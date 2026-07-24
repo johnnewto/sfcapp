@@ -19,6 +19,7 @@ import {
 import { buildNotebookVariableUnitMetadata } from "../../notebook/notebookAppHelpers";
 import {
   appendChartVariable,
+  buildMcBandsForChart,
   buildResolvedChartSeriesRanges,
   buildResolvedChartSeriesWithUnits,
   moveChartSeriesByDisplayName,
@@ -139,6 +140,11 @@ export function PublicationChart({
   const scenarioShocks = resolveShowScenarioShocks(activeCell, sourceRunCell)
     ? buildScenarioShockMarkers(sourceRunCell, result, baselineResult)
     : [];
+  const mcBands = buildMcBandsForChart(activeCell, result, levelSeries).map((band) => ({
+    seriesName: band.seriesName,
+    lo: band.lo,
+    hi: band.hi
+  }));
 
   return (
     <div className="publication-chart">
@@ -176,6 +182,7 @@ export function PublicationChart({
             : undefined
         }
         overlaySeries={overlaySeries}
+        bands={mcBands}
         periodLabelOffset={0}
         originYear={originYear}
         referenceTraceLegendLabels={referenceTraceLegendLabels}

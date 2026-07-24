@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { ModelDefinition, SimulationOptions, SimulationResult } from "@sfcr/core";
+import type { AbmSimConfig, ModelDefinition, SimulationOptions, SimulationResult } from "@sfcr/core";
 
 import {
   applyConstantExternalOverrides,
@@ -58,8 +58,11 @@ export function buildNotebookRunnerResetKey(document: NotebookDocument): string 
         break;
       case "run":
         resetState.push({
+          abm: cell.abm ?? null,
+          abmModel: cell.abmModel ?? null,
           baselineRunCellId: cell.baselineRunCellId,
           baselineStartPeriod: cell.baselineStartPeriod,
+          engine: cell.engine ?? "equation",
           exogenize: cell.exogenize ?? null,
           id: cell.id,
           mode: cell.mode,
@@ -151,6 +154,18 @@ export function buildRunHistorySignatures(document: NotebookDocument): Record<st
     document.cells
       .filter((cell): cell is RunCell => cell.type === "run")
       .map((cell) => {
+        if (cell.engine === "abm") {
+          return [
+            cell.id,
+            JSON.stringify({
+              engine: "abm",
+              abmModel: cell.abmModel ?? "abm-sim",
+              abm: cell.abm ?? null,
+              periods: cell.periods,
+              mode: cell.mode
+            })
+          ];
+        }
         const editor = buildEditorStateForNotebookModel(document, cell);
         return [
           cell.id,
@@ -272,6 +287,79 @@ export function useNotebookRunner(
     return resolveRunCellOptions(runtime.options, cell);
   }
 
+  async function runAbmCell(cell: RunCell): Promise<boolean> {
+    const cellId = cell.id;
+    setState((current) => {
+      const next: NotebookRuntimeState = {
+        ...current,
+        status: { ...current.status, [cellId]: "running" },
+        errors: { ...current.errors, [cellId]: undefined }
+      };
+      stateRef.current = next;
+      return next;
+    });
+
+    try {
+      if (cell.mode !== "baseline") {
+        throw new Error("ABM runs currently support baseline mode only.");
+      }
+      const modelId = cell.abmModel?.trim() || "abm-sim";
+      const config: AbmSimConfig = {
+        ...(cell.abm as AbmSimConfig | undefined),
+        periods: cell.periods
+      };
+      const result = await client.runAbm(modelId, config);
+
+      setState((current) => {
+        const shouldCapturePrevious = historyCapturePendingRef.current[cellId] === true;
+        const previousResult = resolvePreviousRunResult(
+          current.outputs[cellId],
+          lastSuccessfulResultsRef.current[cellId],
+          shouldCapturePrevious
+        );
+        const didCapturePrevious = current.outputs[cellId]?.type !== "result" && previousResult != null;
+        const next: NotebookRuntimeState = {
+          ...current,
+          outputs: {
+            ...current.outputs,
+            [cellId]: {
+              type: "result",
+              previousResult,
+              result
+            }
+          },
+          historyUpdates: didCapturePrevious
+            ? {
+                ...current.historyUpdates,
+                [cellId]: (historyUpdateSequenceRef.current += 1)
+              }
+            : current.historyUpdates,
+          status: { ...current.status, [cellId]: "success" }
+        };
+        historyCapturePendingRef.current[cellId] = false;
+        lastSuccessfulResultsRef.current[cellId] = result;
+        stateRef.current = next;
+        return next;
+      });
+      return true;
+    } catch (error) {
+      setState((current) => {
+        const next: NotebookRuntimeState = {
+          ...current,
+          status: { ...current.status, [cellId]: "error" },
+          errors: {
+            ...current.errors,
+            [cellId]: error instanceof Error ? error.message : "Unknown notebook error"
+          }
+        };
+        stateRef.current = next;
+        return next;
+      });
+      onRunErrorRef.current?.(cellId);
+      return false;
+    }
+  }
+
   function resolveBaselineRunCell(cell: RunCell): RunCell | null {
     if (cell.mode !== "scenario") {
       return null;
@@ -305,6 +393,10 @@ export function useNotebookRunner(
     const cell = document.cells.find((entry) => entry.id === cellId);
     if (!cell || cell.type !== "run") {
       return true;
+    }
+
+    if (cell.engine === "abm") {
+      return runAbmCell(cell);
     }
 
     const editor = buildEditorForRunCell(cell);

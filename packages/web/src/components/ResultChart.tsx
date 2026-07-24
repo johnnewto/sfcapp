@@ -19,6 +19,7 @@ import {
   resolveTimeRange,
   snapAxisMetrics,
   timeRangeInclusiveEquals,
+  toBandAreaPath,
   toPolylinePoints,
   toStoredTimeRangeInclusive,
   toX,
@@ -42,6 +43,14 @@ interface ChartSeries {
   values: number[];
 }
 
+/** Monte Carlo (or other) envelope drawn behind a matching mean series. */
+export interface ChartBand {
+  /** Must match `ChartSeries.name` for axis colour / scale association. */
+  seriesName: string;
+  lo: number[];
+  hi: number[];
+}
+
 export type ChartAxisMode = "shared" | "separate";
 ;
 
@@ -62,6 +71,8 @@ interface ResultChartProps {
   /** Persist the slider window as chart `timeRangeInclusive` (or clear when `undefined`). */
   onTimeRangeInclusiveChange?(range: [number, number] | undefined): void;
   overlaySeries?: ChartSeries[];
+  /** Optional fill bands keyed by series name (drawn under the matching mean polyline). */
+  bands?: ChartBand[];
   periodLabelOffset?: number;
   /**
    * When set, the time axis renders calendar years instead of period numbers:
@@ -214,6 +225,7 @@ export function ResultChart({
   onRemoveVariable,
   onTimeRangeInclusiveChange,
   overlaySeries = [],
+  bands = [],
   periodLabelOffset = 0,
   originYear,
   referenceTraceKind,
@@ -734,7 +746,16 @@ export function ResultChart({
     const visibleReferenceValues = visibleOverlaySeries
       .filter((overlay) => overlay.name === entry.name)
       .flatMap((overlay) => overlay.values.slice(visibleStartIndex, visibleEndIndex + 1));
-    const scaleValues = [...visibleValues, ...visibleReferenceValues].filter(Number.isFinite);
+    const matchingBand = bands.find((band) => band.seriesName === entry.name);
+    const visibleBandValues = matchingBand
+      ? [
+          ...matchingBand.lo.slice(visibleStartIndex, visibleEndIndex + 1),
+          ...matchingBand.hi.slice(visibleStartIndex, visibleEndIndex + 1)
+        ]
+      : [];
+    const scaleValues = [...visibleValues, ...visibleReferenceValues, ...visibleBandValues].filter(
+      Number.isFinite
+    );
     const fallbackScaleValues = entry.values.filter(Number.isFinite);
 
     return {
@@ -1629,6 +1650,34 @@ export function ResultChart({
               hoveredDatum ? (hoveredDatum.seriesName === entry.name ? " is-active" : " is-dimmed") : ""
             }`}
           >
+            {(() => {
+              const matchingBand = bands.find((band) => band.seriesName === entry.name);
+              if (!matchingBand) {
+                return null;
+              }
+              const bandPath = toBandAreaPath(
+                matchingBand.lo.slice(visibleStartIndex, visibleEndIndex + 1),
+                matchingBand.hi.slice(visibleStartIndex, visibleEndIndex + 1),
+                leftPadding,
+                topPadding,
+                plotWidth,
+                plotHeight,
+                axisMode === "shared" ? sharedMetrics.min : entry.min,
+                axisMode === "shared" ? sharedMetrics.range : entry.range
+              );
+              if (!bandPath) {
+                return null;
+              }
+              return (
+                <path
+                  d={bandPath}
+                  fill={entry.color}
+                  fillOpacity={hoveredDatum ? (hoveredDatum.seriesName === entry.name ? 0.22 : 0.08) : 0.16}
+                  pointerEvents="none"
+                  stroke="none"
+                />
+              );
+            })()}
             {visibleOverlaySeries
               .filter((overlay) => overlay.name === entry.name)
               .filter((overlay) => overlay.referenceTraceKind !== "observed")

@@ -283,6 +283,13 @@ function validateRunCellReferences(
     context.issues.push(createNotebookIssue(`Run cell '${cell.id}' references missing model id '${cell.sourceModelId}'.`));
   }
 
+  if (cell.engine === "abm") {
+    if (cell.abmModel != null && typeof cell.abmModel !== "string") {
+      context.issues.push(createNotebookIssue(`Run cell '${cell.id}' abmModel must be a string.`));
+    }
+    return;
+  }
+
   if (!cell.sourceModelCellId && !cell.sourceModelId) {
     context.issues.push(createNotebookIssue(`Run cell '${cell.id}' must reference a source model.`));
   }

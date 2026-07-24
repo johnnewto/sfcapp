@@ -1,3 +1,4 @@
+import abmSimNotebookYaml from "./templates/abm_sim.notebook.yaml?raw";
 import io3PcNotebookYaml from "./templates/3io-pc.notebook.yaml?raw";
 import bmwNotebookYaml from "./templates/bmw.notebook.yaml?raw";
 import eco3IoPcNotebookYaml from "./templates/eco-3io-pc.notebook.yaml?raw";
@@ -20,6 +21,7 @@ import type { NotebookDocument } from "./types";
 
 export type NotebookTemplateId =
   | "3io-pc"
+  | "abm-sim"
   | "bmw"
   | "eco-3io-pc"
   | "endogenous-money"
@@ -50,6 +52,7 @@ export type NotebookTemplateLoadResult =
 
 const NOTEBOOK_TEMPLATE_YAML: Record<NotebookTemplateId, string> = {
   sim: simNotebookYaml,
+  "abm-sim": abmSimNotebookYaml,
   bmw: bmwNotebookYaml,
   "3io-pc": io3PcNotebookYaml,
   "eco-3io-pc": eco3IoPcNotebookYaml,
@@ -74,6 +77,12 @@ export const NOTEBOOK_TEMPLATES: Record<NotebookTemplateId, NotebookTemplateDefi
     label: "SIM",
     description:
       "Godley-Lavoie SIM notebook with baseline, government-spending scenario, accounting matrices, and result views."
+  },
+  "abm-sim": {
+    id: "abm-sim",
+    label: "ABM-SIM",
+    description:
+      "Agent-based SIM (Leeds lectures 2026): heterogeneous households, job lottery, FCFS goods market, Monte Carlo means."
   },
   bmw: {
     id: "bmw",

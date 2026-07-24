@@ -1,0 +1,201 @@
+# ABM-SIM notebook. Agent-based microfoundation of Godley & Lavoie Model SIM
+# (Leeds lectures 2026 / Marco Veronese Passarella). Monte Carlo runs in the
+# browser via the shared ABM kernel — not the equation solver.
+#
+# Reference R: references/leeds_lectures_2026/ABM_SIM.R
+# Upstream: https://github.com/marcoverpas/Leeds_lectures_2026/blob/main/ABM_SIM.R
+format: sfcr-notebook-yaml
+formatVersion: 1
+id: abm-sim-notebook
+title: ABM-SIM Browser Notebook
+metadata:
+  version: 1
+  template: abm-sim
+cells:
+  - markdown:
+      id: intro
+      title: Overview
+      source: >
+        Model **ABM-SIM** is Godley and Lavoie Model SIM populated by many households.
+        Each household holds its own money, forms its own disposable income, and has its
+        own propensity to consume. Macro totals emerge by summing over agents. This
+        notebook runs a Monte Carlo of that agent-based model in the browser (shared ABM
+        kernel). The R reference is `references/leeds_lectures_2026/ABM_SIM.R`.
+      more: |
+        Aggregate and IO models are **top-down**: they write economy-wide behavioural
+        rules directly. **Agent-based models (ABMs)** are **bottom-up**: they specify
+        many individual agents — here households — and obtain macro variables by
+        _summing over agents_. Aggregate regularities then **emerge** from interaction
+        rather than being imposed.
+
+        Three features distinguish this style:
+
+        1. **Heterogeneity.** Each household has its own propensity to consume out of
+           income (`alpha1`).
+        2. **Interaction and matching.** A random **job lottery** (who is hired) and a
+           **first-come-first-served** goods market (who gets served when output is short).
+        3. **Sequential decisions.** Agents act from _last_ period's information, so there
+           is no simultaneous equation system to iterate within the period.
+
+        The model remains **stock-flow consistent**: money is only transferred between
+        agents, so household money `H_d` tracks government money supply `H_s` to machine
+        precision. The ABM is repeated with different random seeds (**Monte Carlo**); charts
+        show the **mean** across runs.
+
+        Mean output still converges toward `G / theta`, as in textbook SIM. With hiring
+        friction `s > 0`, unemployment emerges, and wealth settles _above_ the frictionless
+        SIM value because rationing creates involuntary saving.
+  - markdown:
+      id: ticks
+      title: Period ticks
+      source: >
+        One period unfolds as a sequence of ticks: plan consumption, hire via a job
+        lottery, shuffle the queue, serve government then households first-come-first-served,
+        pay wages and taxes, and update money holdings. Government spending rises from
+        `20` to `30` at period `60`.
+      more: |
+        Conventions: upper-case = macro total; lower-case = one household.
+
+        1. Each household plans `cd = min(alpha1 * yd + alpha2 * h, h)` using its own
+           `alpha1` and last period's disposable income and cash.
+        2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.
+        3. Hiring: `N = min(floor(Nd * U(1-s, 1+s)), floor(Nd), nHouseholds)`.
+        4. One random shuffle orders both jobs and the shop queue.
+        5. Government is served first from produced goods `N * pr`; remaining output is
+           rationed FCFS to households.
+        6. Hired households earn wage `w = pr` (zero profit). Taxes `theta * y` are paid;
+           money updates as `h = h + y - c - tax`. Money supply grows by `YG - TAX`.
+
+        Setting `s = 0` with homogeneous `alpha1` recovers the textbook SIM money stock
+        `H = (1 - theta) * (G / theta) * (1 - alpha1) / alpha2` in the limit.
+  - run:
+      id: baseline-run
+      title: Monte Carlo baseline
+      description: >
+        ABM-SIM Monte Carlo (mean paths). Defaults match the Leeds R script except
+        `monteCarlo: 50` for a snappier browser run (R uses 100).
+      mode: baseline
+      engine: abm
+      abmModel: abm-sim
+      periods: 100
+      resultKey: abm_sim_baseline
+      abm:
+        households: 200
+        monteCarlo: 50
+        alpha1m: 0.6
+        alpha1d: 0.4
+        alpha2: 0.4
+        theta: 0.2
+        pr: 1.1
+        s: 0.2
+        g0: 20
+        g1: 30
+        shockPeriod: 60
+  - chart:
+      id: chart-output
+      title: Total output (MC mean)
+      description: Mean output across Monte Carlo runs with p10–p90 band. Vertical shift at period 60 is the G shock.
+      showMcBands: true
+      variables:
+        - Y
+        - G
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        Y:
+          includeZero: true
+        G:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-income-consumption
+      title: Disposable income and consumption
+      showMcBands: true
+      variables:
+        - YD
+        - C
+      axisMode: shared
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        YD:
+          includeZero: true
+        C:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-money
+      title: Money stock
+      description: >
+        Household money `H_d` (MC mean with p10–p90 band). With hiring friction, wealth sits above the
+        frictionless SIM benchmark at mean alpha1.
+      showMcBands: true
+      variables:
+        - H_d
+        - H_s
+      axisMode: shared
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        H_d:
+          includeZero: true
+        H_s:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-unemployment
+      title: Unemployment rate (emergent)
+      showMcBands: true
+      variables:
+        - UR
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        UR:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-household-first
+      title: First household (micro, MC run 1)
+      description: Consumption and cash for household 1; `e_h1` is 1 when employed that period.
+      variables:
+        - c_h1
+        - h_h1
+        - e_h1
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        c_h1:
+          includeZero: true
+        h_h1:
+          includeZero: true
+        e_h1:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-household-last
+      title: Last household (micro, MC run 1)
+      variables:
+        - c_hLast
+        - h_hLast
+        - e_hLast
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        c_hLast:
+          includeZero: true
+        h_hLast:
+          includeZero: true
+        e_hLast:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - table:
+      id: baseline-table
+      title: Baseline variable summary
+      variables:
+        - Y
+        - C
+        - YD
+        - H_d
+        - H_s
+        - UR
+        - G
+      sourceRunCellId: baseline-run

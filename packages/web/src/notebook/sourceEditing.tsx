@@ -933,6 +933,7 @@ function validateCellSourceShape(
   switch (cellType) {
     case "run":
       if (
+        (parsed as RunCell).engine !== "abm" &&
         typeof (parsed as RunCell).sourceModelId !== "string" &&
         typeof (parsed as RunCell).sourceModelCellId !== "string"
       ) {

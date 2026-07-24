@@ -240,4 +240,46 @@ describe("core worker handler", () => {
     expect(response.payload[0]?.label).toBe("empty");
     expect(response.payload[0]?.report.period).toBe(1);
   });
+
+  it("runs ABM-SIM via runAbm", () => {
+    const response = handleWorkerRequest({
+      id: "abm-1",
+      type: "runAbm",
+      payload: {
+        modelId: "abm-sim",
+        config: {
+          periods: 20,
+          households: 40,
+          monteCarlo: 4,
+          s: 0.1
+        }
+      }
+    });
+
+    expect(response).toMatchObject({
+      id: "abm-1",
+      type: "success"
+    });
+    if (response.type !== "success") {
+      return;
+    }
+
+    expect(response.payload.series.Y).toHaveLength(20);
+    expect(response.payload.series.H_d).toHaveLength(20);
+    expect(response.payload.series.c_h1).toHaveLength(20);
+  });
+
+  it("rejects unknown ABM model ids", () => {
+    const response = handleWorkerRequest({
+      id: "abm-bad",
+      type: "runAbm",
+      payload: { modelId: "abm-pc", config: { periods: 5 } }
+    });
+
+    expect(response).toMatchObject({
+      id: "abm-bad",
+      type: "error",
+      payload: { message: "Unknown ABM model id: abm-pc" }
+    });
+  });
 });

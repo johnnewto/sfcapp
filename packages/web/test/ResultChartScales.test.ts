@@ -6,6 +6,7 @@ import {
   clampInteractiveTimeRange,
   periodFromSvgX,
   timeRangeInclusiveEquals,
+  toBandAreaPath,
   toStoredTimeRangeInclusive
 } from "../src/components/ResultChartScales";
 
@@ -126,5 +127,18 @@ describe("buildAxisMetrics", () => {
     const metrics = buildAxisMetrics([1, 2, 3], { min: 10, max: 2 });
     expect(metrics.min).toBe(2);
     expect(metrics.max).toBe(10);
+  });
+});
+
+describe("toBandAreaPath", () => {
+  it("builds a closed path from lo/hi series", () => {
+    const path = toBandAreaPath([1, 2, 3], [4, 5, 6], 0, 0, 100, 100, 0, 10);
+    expect(path).toMatch(/^M /);
+    expect(path).toMatch(/ Z$/);
+    expect(path!.split(" L ").length).toBeGreaterThan(3);
+  });
+
+  it("returns null when a value is non-finite", () => {
+    expect(toBandAreaPath([1, NaN], [2, 3], 0, 0, 100, 100, 0, 10)).toBeNull();
   });
 });

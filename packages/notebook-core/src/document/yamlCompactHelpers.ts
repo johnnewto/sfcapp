@@ -237,6 +237,7 @@ export function buildCompactChartDescriptor(
     ...(cell.yAxisTickCount == null ? {} : { yAxisTickCount: cell.yAxisTickCount }),
     ...(cell.axisFontSize == null ? {} : { axisFontSize: cell.axisFontSize }),
     ...(cell.sharedRange ? { sharedRange: cell.sharedRange } : {}),
+    ...(cell.showMcBands === true ? { showMcBands: true } : {}),
     ...(cell.seriesRanges ? { seriesRanges: cell.seriesRanges } : {}),
     ...(cell.timeRangeInclusive ? { timeRangeInclusive: cell.timeRangeInclusive } : {})
   };
@@ -754,6 +755,7 @@ export function buildCompactChartCells(charts: unknown, sourceRunCellId: string)
         : {}),
       ...(typeof chart.yAxisTickCount === "number" ? { yAxisTickCount: chart.yAxisTickCount } : {}),
       ...(typeof chart.axisFontSize === "number" ? { axisFontSize: chart.axisFontSize } : {}),
+      ...(chart.showMcBands === true ? { showMcBands: true } : {}),
       ...(isRecord(chart.seriesRanges) ? { seriesRanges: chart.seriesRanges as Extract<NotebookCell, { type: "chart" }>["seriesRanges"] } : {}),
       ...(Array.isArray(chart.timeRangeInclusive) ? { timeRangeInclusive: chart.timeRangeInclusive as [number, number] } : {})
     };

@@ -23,6 +23,7 @@ import {
   resolveReferenceTraces
 } from "../chartReferenceTrace";
 import {
+  buildMcBandsForChart,
   buildResolvedChartSeriesRanges,
   buildResolvedChartSeriesWithUnits
 } from "../chartSeries";
@@ -305,6 +306,11 @@ export function ChartCellView({
   const scenarioShocks = resolveShowScenarioShocks(cell, sourceRunCell)
     ? buildScenarioShockMarkers(sourceRunCell, result, baselineResult)
     : [];
+  const mcBands = buildMcBandsForChart(cell, result, levelSeries).map((band) => ({
+    seriesName: band.seriesName,
+    lo: band.lo,
+    hi: band.hi
+  }));
   const modelSource = sourceRunCell ? resolveInspectorModelSource(sourceRunCell) : null;
   const handleInspectScenarioShockVariable =
     editor == null || sourceRunCell == null || !onVariableInspectRequest
@@ -334,6 +340,7 @@ export function ChartCellView({
       onRemoveVariable={onRemoveVariable}
       onTimeRangeInclusiveChange={onTimeRangeInclusiveChange}
       overlaySeries={overlaySeries}
+      bands={mcBands}
       periodLabelOffset={periodLabelOffset}
       originYear={originYear}
       referenceTraceLegendLabels={referenceTraceLegendLabels}

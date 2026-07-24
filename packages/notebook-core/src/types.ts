@@ -213,6 +213,15 @@ export interface RunCell extends NotebookCellBase {
   periods: number;
   simType?: "DYNAMIC" | "STATIC";
   /**
+   * Simulation engine for this run. Defaults to `"equation"` (Gauss–Seidel / Broyden).
+   * `"abm"` uses the agent-based Monte Carlo path (`abmModel` + `abm` config).
+   */
+  engine?: "equation" | "abm";
+  /** Registered ABM model id when `engine` is `"abm"` (e.g. `"abm-sim"`). */
+  abmModel?: string;
+  /** ABM parameter overrides (households, monteCarlo, s, …). */
+  abm?: Record<string, number | boolean>;
+  /**
    * Variables held exogenous for this run (R `bimets` Exogenize semantics): each
    * listed variable that also has a data series drops its equation so the run
    * uses the supplied/observed values instead of solving it.
@@ -289,6 +298,11 @@ export interface ChartCell extends NotebookCellBase {
   sharedRange?: ChartAxisRange;
   seriesRanges?: Record<string, ChartAxisRange | undefined>;
   timeRangeInclusive?: [number, number];
+  /**
+   * When true, plot Monte Carlo summary bands for bare variable series that have
+   * companion `{name}_p10`/`{name}_p90` (or `{name}_min`/`{name}_max`) in the run result.
+   */
+  showMcBands?: boolean;
 }
 
 /**

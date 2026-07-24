@@ -1,4 +1,5 @@
 import type {
+  AbmSimConfig,
   BlockConvergenceOptions,
   BlockConvergenceReport,
   InitialValueProbeCandidate,
@@ -26,6 +27,7 @@ export interface SolverClient {
     options: SimulationOptions,
     segmentation: SegmentedExogenizeOptions
   ): Promise<SimulationResult>;
+  runAbm(modelId: string, config: AbmSimConfig): Promise<SimulationResult>;
   validateRunnable(model: ModelDefinition, options: SimulationOptions): Promise<void>;
   computeStabilityMetrics(result: SimulationResult, period: number): Promise<StabilityAnalysis>;
   analyzeAllBlockConvergence(
@@ -179,6 +181,13 @@ class BrowserWorkerClient implements SolverClient {
     });
   }
 
+  async runAbm(modelId: string, config: AbmSimConfig): Promise<SimulationResult> {
+    return this.request({
+      type: "runAbm",
+      payload: { modelId, config }
+    });
+  }
+
   async validateRunnable(model: ModelDefinition, options: SimulationOptions): Promise<void> {
     return this.requestVoid({
       type: "validateRunnable",
@@ -235,7 +244,10 @@ class BrowserWorkerClient implements SolverClient {
 
   private request(
     message: Omit<
-      Extract<WorkerRequest, { type: "runBaseline" | "runScenario" | "runSegmentedExogenize" }>,
+      Extract<
+        WorkerRequest,
+        { type: "runBaseline" | "runScenario" | "runSegmentedExogenize" | "runAbm" }
+      >,
       "id"
     >
   ): Promise<SimulationResult> {

@@ -405,3 +405,60 @@ export function moveChartSeriesByDisplayName(
     variables: nextVariables
   };
 }
+
+export interface ResolvedMcBand {
+  /** Display / axis key matching the mean series name. */
+  seriesName: string;
+  lo: number[];
+  hi: number[];
+  /** `"percentile"` when companions are `_p10`/`_p90`, else `"minmax"`. */
+  kind: "percentile" | "minmax";
+}
+
+function seriesToNumberArray(values: Float64Array | number[] | undefined): number[] | null {
+  if (!values || values.length < 2) {
+    return null;
+  }
+  const asArray = Array.from(values);
+  return asArray.some(Number.isFinite) ? asArray : null;
+}
+
+/**
+ * Resolves Monte Carlo summary bands for bare chart variables when companion
+ * `{name}_p10`/`{name}_p90` or `{name}_min`/`{name}_max` series exist on the result.
+ */
+export function buildMcBandsForChart(
+  cell: Pick<ChartCell, "showMcBands" | "series" | "variables">,
+  result: SimulationResult | null | undefined,
+  resolvedSeries: Array<Pick<ResolvedChartSeries, "name" | "highlightKey">>
+): ResolvedMcBand[] {
+  if (!cell.showMcBands || !result) {
+    return [];
+  }
+
+  const bands: ResolvedMcBand[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of resolvedSeries) {
+    const variableName = entry.highlightKey?.trim() || entry.name.trim();
+    if (!variableName || seen.has(variableName) || !isBareVariableName(variableName)) {
+      continue;
+    }
+    seen.add(variableName);
+
+    const p10 = seriesToNumberArray(result.series[`${variableName}_p10`]);
+    const p90 = seriesToNumberArray(result.series[`${variableName}_p90`]);
+    if (p10 && p90) {
+      bands.push({ seriesName: entry.name, lo: p10, hi: p90, kind: "percentile" });
+      continue;
+    }
+
+    const min = seriesToNumberArray(result.series[`${variableName}_min`]);
+    const max = seriesToNumberArray(result.series[`${variableName}_max`]);
+    if (min && max) {
+      bands.push({ seriesName: entry.name, lo: min, hi: max, kind: "minmax" });
+    }
+  }
+
+  return bands;
+}

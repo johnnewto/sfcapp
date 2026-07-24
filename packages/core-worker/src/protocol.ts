@@ -1,4 +1,5 @@
 import type {
+  AbmSimConfig,
   BlockConvergenceOptions,
   BlockConvergenceReport,
   InitialValueProbeCandidate,
@@ -33,6 +34,15 @@ export type WorkerRequest =
         model: ModelDefinition;
         options: SimulationOptions;
         segmentation: SegmentedExogenizeOptions;
+      };
+    }
+  | {
+      id: string;
+      type: "runAbm";
+      payload: {
+        /** Registered ABM model id (currently `"abm-sim"`). */
+        modelId: string;
+        config: AbmSimConfig;
       };
     }
   | {

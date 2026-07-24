@@ -452,6 +452,14 @@
         "baselineStartPeriod": { "type": "integer" },
         "mode": { "enum": ["baseline", "scenario"] },
         "simType": { "enum": ["DYNAMIC", "STATIC"] },
+        "engine": { "enum": ["equation", "abm"] },
+        "abmModel": { "type": "string", "minLength": 1 },
+        "abm": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [{ "type": "number" }, { "type": "boolean" }]
+          }
+        },
         "exogenize": {
           "type": "array",
           "items": {
@@ -521,6 +529,7 @@
             "max": { "type": "number" }
           }
         },
+        "showMcBands": { "type": "boolean" },
         "seriesRanges": {
           "type": "object",
           "additionalProperties": {

@@ -284,6 +284,39 @@ export function toPolylinePoints(
     .join(" ");
 }
 
+/**
+ * Closed SVG path for a fill between upper (`hi`) and lower (`lo`) series.
+ * Traces hi left→right then lo right→left.
+ */
+export function toBandAreaPath(
+  lo: number[],
+  hi: number[],
+  leftPadding: number,
+  topPadding: number,
+  plotWidth: number,
+  plotHeight: number,
+  min: number,
+  range: number
+): string | null {
+  const length = Math.min(lo.length, hi.length);
+  if (length < 2) {
+    return null;
+  }
+  const hiPoints: string[] = [];
+  const loPoints: string[] = [];
+  for (let index = 0; index < length; index++) {
+    const hiValue = hi[index];
+    const loValue = lo[index];
+    if (!Number.isFinite(hiValue) || !Number.isFinite(loValue)) {
+      return null;
+    }
+    const x = toX(index, leftPadding, plotWidth, length);
+    hiPoints.push(`${x},${toY(hiValue, topPadding, plotHeight, min, range)}`);
+    loPoints.push(`${x},${toY(loValue, topPadding, plotHeight, min, range)}`);
+  }
+  return `M ${hiPoints.join(" L ")} L ${loPoints.reverse().join(" L ")} Z`;
+}
+
 export function toX(index: number, leftPadding: number, plotWidth: number, length: number): number {
   const xStep = plotWidth / Math.max(length - 1, 1);
   return leftPadding + index * xStep;
