@@ -19,6 +19,7 @@
     "web:test:fast": "pnpm --filter @sfcr/web run test:fast",
     "web:test:integration": "pnpm --filter @sfcr/web exec vitest run test/App.notebook-source.test.tsx test/App.notebook-cell-editors.test.tsx test/App.notebook-navigation.test.tsx test/App.notebook-assistant.test.tsx",
     "web:test:templates": "pnpm --filter @sfcr/web run test:templates",
+    "web:bench:gl8-growth": "pnpm --filter @sfcr/web run bench:gl8-growth",
     "web:compile:notebook-yaml": "pnpm --filter @sfcr/web compile:notebook-yaml -- --write",
     "web:compile:notebook-yaml:public": "pnpm --filter @sfcr/web compile:notebook-yaml -- --write --write-public-examples",
     "web:preview": "pnpm --filter @sfcr/web exec vite preview --port 4173",

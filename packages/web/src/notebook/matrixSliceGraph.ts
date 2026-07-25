@@ -56,8 +56,16 @@ export function buildMatrixEntryTimeSeries(source: string, result: SimulationRes
   });
 }
 
-function isGraphableTimeSeries(values: number[]): boolean {
-  return values.length > 1 && values.some(Number.isFinite);
+function isGraphableTimeSeries(values: ArrayLike<number>): boolean {
+  if (values.length <= 1) {
+    return false;
+  }
+  for (let i = 0; i < values.length; i += 1) {
+    if (Number.isFinite(values[i])) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function resolveSumIndices(cell: MatrixCell): { sumColumnIndex: number; sumRowIndex: number } {

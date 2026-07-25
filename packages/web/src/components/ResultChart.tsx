@@ -469,13 +469,16 @@ export function ResultChart({
       return undefined;
     }
 
-    const anchor = addVariableMenuRef.current;
-    if (!anchor) {
+    if (!addVariableMenuRef.current) {
       return undefined;
     }
 
     function updatePosition(): void {
-      const rect = anchor.getBoundingClientRect();
+      const node = addVariableMenuRef.current;
+      if (!node) {
+        return;
+      }
+      const rect = node.getBoundingClientRect();
       setAddMenuAnchorRect({ left: rect.left, bottom: rect.bottom });
     }
 
@@ -494,13 +497,17 @@ export function ResultChart({
       return undefined;
     }
 
-    const anchor = legendItemRefs.current.get(openLegendMenuSeriesName);
-    if (!anchor) {
+    const seriesName = openLegendMenuSeriesName;
+    if (!legendItemRefs.current.get(seriesName)) {
       return undefined;
     }
 
     function updatePosition(): void {
-      const rect = anchor.getBoundingClientRect();
+      const node = legendItemRefs.current.get(seriesName);
+      if (!node) {
+        return;
+      }
+      const rect = node.getBoundingClientRect();
       setLegendMenuAnchorRect({ left: rect.left, bottom: rect.bottom });
     }
 

@@ -16,9 +16,10 @@
     "format:notebooks": "node scripts/format-notebook-json.mjs",
     "units:report": "node scripts/unit-metadata-report.mjs",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test:fast": "vitest run test --exclude test/templateSmoke.test.ts --exclude test/notebookTemplateRegression.extended.test.ts --exclude test/simTemplate.test.ts --exclude test/simpleEpidemicTemplate.test.ts --exclude test/App.notebook-source.test.tsx --exclude test/App.notebook-cell-editors.test.tsx --exclude test/App.notebook-navigation.test.tsx --exclude test/App.notebook-assistant.test.tsx",
+    "bench:gl8-growth": "vitest run test/gl8GrowthBench.test.ts --reporter=verbose",
+    "test:fast": "vitest run test --exclude test/templateSmoke.test.ts --exclude test/notebookTemplateRegression.extended.test.ts --exclude test/simTemplate.test.ts --exclude test/simpleEpidemicTemplate.test.ts --exclude test/gl8GrowthBench.test.ts --exclude test/App.notebook-source.test.tsx --exclude test/App.notebook-cell-editors.test.tsx --exclude test/App.notebook-navigation.test.tsx --exclude test/App.notebook-assistant.test.tsx",
     "test:integration": "vitest run test/App.notebook-source.test.tsx test/App.notebook-cell-editors.test.tsx test/App.notebook-navigation.test.tsx test/App.notebook-assistant.test.tsx",
-    "test": "vitest run test --exclude test/templateSmoke.test.ts --exclude test/notebookTemplateRegression.extended.test.ts --exclude test/simTemplate.test.ts --exclude test/simpleEpidemicTemplate.test.ts --exclude test/App.notebook-source.test.tsx --exclude test/App.notebook-cell-editors.test.tsx --exclude test/App.notebook-navigation.test.tsx --exclude test/App.notebook-assistant.test.tsx",
+    "test": "vitest run test --exclude test/templateSmoke.test.ts --exclude test/notebookTemplateRegression.extended.test.ts --exclude test/simTemplate.test.ts --exclude test/simpleEpidemicTemplate.test.ts --exclude test/gl8GrowthBench.test.ts --exclude test/App.notebook-source.test.tsx --exclude test/App.notebook-cell-editors.test.tsx --exclude test/App.notebook-navigation.test.tsx --exclude test/App.notebook-assistant.test.tsx",
     "test:templates": "vitest run test/templateSmoke.test.ts test/notebookTemplateRegression.extended.test.ts test/simTemplate.test.ts test/simpleEpidemicTemplate.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
