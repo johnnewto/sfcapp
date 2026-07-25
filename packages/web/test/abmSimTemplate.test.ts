@@ -1,12 +1,27 @@
 import { describe, expect, it } from "vitest";
 
-import { runAbmSim } from "@sfcr/core";
+import { runAbmSpec } from "@sfcr/core";
+import { abmSpecFromCell, validateNotebookDocument } from "@sfcr/notebook-core";
 
+import { abmRunOverridesFromCell } from "../src/notebook/abmRunOverrides";
 import { getNotebookTemplateDocument } from "../src/notebook/templates";
 
 describe("ABM-SIM notebook template", () => {
-  it("loads and runs the Monte Carlo baseline", () => {
+  it("loads with an abm-model cell and runs the Monte Carlo baseline", () => {
     const document = getNotebookTemplateDocument("abm-sim");
+    expect(validateNotebookDocument(document)).toEqual([]);
+
+    const abmModelCell = document.cells.find(
+      (cell): cell is Extract<(typeof document.cells)[number], { type: "abm-model" }> =>
+        cell.type === "abm-model" && cell.id === "abm-sim-model"
+    );
+    expect(abmModelCell).toBeDefined();
+    expect(abmModelCell?.modelId).toBe("abm-sim");
+    const record = abmModelCell?.record as { descriptions?: Record<string, string>; micro?: unknown[] } | undefined;
+    expect(record?.descriptions?.Y).toMatch(/Output/i);
+    expect(record?.descriptions?.c).toMatch(/micro/i);
+    expect(record?.micro).toHaveLength(1);
+
     const baselineRunCell = document.cells.find(
       (cell): cell is Extract<(typeof document.cells)[number], { type: "run" }> =>
         cell.type === "run" && cell.id === "baseline-run"
@@ -14,10 +29,15 @@ describe("ABM-SIM notebook template", () => {
 
     expect(baselineRunCell).toBeDefined();
     expect(baselineRunCell?.engine).toBe("abm");
-    expect(baselineRunCell?.abmModel).toBe("abm-sim");
-    if (!baselineRunCell) {
-      throw new Error("Expected ABM-SIM baseline run cell.");
+    expect(baselineRunCell?.sourceModelId).toBe("abm-sim");
+    if (!baselineRunCell || !abmModelCell) {
+      throw new Error("Expected ABM-SIM abm-model and baseline run cells.");
     }
+
+    const balanceSheet = document.cells.find(
+      (cell) => cell.type === "matrix" && cell.id === "balance-sheet"
+    );
+    expect(balanceSheet).toBeDefined();
 
     const bandChart = document.cells.find(
       (cell): cell is Extract<(typeof document.cells)[number], { type: "chart" }> =>
@@ -25,18 +45,20 @@ describe("ABM-SIM notebook template", () => {
     );
     expect(bandChart?.showMcBands).toBe(true);
 
-    const result = runAbmSim({
-      ...(baselineRunCell.abm ?? {}),
-      periods: baselineRunCell.periods,
-      // Keep the smoke test fast while still exercising MC averaging.
-      // Keep household count high enough that labour supply does not bind Y.
-      monteCarlo: 6,
-      households: 200
-    });
+    const overrides = abmRunOverridesFromCell(
+      {
+        ...(baselineRunCell.abm ?? {}),
+        monteCarlo: 6,
+        households: 200
+      },
+      baselineRunCell.periods
+    );
+    const result = runAbmSpec(abmSpecFromCell(abmModelCell), overrides);
 
     expect(result.options.periods).toBe(100);
     expect(result.series.Y).toHaveLength(100);
     expect(result.series.H_d).toHaveLength(100);
+    expect(result.series.TAX).toHaveLength(100);
     expect(result.series.Y_p10).toHaveLength(100);
     expect(result.series.Y_p90).toHaveLength(100);
 
@@ -51,5 +73,9 @@ describe("ABM-SIM notebook template", () => {
       maxGap = Math.max(maxGap, Math.abs(result.series.H_d![t]! - result.series.H_s![t]!));
     }
     expect(maxGap).toBeLessThan(1e-6);
+
+    // Matrix identity at a late period: H_d ≈ H_s (MC means).
+    const late = 90;
+    expect(Math.abs(result.series.H_d![late]! - result.series.H_s![late]!)).toBeLessThan(1e-6);
   });
 });

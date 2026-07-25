@@ -246,12 +246,104 @@ describe("core worker handler", () => {
       id: "abm-1",
       type: "runAbm",
       payload: {
-        modelId: "abm-sim",
-        config: {
+        spec: {
+          modelId: "abm-sim",
+          populations: [
+            {
+              name: "households",
+              size: 40,
+              state: ["h", "yd", "cd", "c", "y", "e"],
+              params: { alpha1: { draw: "uniform", lo: 0.2, hi: 1.0 } }
+            }
+          ],
+          params: {
+            alpha2: 0.4,
+            theta: 0.2,
+            pr: 1.1,
+            w: 1.1,
+            s: 0.1,
+            g0: 20,
+            g1: 30,
+            shockPeriod: 60
+          },
+          ticks: [
+            { kind: "aggregate", equations: [["G", "if (t >= shockPeriod) { g1 } else { g0 }"]] },
+            {
+              kind: "agent",
+              population: "households",
+              equations: [["cd", "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))"]]
+            },
+            {
+              kind: "aggregate",
+              equations: [
+                ["AD", "sum(households.cd) + G"],
+                ["Nd", "AD / pr"],
+                [
+                  "N",
+                  "min(min(floor(Nd * runif(1 - s, 1 + s)), floor(Nd)), households.size)"
+                ]
+              ]
+            },
+            { kind: "shuffle", population: "households" },
+            {
+              kind: "agent",
+              population: "households",
+              equations: [["e", "if (households.rank <= N) { 1 } else { 0 }"]]
+            },
+            {
+              kind: "aggregate",
+              equations: [
+                ["Y", "pr * N"],
+                ["YG", "min(G, Y)"],
+                ["YC", "Y - YG"]
+              ]
+            },
+            {
+              kind: "ration-fcfs",
+              population: "households",
+              demand: "cd",
+              supply: "YC",
+              into: "c"
+            },
+            {
+              kind: "agent",
+              population: "households",
+              equations: [
+                ["y", "w * e"],
+                ["yd", "y * (1 - theta)"],
+                ["h", "lag(h) + y - c - theta * y"]
+              ]
+            },
+            {
+              kind: "aggregate",
+              equations: [
+                ["C", "sum(households.c)"],
+                ["YD", "sum(households.yd)"],
+                ["TAX", "theta * w * N"],
+                ["H_d", "sum(households.h)"],
+                ["H_s", "lag(H_s) + YG - TAX"],
+                ["UR", "(households.size - N) / households.size"]
+              ]
+            }
+          ],
+          record: {
+            series: ["Y", "C", "YD", "H_d", "H_s", "UR", "G"],
+            bands: ["Y"],
+            micro: [
+              {
+                population: "households",
+                agents: ["first"],
+                variables: ["c"]
+              }
+            ]
+          },
+          check: { left: "H_d", right: "H_s", tolerance: 1e-9 }
+        },
+        overrides: {
           periods: 20,
-          households: 40,
           monteCarlo: 4,
-          s: 0.1
+          populationSizes: { households: 40 },
+          params: { s: 0.1 }
         }
       }
     });
@@ -269,17 +361,26 @@ describe("core worker handler", () => {
     expect(response.payload.series.c_h1).toHaveLength(20);
   });
 
-  it("rejects unknown ABM model ids", () => {
+  it("rejects invalid ABM specs", () => {
     const response = handleWorkerRequest({
       id: "abm-bad",
       type: "runAbm",
-      payload: { modelId: "abm-pc", config: { periods: 5 } }
+      payload: {
+        spec: {
+          populations: [],
+          ticks: [],
+          record: { series: [] }
+        }
+      }
     });
 
     expect(response).toMatchObject({
       id: "abm-bad",
-      type: "error",
-      payload: { message: "Unknown ABM model id: abm-pc" }
+      type: "error"
     });
+    if (response.type !== "error") {
+      return;
+    }
+    expect(response.payload.message).toMatch(/population|tick|series/i);
   });
 });

@@ -15,6 +15,7 @@ export function stringifyCompactYamlEnvelope(envelope: NotebookYamlEnvelope): st
   markWrappedRunFlowSequences(document);
   markWrappedChartAxisGroupFlowSequences(document);
   markWrappedChartGridFlowSequences(document);
+  markWrappedAbmModelFlowSequences(document);
 
   return document.toString({
     collectionStyle: "any",
@@ -188,4 +189,102 @@ function markFlowSequence(document: YamlDocument, path: Array<string | number>):
   if (isSeq(node)) {
     node.flow = true;
   }
+}
+
+/**
+ * Keep ABM-SIM-style compact sequences when re-serializing YAML:
+ * equation rows as `- [name, "expr"]`, plus state/series/bands/micro lists.
+ */
+function markWrappedAbmModelFlowSequences(document: YamlDocument): void {
+  const cells = document.get("cells", true);
+  if (!isSeq(cells)) {
+    return;
+  }
+
+  cells.items.forEach((_cell, index) => {
+    const abmRoot = document.getIn(["cells", index, "abm-model"], true);
+    if (!isMap(abmRoot)) {
+      return;
+    }
+
+    const base = ["cells", index, "abm-model"] as const;
+
+    const populations = document.getIn([...base, "populations"], true);
+    if (isSeq(populations)) {
+      populations.items.forEach((_pop, popIndex) => {
+        markFlowSequence(document, [...base, "populations", popIndex, "state"]);
+        const params = document.getIn([...base, "populations", popIndex, "params"], true);
+        if (isMap(params)) {
+          params.items.forEach((pair) => {
+            if (isMap(pair.value)) {
+              pair.value.flow = true;
+            }
+          });
+        }
+      });
+    }
+
+    markFlowSequence(document, [...base, "record", "series"]);
+    markFlowSequence(document, [...base, "record", "bands"]);
+
+    const micro = document.getIn([...base, "record", "micro"], true);
+    if (isSeq(micro)) {
+      micro.items.forEach((_entry, microIndex) => {
+        markFlowSequence(document, [...base, "record", "micro", microIndex, "agents"]);
+        markFlowSequence(document, [...base, "record", "micro", microIndex, "variables"]);
+      });
+    }
+
+    const check = document.getIn([...base, "check"], true);
+    if (isMap(check)) {
+      check.flow = true;
+    }
+
+    const ticks = document.getIn([...base, "ticks"], true);
+    if (!isSeq(ticks)) {
+      return;
+    }
+
+    ticks.items.forEach((_tick, tickIndex) => {
+      markAbmTickEquationRows(document, [...base, "ticks", tickIndex]);
+    });
+  });
+}
+
+function markAbmTickEquationRows(document: YamlDocument, tickPath: Array<string | number>): void {
+  const tick = document.getIn(tickPath, true);
+  if (!isMap(tick)) {
+    return;
+  }
+
+  // Typed ticks: { kind: "agent"|"aggregate", equations: [...] }
+  markAbmEquationRowSeq(document.getIn([...tickPath, "equations"], true));
+
+  // YAML wrappers:
+  // - do: [[name, expr], ...]
+  // - for: { households: [[name, expr], ...] }
+  markAbmEquationRowSeq(document.getIn([...tickPath, "do"], true));
+
+  const forBody = document.getIn([...tickPath, "for"], true);
+  if (isMap(forBody)) {
+    forBody.items.forEach((pair) => {
+      markAbmEquationRowSeq(pair.value);
+    });
+  }
+}
+
+function markAbmEquationRowSeq(rows: unknown): void {
+  if (!isSeq(rows)) {
+    return;
+  }
+  rows.items.forEach((row) => {
+    if (!isSeq(row)) {
+      return;
+    }
+    row.flow = true;
+    const expression = row.items[1];
+    if (isScalar(expression) && typeof expression.value === "string" && expression.value !== "") {
+      expression.type = Scalar.QUOTE_DOUBLE;
+    }
+  });
 }

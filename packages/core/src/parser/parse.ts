@@ -1,4 +1,6 @@
 import type { Expr } from "./ast";
+import type { CompiledExpression } from "../compile/compileExpression";
+import { compileExpression } from "../compile/compileExpression";
 import { normalizeDerivativeBalanceTarget, parseTransformedLhsTarget } from "./equationTarget";
 import { collectCurrentDependencies, collectLagDependencies } from "./dependencies";
 import { expressionParseError, rethrowExpressionParseError } from "./parseErrors";
@@ -25,6 +27,8 @@ export interface ParsedEquation {
   sourceExpression: Expr;
   currentDependencies: string[];
   lagDependencies: string[];
+  /** Compile-once RHS evaluator (same semantics as evaluateExpression). */
+  evaluate: CompiledExpression;
 }
 
 const IDENTIFIER_SOURCE = String.raw`[A-Za-z_][A-Za-z0-9_\.\^\{\}]*`;
@@ -380,10 +384,14 @@ class Parser {
       case "EXP":
       case "LOG":
       case "ABS":
-      case "SQRT": {
+      case "SQRT":
+      case "FLOOR":
+      case "INT": {
         const argument = this.parseTopLevelExpression();
         this.expect("RPAREN");
-        return fn(identifier.toLowerCase() as "exp" | "log" | "abs" | "sqrt", [argument]);
+        const name =
+          identifier.toUpperCase() === "INT" ? "floor" : (identifier.toLowerCase() as "exp" | "log" | "abs" | "sqrt" | "floor");
+        return fn(name, [argument]);
       }
       case "MIN":
       case "MAX": {
@@ -399,6 +407,13 @@ class Parser {
         const exponent = this.parseTopLevelExpression();
         this.expect("RPAREN");
         return fn("pow", [base, exponent]);
+      }
+      case "RUNIF": {
+        const lo = this.parseTopLevelExpression();
+        this.expect("COMMA");
+        const hi = this.parseTopLevelExpression();
+        this.expect("RPAREN");
+        return fn("runif", [lo, hi]);
       }
       default:
         throw new Error(`Unsupported function: ${identifier}`);
@@ -466,7 +481,8 @@ export function parseEquation(
     expression,
     sourceExpression,
     currentDependencies: Array.from(collectCurrentDependencies(expression, matrixColumnSums)),
-    lagDependencies: Array.from(collectLagDependencies(expression, matrixColumnSums))
+    lagDependencies: Array.from(collectLagDependencies(expression, matrixColumnSums)),
+    evaluate: compileExpression(expression)
   };
 }
 
@@ -553,7 +569,10 @@ function binary(op: "+" | "-" | "*" | "/", left: Expr, right: Expr): Expr {
   return { type: "Binary", op, left, right };
 }
 
-function fn(name: "exp" | "log" | "abs" | "sqrt" | "min" | "max" | "pow", args: Expr[]): Expr {
+function fn(
+  name: "exp" | "log" | "abs" | "sqrt" | "floor" | "min" | "max" | "pow" | "runif",
+  args: Expr[]
+): Expr {
   return { type: "Function", name, args };
 }
 

@@ -70,6 +70,7 @@ import {
   InitialValuesCellView,
   SolverCellView
 } from "./components/LinkedSectionViews";
+import { AbmModelCellView } from "./components/AbmModelCellView";
 import {
   appendChartVariable,
   buildResolvedChartSeries,
@@ -1316,9 +1317,10 @@ function NotebookCellViewComponent({
             }
             title={cell.title}
             onVariableInspectRequest={onVariableInspectRequest}
-            highlightedVariable={highlightedVariable}
+            highlightedVariable={highlightedVariable            }
           />
         ) : null}
+        {isCollapsed ? null : cell.type === "abm-model" ? <AbmModelCellView cell={cell} /> : null}
         {isCollapsed ? null : cell.type === "solver" ? (
           <SolverCellView
             cell={cell}

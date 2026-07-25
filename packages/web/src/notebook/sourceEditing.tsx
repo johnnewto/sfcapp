@@ -22,6 +22,7 @@ import transactionFlowMatrixHelp from "./help/transaction-flow-matrix.md?raw";
 import { normalizeScenarioFromNotebook, serializeNotebookCell } from "./document";
 import { resolveAccountingMatrixKind } from "./validation";
 import type {
+  AbmModelCell,
   ChartCell,
   EquationsCell,
   ExternalsCell,
@@ -436,6 +437,19 @@ export function buildSourceHelperActions(
       ];
     case "model":
       return [{ label: "Collapsed true", insert: '"collapsed": true' }];
+    case "abm-model":
+      return [
+        { label: "Model id", insert: '"modelId": "abm-sim"' },
+        {
+          label: "Populations",
+          insert: '"populations": [{ "name": "households", "size": 200, "state": ["h"] }]'
+        },
+        { label: "Ticks", insert: '"ticks": []' },
+        { label: "Record", insert: '"record": { "series": ["Y"] }' },
+        { label: "Collapsed true", insert: '"collapsed": true' }
+      ];
+    default:
+      return [];
   }
 }
 
@@ -715,6 +729,22 @@ Behavior:
 - Input-output matrices (accountingKind: input-output) use output → market → inputs / final demand.`;
     case "model":
       return "";
+    case "abm-model":
+      return `Required fields:
+- title
+- id
+- type: "abm-model"
+- modelId
+- populations
+- ticks
+- record
+
+Optional: params, check
+
+Ticks use YAML one-key wrappers (do / for / hire-lottery / shuffle / ration-fcfs).
+Run cells with engine: "abm" reference this cell via sourceModelId.`;
+    default:
+      return "";
   }
 }
 
@@ -737,6 +767,10 @@ export function getNotebookHelpTopicIdForCell(cell: NotebookCell): NotebookHelpT
 
   if (cell.type === "sankey") {
     return "sequence";
+  }
+
+  if (cell.type === "abm-model") {
+    return "model";
   }
 
   return cell.type;
@@ -932,8 +966,11 @@ function validateCellSourceShape(
   }
   switch (cellType) {
     case "run":
-      if (
-        (parsed as RunCell).engine !== "abm" &&
+      if ((parsed as RunCell).engine === "abm") {
+        if (typeof (parsed as RunCell).sourceModelId !== "string") {
+          throw new Error("ABM run cells require sourceModelId pointing at an abm-model cell.");
+        }
+      } else if (
         typeof (parsed as RunCell).sourceModelId !== "string" &&
         typeof (parsed as RunCell).sourceModelCellId !== "string"
       ) {
@@ -1127,6 +1164,24 @@ function validateCellSourceShape(
       }
       if (!Array.isArray((parsed as EquationsCell).equations)) {
         throw new Error("equations cells require equations.");
+      }
+      return;
+    case "abm-model":
+      if (typeof (parsed as AbmModelCell).modelId !== "string") {
+        throw new Error("abm-model cells require modelId.");
+      }
+      if (!Array.isArray((parsed as AbmModelCell).populations)) {
+        throw new Error("abm-model cells require populations.");
+      }
+      if (!Array.isArray((parsed as AbmModelCell).ticks)) {
+        throw new Error("abm-model cells require ticks.");
+      }
+      if (
+        (parsed as AbmModelCell).record == null ||
+        typeof (parsed as AbmModelCell).record !== "object" ||
+        Array.isArray((parsed as AbmModelCell).record)
+      ) {
+        throw new Error("abm-model cells require a record object.");
       }
       return;
     case "matrix":

@@ -63,6 +63,7 @@ function classifyCellPlacement(cell: NotebookCell): "body" | "appendix" | "skip"
     case "observed":
     case "initial-values":
     case "solver":
+    case "abm-model":
       return "appendix";
     case "sequence":
       // Only matrix-sourced sequences render as multiport transaction-flow figures.

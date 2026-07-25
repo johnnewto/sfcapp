@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { validateNotebookDocument } from "@sfcr/notebook-core";
+
 import {
   analyzeNotebookSource,
   detectNotebookSourceFormat,
@@ -9,6 +11,7 @@ import {
   notebookToMarkdown,
   parseNotebookSource
 } from "../src/notebook/document";
+import { getNotebookTemplateDocument } from "../src/notebook/templates";
 
 describe("analyzeNotebookSource", () => {
   it("detects and parses JSON, Markdown, and YAML notebook source", () => {
@@ -188,6 +191,123 @@ describe("analyzeNotebookSource", () => {
         { id: "chart-2", type: "chart", sourceRunCellId: "baseline-run" }
       ]
     });
+  });
+
+  it("round-trips abm-model cells through compact YAML", () => {
+    const yamlSource = `format: sfcr-notebook-yaml
+formatVersion: 1
+id: abm-roundtrip
+title: ABM roundtrip
+metadata:
+  version: 1
+cells:
+  - abm-model:
+      id: abm-sim-model
+      title: Spec
+      modelId: abm-sim
+      populations:
+        - name: households
+          size: 10
+          state: [h, cd]
+          params:
+            alpha1: { draw: uniform, lo: 0.2, hi: 1.0 }
+      params: { alpha2: 0.4, theta: 0.2 }
+      ticks:
+        - do:
+            - [G, "20"]
+        - for:
+            households:
+              - [cd, "alpha1 * lag(h)"]
+        - do:
+            - [H_d, "sum(households.h)"]
+      record:
+        series: [G, H_d]
+  - run:
+      id: baseline-run
+      title: Baseline
+      mode: baseline
+      engine: abm
+      sourceModelId: abm-sim
+      periods: 5
+      resultKey: abm_baseline
+      abm: { monteCarlo: 2, households: 10 }
+`;
+    const document = parseNotebookSource(yamlSource, "yaml").document;
+    expect(document.cells[0]).toMatchObject({
+      type: "abm-model",
+      modelId: "abm-sim"
+    });
+    expect(document.cells[1]).toMatchObject({
+      type: "run",
+      engine: "abm",
+      sourceModelId: "abm-sim"
+    });
+
+    const yaml = notebookToCompactYaml(document, { preserveIds: true });
+    const parsed = notebookFromYaml(yaml);
+    expect(yaml).toContain("  - abm-model:");
+    expect(yaml).toMatch(/- do:/);
+    expect(yaml).toMatch(/for:/);
+    expect(yaml).toMatch(/households:/);
+    expect(yaml).toMatch(/state: \[h, cd\]/);
+    expect(yaml).toMatch(/- \[G, "20"\]/);
+    expect(yaml).toMatch(/- \[cd, "alpha1 \* lag\(h\)"\]/);
+    expect(yaml).toMatch(/series: \[G, H_d\]/);
+    expect(yaml).not.toMatch(/^\s+- - G$/m);
+    expect(parsed.cells[0]).toMatchObject({
+      type: "abm-model",
+      modelId: "abm-sim"
+    });
+    expect(validateNotebookDocument(parsed)).toEqual([]);
+  });
+
+  it("lifts legacy nested abm-model spec onto the cell", () => {
+    const yamlSource = `format: sfcr-notebook-yaml
+formatVersion: 1
+id: abm-legacy
+title: ABM legacy
+metadata:
+  version: 1
+cells:
+  - abm-model:
+      id: abm-sim-model
+      title: Spec
+      modelId: abm-sim
+      spec:
+        modelId: abm-sim
+        populations:
+          - name: households
+            size: 5
+            state: [h]
+        ticks:
+          - aggregate:
+              - [G, "20"]
+        record:
+          series: [G]
+`;
+    const document = parseNotebookSource(yamlSource, "yaml").document;
+    const cell = document.cells[0] as Extract<(typeof document.cells)[number], { type: "abm-model" }>;
+    expect(cell.type).toBe("abm-model");
+    expect(cell.modelId).toBe("abm-sim");
+    expect(cell.populations).toEqual([{ name: "households", size: 5, state: ["h"] }]);
+    expect(cell.ticks).toBeDefined();
+    expect(cell.record).toEqual({ series: ["G"] });
+    expect((cell as { spec?: unknown }).spec).toBeUndefined();
+    expect(validateNotebookDocument(document)).toEqual([]);
+  });
+
+  it("keeps abm-sim template equations as flow-style YAML rows", () => {
+    const document = getNotebookTemplateDocument("abm-sim");
+    const yaml = notebookToCompactYaml(document, { preserveIds: true });
+    expect(yaml).toMatch(/- \[G, "if \(t >= shockPeriod\) \{ g1 \} else \{ g0 \}"\]/);
+    expect(yaml).toMatch(/- \[cd, "min\(alpha1 \* lag\(yd\) \+ alpha2 \* lag\(h\), lag\(h\)\)"\]/);
+    expect(yaml).toMatch(/- do:/);
+    expect(yaml).toMatch(/for:/);
+    expect(yaml).toMatch(/state: \[h, yd, cd, c, y, e\]/);
+    expect(yaml).toMatch(/agents: \[first, last\]/);
+    expect(yaml).toMatch(/variables: \[c, h, e\]/);
+    expect(yaml).not.toMatch(/^\s+- - G$/m);
+    expect(yaml).not.toMatch(/^\s+- - cd$/m);
   });
 
   it("keeps run exogenize arrays compact in YAML source", () => {

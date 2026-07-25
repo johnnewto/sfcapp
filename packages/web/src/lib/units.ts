@@ -780,6 +780,26 @@ function inferFunctionUnits(
       const argument = inferUnits(expr.args[0] ?? { type: "Number", value: 0 }, variableUnits);
       return argument;
     }
+    case "floor": {
+      const argument = inferUnits(expr.args[0] ?? { type: "Number", value: 0 }, variableUnits);
+      return argument;
+    }
+    case "runif": {
+      const lo = inferUnits(expr.args[0] ?? { type: "Number", value: 0 }, variableUnits);
+      const hi = inferUnits(expr.args[1] ?? { type: "Number", value: 0 }, variableUnits);
+      const diagnostics = mergeDiagnostics(lo, hi);
+      if (lo.signature == null || hi.signature == null) {
+        return { signature: null, diagnostics };
+      }
+      if (!signaturesEqual(lo.signature, hi.signature)) {
+        diagnostics.push({
+          severity: UNIT_CHECK_SEVERITY,
+          message: `runif() bounds must use matching units, got ${formatSignature(lo.signature)} and ${formatSignature(hi.signature)}.`
+        });
+        return { signature: null, diagnostics };
+      }
+      return { signature: lo.signature, diagnostics };
+    }
     case "log":
     case "exp": {
       const argument = inferUnits(expr.args[0] ?? { type: "Number", value: 0 }, variableUnits);

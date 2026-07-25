@@ -4,6 +4,7 @@ export * from "./parser/ast";
 export * from "./parser/analyze";
 export * from "./parser/parse";
 export * from "./parser/dependencies";
+export * from "./compile";
 export * from "./graph/blocks";
 export * from "./graph/sectors";
 export * from "./engine/context";

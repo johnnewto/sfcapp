@@ -1,5 +1,5 @@
-import { hireLottery, rationFcfs, runif, shuffleIndices, type Rng } from "./rng";
-import { runAbmMonteCarlo, type AbmModelState } from "./monteCarlo";
+import { runAbmSpec } from "./abmSpec";
+import type { AbmSpec, AbmSpecOverrides, AbmUniformDraw } from "./abmSpecTypes";
 import type { SimulationResult } from "../result/result";
 
 export interface AbmSimConfig {
@@ -49,62 +49,131 @@ export const ABM_SIM_DEFAULTS = {
   shockPeriod: 60
 } as const;
 
-interface HouseholdPopulation {
-  n: number;
-  alpha1: Float64Array;
-  h: Float64Array;
-  yd: Float64Array;
-  cd: Float64Array;
-  c: Float64Array;
-  y: Float64Array;
-  order: number[];
-}
-
-interface AbmSimState {
-  populations: {
-    households: HouseholdPopulation;
-  };
-  /** Aggregate money supply (government liability). */
-  H_s: number;
-  G: Float64Array;
-  pr: number;
-  w: number;
-  alpha2: number;
-  theta: number;
-  s: number;
-}
-
-function governmentPath(periods: number, g0: number, g1: number, shockPeriod: number): Float64Array {
-  const G = new Float64Array(periods);
-  const shockZero = Math.max(0, shockPeriod - 1);
-  for (let t = 0; t < periods; t++) {
-    G[t] = t >= shockZero ? g1 : g0;
-  }
-  return G;
-}
-
-function initHouseholds(
-  rng: Rng,
-  n: number,
-  alpha1m: number,
-  alpha1d: number,
-  homogeneous: boolean
-): HouseholdPopulation {
-  const alpha1 = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    alpha1[i] = homogeneous ? alpha1m : runif(rng, alpha1m - alpha1d, alpha1m + alpha1d);
-  }
-  return {
-    n,
-    alpha1,
-    h: new Float64Array(n),
-    yd: new Float64Array(n),
-    cd: new Float64Array(n),
-    c: new Float64Array(n),
-    y: new Float64Array(n),
-    order: new Array(n)
-  };
-}
+/**
+ * Declarative ABM-SIM spec matching Leeds ABM_SIM.R / the former hand-rolled tick.
+ * Hiring uses `runif` then `shuffle` so the RNG stream matches the original hire-lottery order.
+ */
+export const ABM_SIM_SPEC: AbmSpec = {
+  modelId: "abm-sim",
+  populations: [
+    {
+      name: "households",
+      size: ABM_SIM_DEFAULTS.households,
+      state: ["h", "yd", "cd", "c", "y", "e"],
+      params: {
+        alpha1: {
+          draw: "uniform",
+          lo: ABM_SIM_DEFAULTS.alpha1m - ABM_SIM_DEFAULTS.alpha1d,
+          hi: ABM_SIM_DEFAULTS.alpha1m + ABM_SIM_DEFAULTS.alpha1d
+        }
+      }
+    }
+  ],
+  params: {
+    alpha2: ABM_SIM_DEFAULTS.alpha2,
+    theta: ABM_SIM_DEFAULTS.theta,
+    pr: ABM_SIM_DEFAULTS.pr,
+    w: ABM_SIM_DEFAULTS.pr,
+    s: ABM_SIM_DEFAULTS.s,
+    g0: ABM_SIM_DEFAULTS.g0,
+    g1: ABM_SIM_DEFAULTS.g1,
+    shockPeriod: ABM_SIM_DEFAULTS.shockPeriod
+  },
+  ticks: [
+    {
+      kind: "aggregate",
+      equations: [["G", "if (t >= shockPeriod) { g1 } else { g0 }"]]
+    },
+    {
+      kind: "agent",
+      population: "households",
+      equations: [["cd", "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))"]]
+    },
+    {
+      kind: "aggregate",
+      equations: [
+        ["AD", "sum(households.cd) + G"],
+        ["Nd", "AD / pr"]
+      ]
+    },
+    {
+      kind: "aggregate",
+      equations: [
+        [
+          "N",
+          "min(min(floor(Nd * runif(1 - s, 1 + s)), floor(Nd)), households.size)"
+        ]
+      ]
+    },
+    { kind: "shuffle", population: "households" },
+    {
+      kind: "agent",
+      population: "households",
+      equations: [["e", "if (households.rank <= N) { 1 } else { 0 }"]]
+    },
+    {
+      kind: "aggregate",
+      equations: [
+        ["Y", "pr * N"],
+        ["YG", "min(G, Y)"],
+        ["YC", "Y - YG"]
+      ]
+    },
+    {
+      kind: "ration-fcfs",
+      population: "households",
+      demand: "cd",
+      supply: "YC",
+      into: "c"
+    },
+    {
+      kind: "agent",
+      population: "households",
+      equations: [
+        ["y", "w * e"],
+        ["yd", "y * (1 - theta)"],
+        ["h", "lag(h) + y - c - theta * y"]
+      ]
+    },
+    {
+      kind: "aggregate",
+      equations: [
+        ["C", "sum(households.c)"],
+        ["YD", "sum(households.yd)"],
+        ["TAX", "theta * w * N"],
+        ["H_d", "sum(households.h)"],
+        ["H_s", "lag(H_s) + YG - TAX"],
+        ["UR", "(households.size - N) / households.size"]
+      ]
+    }
+  ],
+  record: {
+    series: ["Y", "C", "YD", "H_d", "H_s", "UR", "G", "TAX", "N"],
+    bands: ["Y", "C", "YD", "H_d", "H_s", "UR"],
+    descriptions: {
+      Y: "Output / income (MC mean)",
+      C: "Consumption (MC mean)",
+      YD: "Disposable income (MC mean)",
+      H_d: "Total household money (MC mean)",
+      H_s: "Government money supply (MC mean)",
+      UR: "Unemployment rate, emergent (MC mean)",
+      G: "Government spending",
+      TAX: "Tax revenue",
+      N: "Employment (hired count)",
+      c: "Household consumption (micro, MC run 1)",
+      h: "Household money holdings (micro, MC run 1)",
+      e: "Employment flag 0/1 (micro, MC run 1)"
+    },
+    micro: [
+      {
+        population: "households",
+        agents: ["first", "last"],
+        variables: ["c", "h", "e"]
+      }
+    ]
+  },
+  check: { left: "H_d", right: "H_s", tolerance: 1e-9 }
+};
 
 function resolveConfig(config: AbmSimConfig = {}) {
   return {
@@ -126,140 +195,63 @@ function resolveConfig(config: AbmSimConfig = {}) {
   };
 }
 
-/**
- * Agent-based SIM (Leeds ABM_SIM.R): heterogeneous households, job lottery,
- * FCFS goods market, Monte Carlo means.
- */
-export function runAbmSim(config: AbmSimConfig = {}): SimulationResult {
+/** Build an AbmSpec for ABM-SIM from resolved config (alpha1 draw / size / params). */
+export function buildAbmSimSpec(config: AbmSimConfig = {}): {
+  spec: AbmSpec;
+  overrides: AbmSpecOverrides;
+} {
   const cfg = resolveConfig(config);
-  const lastIdx = cfg.households - 1;
+  const alpha1: AbmUniformDraw | { value: number } = cfg.homogeneousAlpha1
+    ? { value: cfg.alpha1m }
+    : {
+        draw: "uniform",
+        lo: cfg.alpha1m - cfg.alpha1d,
+        hi: cfg.alpha1m + cfg.alpha1d
+      };
 
-  return runAbmMonteCarlo(
-    {
-      periods: cfg.periods,
-      monteCarlo: cfg.monteCarlo,
-      baseSeed: cfg.baseSeed,
-      ...(cfg.bandKind === "none" ? {} : { bandKind: cfg.bandKind })
+  const overrides: AbmSpecOverrides = {
+    periods: cfg.periods,
+    monteCarlo: cfg.monteCarlo,
+    baseSeed: cfg.baseSeed,
+    bandKind: cfg.bandKind,
+    params: {
+      alpha2: cfg.alpha2,
+      theta: cfg.theta,
+      pr: cfg.pr,
+      w: cfg.pr,
+      s: cfg.s,
+      g0: cfg.g0,
+      g1: cfg.g1,
+      shockPeriod: cfg.shockPeriod
     },
-    {
-      seriesNames: ["Y", "C", "YD", "H_d", "H_s", "UR", "G"],
-      bandSeriesNames:
-        cfg.bandKind === "none" ? [] : ["Y", "C", "YD", "H_d", "H_s", "UR"],
-      microSeriesNames: [
-        "c_h1",
-        "h_h1",
-        "e_h1",
-        "c_hLast",
-        "h_hLast",
-        "e_hLast"
-      ],
-      model: {
-        equations: [{ name: "_abm_sim", expression: "0" }],
-        externals: {
-          alpha1m: { kind: "constant", value: cfg.alpha1m },
-          alpha2: { kind: "constant", value: cfg.alpha2 },
-          theta: { kind: "constant", value: cfg.theta },
-          pr: { kind: "constant", value: cfg.pr },
-          s: { kind: "constant", value: cfg.s },
-          households: { kind: "constant", value: cfg.households },
-          monteCarlo: { kind: "constant", value: cfg.monteCarlo }
-        },
-        initialValues: {}
-      },
-      init: (rng) => {
-        const households = initHouseholds(
-          rng,
-          cfg.households,
-          cfg.alpha1m,
-          cfg.alpha1d,
-          cfg.homogeneousAlpha1
-        );
-        const state: AbmSimState = {
-          populations: { households },
-          H_s: 0,
-          G: governmentPath(cfg.periods, cfg.g0, cfg.g1, cfg.shockPeriod),
-          pr: cfg.pr,
-          w: cfg.pr,
-          alpha2: cfg.alpha2,
-          theta: cfg.theta,
-          s: cfg.s
-        };
-        return state;
-      },
-      tick: (ctx) => {
-        const state = ctx.state as AbmSimState;
-        const hh = state.populations.households;
-        const { n, alpha1, h, yd, cd, c, y, order } = hh;
-        const { pr, w, alpha2, theta, s } = state;
-        const Gi = state.G[ctx.periodZeroBased]!;
+    populationSizes: { households: cfg.households },
+    populationParams: { households: { alpha1 } }
+  };
 
-        // Tick 1: planned consumption
-        let AD = Gi;
-        for (let i = 0; i < n; i++) {
-          const planned = Math.min(alpha1[i]! * yd[i]! + alpha2 * h[i]!, h[i]!);
-          cd[i] = planned;
-          AD += planned;
-        }
-        const Nd = AD / pr;
-
-        // Tick 2: job lottery
-        const N = hireLottery(ctx.rng, Nd, s, n);
-
-        // Tick 3: shuffle (jobs + goods queue)
-        shuffleIndices(ctx.rng, n, order);
-
-        // Tick 4: goods — government first, then FCFS households
-        const YG = Math.min(Gi, N * pr);
-        const YC = N * pr - YG;
-        rationFcfs(cd, order, YC, c);
-
-        // Tick 5: wages, taxes, money
-        y.fill(0);
-        for (let k = 0; k < N; k++) {
-          y[order[k]!] = w;
-        }
-
-        let TAX = 0;
-        let Y = 0;
-        let C = 0;
-        let YD = 0;
-        for (let i = 0; i < n; i++) {
-          const yi = y[i]!;
-          const tax = theta * yi;
-          const ci = c[i]!;
-          h[i] = h[i]! + yi - ci - tax;
-          yd[i] = yi - tax;
-          TAX += tax;
-          Y += yi;
-          C += ci;
-          YD += yd[i]!;
-        }
-
-        // Tick 6: aggregates + SFC
-        const H_d = h.reduce((a, b) => a + b, 0);
-        state.H_s = state.H_s + (YG - TAX);
-
-        return {
-          values: {
-            Y,
-            C,
-            YD,
-            H_d,
-            H_s: state.H_s,
-            UR: (n - N) / n,
-            G: Gi,
-            c_h1: c[0]!,
-            h_h1: h[0]!,
-            e_h1: y[0]! > 0 ? 1 : 0,
-            c_hLast: c[lastIdx]!,
-            h_hLast: h[lastIdx]!,
-            e_hLast: y[lastIdx]! > 0 ? 1 : 0
+  // When bands are "none", still record the same series; runAbmSpec drops band emission.
+  const spec: AbmSpec =
+    cfg.bandKind === "none"
+      ? {
+          ...ABM_SIM_SPEC,
+          record: {
+            ...ABM_SIM_SPEC.record,
+            bands: []
           }
-        };
-      }
-    }
-  );
+        }
+      : ABM_SIM_SPEC;
+
+  return { spec, overrides };
 }
 
-/** Narrow helper for tests / callers that need the resolved AbmSimState type. */
-export type { AbmModelState };
+/**
+ * Agent-based SIM (Leeds ABM_SIM.R): heterogeneous households, job lottery,
+ * FCFS goods market, Monte Carlo means. Implemented via `runAbmSpec`.
+ */
+export function runAbmSim(config: AbmSimConfig = {}): SimulationResult {
+  const { spec, overrides } = buildAbmSimSpec(config);
+  const result = runAbmSpec(spec, overrides);
+
+  // Preserve the historical series surface for callers that only expect the
+  // original seven macro names (+ micro). TAX and N remain available when present.
+  return result;
+}

@@ -1003,6 +1003,10 @@ export function NotebookApp() {
           return [];
         }
 
+        if (cell.engine === "abm") {
+          return [Math.max(cell.periods - 1, 0)];
+        }
+
         const editor = buildEditorStateForNotebookModel(notebookDocument, cell);
         if (!editor) {
           return [];
@@ -2280,7 +2284,9 @@ export function NotebookApp() {
             ? "chart"
             : args.cellType === "sankey"
               ? "sequence"
-              : args.cellType
+              : args.cellType === "abm-model"
+                ? "model"
+                : (args.cellType as NotebookHelpTopicId)
     );
     setIsHelpContentsVisible(false);
     selectNotebookCell(args.cellId);

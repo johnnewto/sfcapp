@@ -1,5 +1,6 @@
 import { isRowComment } from "../rowComments";
 import type { NotebookCell, NotebookDocument } from "../types";
+import { normalizeAbmModelCell } from "../abmModelCell";
 import { normalizeUnitMetaAliases, serializeUnitMetaAliases } from "../unitMetaAliases";
 import { normalizeScenarioFromNotebook, serializeScenarioForNotebook } from "./scenarioFormat";
 import { validateCell } from "./documentUtils";
@@ -95,13 +96,15 @@ export function normalizeNotebookDocument(document: NotebookDocument): NotebookD
 }
 
 export function normalizeNotebookCell(cell: NotebookCell): NotebookCell {
-  switch (cell.type) {
+  const lifted = cell.type === "abm-model" ? normalizeAbmModelCell(cell) : cell;
+
+  switch (lifted.type) {
     case "model":
       return {
-        ...cell,
+        ...lifted,
         editor: {
-          ...cell.editor,
-          equations: cell.editor.equations.map((equation) =>
+          ...lifted.editor,
+          equations: lifted.editor.equations.map((equation) =>
             isRowComment(equation)
               ? equation
               : {
@@ -109,7 +112,7 @@ export function normalizeNotebookCell(cell: NotebookCell): NotebookCell {
                   unitMeta: normalizeUnitMetaAliases(equation.unitMeta)
                 }
           ),
-          externals: cell.editor.externals.map((external) =>
+          externals: lifted.editor.externals.map((external) =>
             isRowComment(external)
               ? external
               : {
@@ -121,8 +124,8 @@ export function normalizeNotebookCell(cell: NotebookCell): NotebookCell {
       };
     case "equations":
       return {
-        ...cell,
-        equations: cell.equations.map((equation) =>
+        ...lifted,
+        equations: lifted.equations.map((equation) =>
           isRowComment(equation)
             ? equation
             : {
@@ -134,8 +137,8 @@ export function normalizeNotebookCell(cell: NotebookCell): NotebookCell {
     case "externals":
     case "observed":
       return {
-        ...cell,
-        externals: cell.externals.map((external) =>
+        ...lifted,
+        externals: lifted.externals.map((external) =>
           isRowComment(external)
             ? external
             : {
@@ -146,10 +149,10 @@ export function normalizeNotebookCell(cell: NotebookCell): NotebookCell {
       };
     case "run":
       return {
-        ...cell,
-        ...(cell.externalOverrides
+        ...lifted,
+        ...(lifted.externalOverrides
           ? {
-              externalOverrides: cell.externalOverrides.map((external) =>
+              externalOverrides: lifted.externalOverrides.map((external) =>
                 isRowComment(external)
                   ? external
                   : {
@@ -159,14 +162,14 @@ export function normalizeNotebookCell(cell: NotebookCell): NotebookCell {
               )
             }
           : {}),
-        ...(cell.scenario
+        ...(lifted.scenario
           ? {
-              scenario: normalizeScenarioFromNotebook(cell.scenario)
+              scenario: normalizeScenarioFromNotebook(lifted.scenario)
             }
           : {})
       };
     default:
-      return cell;
+      return lifted;
   }
 }
 

@@ -23,6 +23,35 @@ export {
 } from "./percentiles";
 export {
   runAbmSim,
+  buildAbmSimSpec,
   ABM_SIM_DEFAULTS,
+  ABM_SIM_SPEC,
   type AbmSimConfig
 } from "./abmSim";
+export {
+  runAbmSpec,
+  validateAbmSpec,
+  abmMicroSeriesName,
+  expandAbmMicroAgents
+} from "./abmSpec";
+export { normalizeAbmSpec, normalizeAbmTick } from "./normalizeAbmSpec";
+export type {
+  AbmSpec,
+  AbmSpecOverrides,
+  AbmPopulationSpec,
+  AbmPopulationParam,
+  AbmUniformDraw,
+  AbmConstantParam,
+  AbmTickSpec,
+  AbmAgentTick,
+  AbmAggregateTick,
+  AbmHireLotteryTick,
+  AbmShuffleTick,
+  AbmRationFcfsTick,
+  AbmEquationRow,
+  AbmRecordSpec,
+  AbmMicroRecord,
+  AbmMicroAgentRef,
+  AbmCheckSpec
+} from "./abmSpecTypes";
+export { ABM_MICRO_DEFAULT_MAX_AGENTS } from "./abmSpecTypes";

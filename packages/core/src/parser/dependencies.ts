@@ -159,6 +159,15 @@ export function evaluateExpression(expr: Expr, context: SolverContext): number {
         ? evaluateExpression(expr.whenTrue, context)
         : evaluateExpression(expr.whenFalse, context);
     case "Function":
+      if (expr.name === "runif") {
+        const randomUniform = context.randomUniform;
+        if (!randomUniform) {
+          throw new Error("runif(lo, hi) requires a solver context with randomUniform.");
+        }
+        const lo = evaluateExpression(expr.args[0]!, context);
+        const hi = evaluateExpression(expr.args[1]!, context);
+        return randomUniform(lo, hi);
+      }
       return evaluateFunction(expr.name, expr.args.map((arg) => evaluateExpression(arg, context)));
     case "Binary": {
       const leftValue = evaluateExpression(expr.left, context);
@@ -305,6 +314,8 @@ function evaluateFunction(name: string, values: number[]): number {
       return Math.abs(values[0] ?? NaN);
     case "sqrt":
       return Math.sqrt(values[0] ?? NaN);
+    case "floor":
+      return Math.floor(values[0] ?? NaN);
     case "min":
       return Math.min(values[0] ?? NaN, values[1] ?? NaN);
     case "max":

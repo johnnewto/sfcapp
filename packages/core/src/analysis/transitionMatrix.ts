@@ -1,6 +1,6 @@
 import { wrapContextWithMatrixColumnSums } from "../engine/matrixColumnSum";
 import type { SolverContext } from "../engine/context";
-import { evaluateExpression, type MatrixColumnSumLocations } from "../parser/dependencies";
+import type { MatrixColumnSumLocations } from "../parser/dependencies";
 import { parseEquation, type ParsedEquation } from "../parser/parse";
 import type { SimulationResult } from "../result/result";
 import { solveLinearSystem } from "../solver/linearSolve";
@@ -166,7 +166,7 @@ function computeResidualVector(
       throw new Error(`Missing equation for variable: ${variable}`);
     }
 
-    return evaluateExpression(equation.expression, context) - context.currentValue(variable);
+    return equation.evaluate(context) - context.currentValue(variable);
   });
 }
 

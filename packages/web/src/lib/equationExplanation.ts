@@ -115,6 +115,8 @@ function explainFunction(
       return `the maximum of ${explainedArgs.join(" and ")}`;
     case "abs":
       return `the absolute value of ${explainedArgs[0] ?? "the expression"}`;
+    case "floor":
+      return `the floor of ${explainedArgs[0] ?? "the expression"}`;
     case "sqrt":
       return `the square root of ${explainedArgs[0] ?? "the expression"}`;
     case "pow":
@@ -125,6 +127,8 @@ function explainFunction(
       return `the logarithm of ${explainedArgs[0] ?? "the expression"}`;
     case "exp":
       return `the exponential of ${explainedArgs[0] ?? "the expression"}`;
+    case "runif":
+      return `a uniform random draw between ${explainedArgs[0] ?? "lo"} and ${explainedArgs[1] ?? "hi"}`;
     default:
       return `${name} of ${explainedArgs.join(", ")}`;
   }

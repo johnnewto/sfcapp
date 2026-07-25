@@ -1,4 +1,3 @@
-import { evaluateExpression } from "../parser/dependencies";
 import type { SolverContext } from "../engine/context";
 import type { ParsedEquation } from "../parser/parse";
 import type { SolverMethod } from "../model/types";
@@ -559,7 +558,7 @@ function probeGaussSeidel(
         throw new Error(`Missing equation for variable: ${variable}`);
       }
       const previous = context.currentValue(variable);
-      const next = evaluateExpression(equation.expression, context);
+      const next = equation.evaluate(context);
       context.setCurrentValue(variable, next);
       const relative = Math.abs(next - previous) / (Math.abs(previous) + 1e-15);
       const finite = Number.isFinite(next) && Number.isFinite(previous) && Number.isFinite(relative);
@@ -661,7 +660,7 @@ function residuals(
     if (!equation) {
       throw new Error(`Missing equation for variable: ${variable}`);
     }
-    return evaluateExpression(equation.expression, context) - context.currentValue(variable);
+    return equation.evaluate(context) - context.currentValue(variable);
   });
 }
 

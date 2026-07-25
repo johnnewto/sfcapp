@@ -35,6 +35,7 @@ export const NOTEBOOK_CELL_TYPES = new Set<NotebookCell["type"]>([
   "externals",
   "observed",
   "initial-values",
+  "abm-model",
   "run",
   "chart",
   "chart-grid",

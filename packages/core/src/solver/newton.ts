@@ -1,8 +1,9 @@
-import { evaluateExpression } from "../parser/dependencies";
+import type { ParsedEquation } from "../parser/parse";
 
 import { throwConvergenceError, type ConvergenceVariableDiagnostic } from "./convergenceFailure";
 import type { BlockSolver } from "./types";
 import { solveLinearSystem } from "./linearSolve";
+import type { SolverContext } from "../engine/context";
 
 export const newtonSolver: BlockSolver = {
   solveBlock(period, block, equationsByName, context, options) {
@@ -15,7 +16,7 @@ export const newtonSolver: BlockSolver = {
       if (!equation) {
         throw new Error(`Missing equation for variable: ${variable}`);
       }
-      context.setCurrentValue(variable, evaluateExpression(equation.expression, context));
+      context.setCurrentValue(variable, equation.evaluate(context));
       return;
     }
 
@@ -83,22 +84,22 @@ function buildResidualDiagnostics(
 
 function residuals(
   variables: string[],
-  equationsByName: Map<string, { expression: import("../parser/ast").Expr }>,
-  context: import("../engine/context").SolverContext
+  equationsByName: Map<string, ParsedEquation>,
+  context: SolverContext
 ): number[] {
   return variables.map((variable) => {
     const equation = equationsByName.get(variable);
     if (!equation) {
       throw new Error(`Missing equation for variable: ${variable}`);
     }
-    return evaluateExpression(equation.expression, context) - context.currentValue(variable);
+    return equation.evaluate(context) - context.currentValue(variable);
   });
 }
 
 function finiteDifferenceJacobian(
   variables: string[],
-  equationsByName: Map<string, { expression: import("../parser/ast").Expr }>,
-  context: import("../engine/context").SolverContext,
+  equationsByName: Map<string, ParsedEquation>,
+  context: SolverContext,
   x: number[],
   baseResidual: number[]
 ): number[][] {
@@ -122,11 +123,7 @@ function finiteDifferenceJacobian(
   return jacobian;
 }
 
-function setCurrentValues(
-  context: import("../engine/context").SolverContext,
-  variables: string[],
-  values: number[]
-): void {
+function setCurrentValues(context: SolverContext, variables: string[], values: number[]): void {
   for (let index = 0; index < variables.length; index += 1) {
     const variable = variables[index];
     if (variable) {

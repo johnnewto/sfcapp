@@ -1,7 +1,5 @@
-import { evaluateExpression } from "../parser/dependencies";
-
-import { throwConvergenceError, type ConvergenceVariableDiagnostic } from "./convergenceFailure";
 import type { BlockSolver } from "./types";
+import { throwConvergenceError, type ConvergenceVariableDiagnostic } from "./convergenceFailure";
 
 export const gaussSeidelSolver: BlockSolver = {
   solveBlock(period, block, equationsByName, context, options) {
@@ -14,7 +12,7 @@ export const gaussSeidelSolver: BlockSolver = {
       if (!equation) {
         throw new Error(`Missing equation for variable: ${variable}`);
       }
-      context.setCurrentValue(variable, evaluateExpression(equation.expression, context));
+      context.setCurrentValue(variable, equation.evaluate(context));
       return;
     }
 
@@ -30,7 +28,7 @@ export const gaussSeidelSolver: BlockSolver = {
           throw new Error(`Missing equation for variable: ${variable}`);
         }
         const previous = context.currentValue(variable);
-        const next = evaluateExpression(equation.expression, context);
+        const next = equation.evaluate(context);
         context.setCurrentValue(variable, next);
         const relative = Math.abs(next - previous) / (Math.abs(previous) + 1e-15);
         const finite = Number.isFinite(next) && Number.isFinite(previous) && Number.isFinite(relative);

@@ -36,7 +36,7 @@ Supported syntax includes:
 - Lagged values: `X'` (preferred), or `lag(X)`, or `X[-1]`.
 - Stock changes: `d(X)`.
 - Time step: `dt`.
-- Functions such as `min(a, b)`, `max(a, b)`, `abs(x)`, `sqrt(x)`, `pow(x, n)`, `exp(x)`, and `log(x)`.
+- Functions such as `min(a, b)`, `max(a, b)`, `abs(x)`, `sqrt(x)`, `floor(x)` (alias `int(x)`), `pow(x, n)`, `exp(x)`, `log(x)`, and ABM `runif(lo, hi)`.
 - Conditionals such as `if (condition) { expr } else { expr }`.
 
 ## Roles

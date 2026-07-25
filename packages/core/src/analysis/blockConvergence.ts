@@ -1,7 +1,6 @@
 import { buildOrderedBlocks, type EquationBlock } from "../graph/blocks";
 import { wrapContextWithMatrixColumnSums } from "../engine/matrixColumnSum";
 import type { SolverContext } from "../engine/context";
-import { evaluateExpression } from "../parser/dependencies";
 import { parseEquation, type ParsedEquation } from "../parser/parse";
 import type { ModelDefinition, SimulationOptions, SolverMethod } from "../model/types";
 import type { ConvergenceVariableDiagnostic } from "../solver/convergenceFailure";
@@ -286,11 +285,11 @@ function analyzeAcyclicBlock(
   }
 
   const previous = context.currentValue(variable);
-  const rhsBefore = evaluateExpression(equation.expression, context);
+  const rhsBefore = equation.evaluate(context);
   const residualNormBefore = Math.abs(rhsBefore - previous);
   const next = rhsBefore;
   context.setCurrentValue(variable, next);
-  const rhsAfter = evaluateExpression(equation.expression, context);
+  const rhsAfter = equation.evaluate(context);
   const residualNormAfter = Math.abs(rhsAfter - next);
   const finite = Number.isFinite(previous) && Number.isFinite(next) && Number.isFinite(rhsBefore);
 

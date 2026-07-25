@@ -5,7 +5,7 @@ import {
   analyzeAllBlockConvergence,
   computeStabilityMetrics,
   probeInitialValuesForPeriod1,
-  runAbmSim,
+  runAbmSpec,
   runBaseline,
   runScenario,
   runSegmentedExogenize,
@@ -44,14 +44,11 @@ export function handleWorkerRequest(request: WorkerRequest): WorkerResponse {
           )
         };
       case "runAbm": {
-        const { modelId, config } = request.payload;
-        if (modelId !== "abm-sim") {
-          throw new Error(`Unknown ABM model id: ${modelId}`);
-        }
+        const { spec, overrides } = request.payload;
         return {
           id: request.id,
           type: "success",
-          payload: runAbmSim(config)
+          payload: runAbmSpec(spec, overrides)
         };
       }
       case "validateRunnable":

@@ -7,6 +7,7 @@ import { validateMatrixColumnTreeMatchesColumns } from "./matrixColumnTree";
 import { isRecord } from "./document/documentUtils";
 import { isRowComment } from "./rowComments";
 import type {
+  AbmModelCell,
   ChartCell,
   MatrixCell,
   NotebookCell,
@@ -48,7 +49,8 @@ const CELL_TYPE_SCHEMA_BRANCH: Record<string, number> = {
   table: 7,
   matrix: 8,
   sequence: 9,
-  sankey: 10
+  sankey: 10,
+  "abm-model": 11
 };
 
 function filterSchemaErrors(value: unknown, errors: ErrorObject[]): ErrorObject[] {
@@ -129,6 +131,7 @@ export function validateNotebookDocument(document: NotebookDocument): NotebookVa
   const matrixCellIds = new Set<string>();
   const modelCellIds = new Set<string>();
   const sectionModelIds = new Set<string>();
+  const abmModelIds = new Set<string>();
 
   for (const cell of document.cells) {
     if (cellIds.has(cell.id)) {
@@ -144,6 +147,9 @@ export function validateNotebookDocument(document: NotebookDocument): NotebookVa
     }
     if (cell.type === "model") {
       modelCellIds.add(cell.id);
+    }
+    if (cell.type === "abm-model") {
+      abmModelIds.add(cell.modelId);
     }
     if (
       cell.type === "equations" ||
@@ -161,12 +167,22 @@ export function validateNotebookDocument(document: NotebookDocument): NotebookVa
   }
 
   for (const cell of document.cells) {
-    validateCellReferences(cell, { issues, matrixCellIds, modelCellIds, runCellIds, sectionModelIds });
+    validateCellReferences(cell, {
+      issues,
+      matrixCellIds,
+      modelCellIds,
+      runCellIds,
+      sectionModelIds,
+      abmModelIds
+    });
     if (cell.type === "matrix") {
       validateMatrixCell(cell, issues);
     }
     if (cell.type === "chart") {
       validateChartCell(cell, issues);
+    }
+    if (cell.type === "abm-model") {
+      validateAbmModelCell(cell, issues);
     }
   }
 
@@ -239,6 +255,7 @@ function validateCellReferences(
     modelCellIds: Set<string>;
     runCellIds: Set<string>;
     sectionModelIds: Set<string>;
+    abmModelIds: Set<string>;
   }
 ): void {
   if ("sourceRunCellId" in cell && cell.sourceRunCellId && !context.runCellIds.has(cell.sourceRunCellId)) {
@@ -265,6 +282,7 @@ function validateRunCellReferences(
     modelCellIds: Set<string>;
     runCellIds: Set<string>;
     sectionModelIds: Set<string>;
+    abmModelIds: Set<string>;
   }
 ): void {
   if (!Number.isInteger(cell.periods) || cell.periods < 1) {
@@ -279,19 +297,44 @@ function validateRunCellReferences(
     context.issues.push(createNotebookIssue(`Run cell '${cell.id}' references missing model cell '${cell.sourceModelCellId}'.`));
   }
 
-  if (cell.sourceModelId && !context.sectionModelIds.has(cell.sourceModelId)) {
-    context.issues.push(createNotebookIssue(`Run cell '${cell.id}' references missing model id '${cell.sourceModelId}'.`));
-  }
-
   if (cell.engine === "abm") {
-    if (cell.abmModel != null && typeof cell.abmModel !== "string") {
-      context.issues.push(createNotebookIssue(`Run cell '${cell.id}' abmModel must be a string.`));
+    if (!cell.sourceModelId) {
+      context.issues.push(
+        createNotebookIssue(`ABM run cell '${cell.id}' must set sourceModelId to an abm-model modelId.`)
+      );
+      return;
+    }
+    if (!context.abmModelIds.has(cell.sourceModelId)) {
+      context.issues.push(
+        createNotebookIssue(
+          `ABM run cell '${cell.id}' references missing abm-model id '${cell.sourceModelId}'.`
+        )
+      );
     }
     return;
   }
 
+  if (cell.sourceModelId && !context.sectionModelIds.has(cell.sourceModelId)) {
+    context.issues.push(createNotebookIssue(`Run cell '${cell.id}' references missing model id '${cell.sourceModelId}'.`));
+  }
+
   if (!cell.sourceModelCellId && !cell.sourceModelId) {
     context.issues.push(createNotebookIssue(`Run cell '${cell.id}' must reference a source model.`));
+  }
+}
+
+function validateAbmModelCell(cell: AbmModelCell, issues: NotebookValidationIssue[]): void {
+  if (!cell.modelId?.trim()) {
+    issues.push(createNotebookIssue(`ABM model cell '${cell.id}' must define modelId.`));
+  }
+  if (!Array.isArray(cell.populations) || cell.populations.length < 1) {
+    issues.push(createNotebookIssue(`ABM model cell '${cell.id}' needs populations.`));
+  }
+  if (!Array.isArray(cell.ticks) || cell.ticks.length < 1) {
+    issues.push(createNotebookIssue(`ABM model cell '${cell.id}' needs ticks.`));
+  }
+  if (cell.record == null || typeof cell.record !== "object" || Array.isArray(cell.record)) {
+    issues.push(createNotebookIssue(`ABM model cell '${cell.id}' needs record.`));
   }
 }
 

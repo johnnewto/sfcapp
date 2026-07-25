@@ -3,9 +3,9 @@ import type {
   MatrixColumnSumBindings,
   MatrixColumnSumLocations
 } from "../parser/dependencies";
-import { evaluateExpression } from "../parser/dependencies";
 import { rethrowExpressionParseError } from "../parser/parseErrors";
 import { parseExpression } from "../parser/parse";
+import { compileExpression, type CompiledExpression } from "../compile/compileExpression";
 import type { SolverContext } from "./context";
 import { isSkippableMatrixCellSource } from "./matrixCellSource";
 
@@ -15,6 +15,19 @@ function stripLeadingPlus(source: string): string {
   return source.startsWith("+") ? source.slice(1).trimStart() : source;
 }
 
+const matrixCellCompileCache = new Map<string, CompiledExpression>();
+
+function compiledMatrixCell(source: string): CompiledExpression {
+  const key = stripLeadingPlus(source.trim());
+  const cached = matrixCellCompileCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const compiled = compileExpression(parseExpression(key));
+  matrixCellCompileCache.set(key, compiled);
+  return compiled;
+}
+
 export function evaluateMatrixCellSource(source: string, context: SolverContext): number {
   const trimmed = source.trim();
   if (isSkippableMatrixCellSource(trimmed)) {
@@ -22,8 +35,7 @@ export function evaluateMatrixCellSource(source: string, context: SolverContext)
   }
 
   try {
-    const expression = parseExpression(stripLeadingPlus(trimmed));
-    return evaluateExpression(expression, context);
+    return compiledMatrixCell(trimmed)(context);
   } catch (error) {
     rethrowExpressionParseError(error, trimmed);
   }
@@ -76,6 +88,9 @@ export function wrapContextWithMatrixColumnSums(
       : undefined,
     evaluateMatrixColumnSum: (columnRef) =>
       evaluateMatrixColumnSum(columnRef, bindings, context, locations),
+    randomUniform: context.randomUniform
+      ? (lo, hi) => context.randomUniform!(lo, hi)
+      : undefined,
     matrixColumnSums: bindings,
     matrixColumnSumLocations: locations
   };

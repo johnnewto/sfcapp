@@ -1,4 +1,5 @@
 import type {
+  AbmSpec,
   EquationRole,
   ExternalDef,
   ModelDefinition,
@@ -137,6 +138,7 @@ export type NotebookCell =
   | ExternalsCell
   | ObservedCell
   | InitialValuesCell
+  | AbmModelCell
   | RunCell
   | ChartCell
   | ChartGridCell
@@ -201,6 +203,29 @@ export interface InitialValuesCell extends NotebookCellBase {
   initialValues: InitialValueListItem[];
 }
 
+/**
+ * Declarative agent-based model. Run cells with `engine: "abm"` reference this
+ * cell via `sourceModelId` (== `modelId`) and pass optional `abm` overrides.
+ *
+ * AbmSpec fields (`populations`, `ticks`, `record`, …) live on the cell itself
+ * (same pattern as equations on an equations cell). Pass {@link abmSpecFromCell}
+ * into `runAbmSpec`.
+ */
+export interface AbmModelCell extends NotebookCellBase {
+  type: "abm-model";
+  modelId: string;
+  /** Population definitions (typed or YAML-shaped). */
+  populations: AbmSpec["populations"] | unknown;
+  /** Scalar params shared by agents and aggregates. */
+  params?: AbmSpec["params"] | Record<string, number>;
+  /** Ordered ticks (typed `{ kind }` or YAML one-key wrappers). */
+  ticks: AbmSpec["ticks"] | unknown;
+  /** Macro / micro recording config. */
+  record: AbmSpec["record"] | Record<string, unknown>;
+  /** Optional stock-flow identity check. */
+  check?: AbmSpec["check"] | Record<string, unknown>;
+}
+
 export interface RunCell extends NotebookCellBase {
   type: "run";
   sourceModelCellId?: string;
@@ -214,10 +239,13 @@ export interface RunCell extends NotebookCellBase {
   simType?: "DYNAMIC" | "STATIC";
   /**
    * Simulation engine for this run. Defaults to `"equation"` (Gauss–Seidel / Broyden).
-   * `"abm"` uses the agent-based Monte Carlo path (`abmModel` + `abm` config).
+   * `"abm"` uses the agent-based Monte Carlo path (`sourceModelId` → abm-model cell).
    */
   engine?: "equation" | "abm";
-  /** Registered ABM model id when `engine` is `"abm"` (e.g. `"abm-sim"`). */
+  /**
+   * @deprecated Prefer `sourceModelId` pointing at an `abm-model` cell.
+   * Kept for transitional templates; ignored when `sourceModelId` resolves.
+   */
   abmModel?: string;
   /** ABM parameter overrides (households, monteCarlo, s, …). */
   abm?: Record<string, number | boolean>;

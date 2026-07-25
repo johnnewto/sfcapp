@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { AbmSimConfig, ModelDefinition, SimulationOptions, SimulationResult } from "@sfcr/core";
+import type { ModelDefinition, SimulationOptions, SimulationResult } from "@sfcr/core";
+import { abmSpecFromCell } from "@sfcr/notebook-core";
 
 import {
   applyConstantExternalOverrides,
@@ -10,9 +11,16 @@ import {
 import { buildRuntimeConfig } from "../lib/editorModel";
 import { createWorkerClient } from "../lib/workerClient";
 import { extractPartialRunResult } from "../lib/partialRunResult";
+import { abmRunOverridesFromCell } from "./abmRunOverrides";
 import { normalizeScenarioFromNotebook } from "./document";
 import { buildEditorStateForNotebookModel, resolveRunCellModelKey } from "./modelSections";
-import type { NotebookCellOutput, NotebookDocument, NotebookRuntimeState, RunCell } from "./types";
+import type {
+  AbmModelCell,
+  NotebookCellOutput,
+  NotebookDocument,
+  NotebookRuntimeState,
+  RunCell
+} from "./types";
 
 export interface NotebookRunnerApi extends NotebookRuntimeState {
   getPreviousResult(cellId: string): SimulationResult | null;
@@ -54,6 +62,18 @@ export function buildNotebookRunnerResetKey(document: NotebookDocument): string 
           type: cell.type,
           modelId: cell.modelId,
           initialValues: cell.initialValues
+        });
+        break;
+      case "abm-model":
+        resetState.push({
+          id: cell.id,
+          type: cell.type,
+          modelId: cell.modelId,
+          populations: cell.populations,
+          params: cell.params ?? null,
+          ticks: cell.ticks,
+          record: cell.record,
+          check: cell.check ?? null
         });
         break;
       case "run":
@@ -149,17 +169,33 @@ export function resolveModelIdFromRunCellKey(modelKey: string | null): string | 
   return modelKey.replace(/^model:/, "").replace(/^cell:/, "") || null;
 }
 
+export function resolveAbmModelCell(
+  document: NotebookDocument,
+  cell: RunCell
+): AbmModelCell | null {
+  const modelId = cell.sourceModelId?.trim();
+  if (!modelId) {
+    return null;
+  }
+  const match = document.cells.find(
+    (entry): entry is AbmModelCell => entry.type === "abm-model" && entry.modelId === modelId
+  );
+  return match ?? null;
+}
+
 export function buildRunHistorySignatures(document: NotebookDocument): Record<string, string> {
   return Object.fromEntries(
     document.cells
       .filter((cell): cell is RunCell => cell.type === "run")
       .map((cell) => {
         if (cell.engine === "abm") {
+          const abmCell = resolveAbmModelCell(document, cell);
           return [
             cell.id,
             JSON.stringify({
               engine: "abm",
-              abmModel: cell.abmModel ?? "abm-sim",
+              sourceModelId: cell.sourceModelId ?? null,
+              spec: abmCell ? abmSpecFromCell(abmCell) : null,
               abm: cell.abm ?? null,
               periods: cell.periods,
               mode: cell.mode
@@ -303,12 +339,14 @@ export function useNotebookRunner(
       if (cell.mode !== "baseline") {
         throw new Error("ABM runs currently support baseline mode only.");
       }
-      const modelId = cell.abmModel?.trim() || "abm-sim";
-      const config: AbmSimConfig = {
-        ...(cell.abm as AbmSimConfig | undefined),
-        periods: cell.periods
-      };
-      const result = await client.runAbm(modelId, config);
+      const abmCell = resolveAbmModelCell(document, cell);
+      if (!abmCell) {
+        throw new Error(
+          `ABM run cell '${cell.id}' needs sourceModelId pointing at an abm-model cell.`
+        );
+      }
+      const overrides = abmRunOverridesFromCell(cell.abm, cell.periods);
+      const result = await client.runAbm(abmSpecFromCell(abmCell), overrides);
 
       setState((current) => {
         const shouldCapturePrevious = historyCapturePendingRef.current[cellId] === true;

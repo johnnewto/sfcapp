@@ -1,4 +1,5 @@
 import { normalizeMatrixCellAccountingKind } from "../accountingMatrixKind";
+import { normalizeAbmModelCell } from "../abmModelCell";
 import type { MatrixCell, NotebookCell } from "../types";
 import type { NotebookYamlEnvelope } from "./documentTypes";
 import { isRecord, stringValue } from "./documentUtils";
@@ -157,6 +158,8 @@ function buildYamlWrappedCell(type: NotebookCell["type"], body: Record<string, u
       return buildCompactChartCells([body], stringValue(body.sourceRunCellId, ""))[0] ?? normalizeRawYamlWrappedCell(type, body);
     case "table":
       return buildCompactTableCells([body], stringValue(body.sourceRunCellId, ""))[0] ?? normalizeRawYamlWrappedCell(type, body);
+    case "abm-model":
+      return normalizeAbmModelCell(normalizeRawYamlWrappedCell(type, body) as Extract<NotebookCell, { type: "abm-model" }>);
     default:
       return normalizeRawYamlWrappedCell(type, body);
   }

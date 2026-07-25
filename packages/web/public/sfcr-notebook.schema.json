@@ -389,6 +389,7 @@
             "externals",
             "observed",
             "initial-values",
+            "abm-model",
             "run",
             "chart",
             "chart-grid",
@@ -448,6 +449,11 @@
         },
         "sourceModelCellId": { "type": "string" },
         "sourceModelId": { "type": "string" },
+        "populations": { "type": "array" },
+        "ticks": { "type": "array" },
+        "record": { "type": "object" },
+        "params": { "type": "object" },
+        "check": { "type": "object" },
         "baselineRunCellId": { "type": "string" },
         "baselineStartPeriod": { "type": "integer" },
         "mode": { "enum": ["baseline", "scenario"] },
@@ -609,6 +615,10 @@
         {
           "if": { "properties": { "type": { "const": "initial-values" } } },
           "then": { "required": ["modelId", "initialValues"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "abm-model" } } },
+          "then": { "required": ["modelId", "populations", "ticks", "record"] }
         },
         {
           "if": { "properties": { "type": { "const": "run" } } },

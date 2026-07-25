@@ -1,5 +1,6 @@
 import type {
-  AbmSimConfig,
+  AbmSpec,
+  AbmSpecOverrides,
   BlockConvergenceOptions,
   BlockConvergenceReport,
   InitialValueProbeCandidate,
@@ -40,9 +41,8 @@ export type WorkerRequest =
       id: string;
       type: "runAbm";
       payload: {
-        /** Registered ABM model id (currently `"abm-sim"`). */
-        modelId: string;
-        config: AbmSimConfig;
+        spec: AbmSpec | Record<string, unknown>;
+        overrides?: AbmSpecOverrides;
       };
     }
   | {

@@ -65,6 +65,6 @@ export interface IfExpr {
 
 export interface FunctionExpr {
   type: "Function";
-  name: "exp" | "log" | "abs" | "sqrt" | "min" | "max" | "pow";
+  name: "exp" | "log" | "abs" | "sqrt" | "floor" | "min" | "max" | "pow" | "runif";
   args: Expr[];
 }

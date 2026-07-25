@@ -1,6 +1,7 @@
 import { externalRowsOnly, initialValueRowsOnly } from "@sfcr/notebook-core";
 
 import type {
+  AbmModelCell,
   ExternalsCell,
   InitialValuesCell,
   NotebookCell,
@@ -9,6 +10,7 @@ import type {
 } from "../../notebook/types";
 import type { PublicationVariableInteraction } from "../publicationInspect";
 import { PublicationVariableName } from "../publicationFormula";
+import { AbmModelCellView } from "../../notebook/components/AbmModelCellView";
 
 export function PublicationAppendixSection({
   cell,
@@ -25,6 +27,8 @@ export function PublicationAppendixSection({
       return <PublicationInitialValues cell={cell} interaction={interaction} />;
     case "solver":
       return <PublicationSolver cell={cell} />;
+    case "abm-model":
+      return <AbmModelCellView cell={cell as AbmModelCell} />;
     default:
       return null;
   }

@@ -1,4 +1,4 @@
-import { evaluateExpression } from "../parser/dependencies";
+import type { ParsedEquation } from "../parser/parse";
 
 import { throwConvergenceError, type ConvergenceVariableDiagnostic } from "./convergenceFailure";
 import type { BlockSolver } from "./types";
@@ -15,7 +15,7 @@ export const broydenSolver: BlockSolver = {
       if (!equation) {
         throw new Error(`Missing equation for variable: ${variable}`);
       }
-      context.setCurrentValue(variable, evaluateExpression(equation.expression, context));
+      context.setCurrentValue(variable, equation.evaluate(context));
       return;
     }
 
@@ -99,7 +99,7 @@ function buildStepDiagnostics(
 
 function residuals(
   variables: string[],
-  equationsByName: Map<string, { expression: import("../parser/ast").Expr }>,
+  equationsByName: Map<string, ParsedEquation>,
   context: import("../engine/context").SolverContext
 ): number[] {
   return variables.map((variable) => {
@@ -107,13 +107,13 @@ function residuals(
     if (!equation) {
       throw new Error(`Missing equation for variable: ${variable}`);
     }
-    return evaluateExpression(equation.expression, context) - context.currentValue(variable);
+    return equation.evaluate(context) - context.currentValue(variable);
   });
 }
 
 function finiteDifferenceJacobian(
   variables: string[],
-  equationsByName: Map<string, { expression: import("../parser/ast").Expr }>,
+  equationsByName: Map<string, ParsedEquation>,
   context: import("../engine/context").SolverContext,
   x: number[],
   baseResidual: number[]
