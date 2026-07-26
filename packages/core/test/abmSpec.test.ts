@@ -70,6 +70,47 @@ describe("runAbmSpec", () => {
     ).toThrow(/stock-flow check failed/);
   });
 
+  it("defaults record to all macros and first/last micro when omitted", () => {
+    const spec = normalizeAbmSpec({
+      populations: [{ name: "households", size: 3, state: ["h", "cd", "c"] }],
+      params: { G: 20 },
+      ticks: [
+        { do: [["AD", "sum(households.cd) + G"]] },
+        { do: [["H_d", "sum(households.h)"]] }
+      ]
+    });
+    expect(spec.record.series).toEqual(["AD", "H_d"]);
+    expect(spec.record.bands).toEqual(["AD", "H_d"]);
+    expect(spec.record.micro).toEqual([
+      {
+        population: "households",
+        agents: ["first", "last"],
+        variables: ["h", "cd", "c"]
+      }
+    ]);
+  });
+
+  it("normalizes record directive list to auto-all macros", () => {
+    const spec = normalizeAbmSpec({
+      populations: [{ name: "households", size: 3, state: ["h", "cd", "c"] }],
+      params: { G: 20 },
+      ticks: [
+        { do: [["AD", "sum(households.cd) + G"]] },
+        { do: [["H_d", "sum(households.h)"]] }
+      ],
+      record: [{ population: "households", variables: ["c"] }]
+    });
+    expect(spec.record.series).toEqual(["AD", "H_d"]);
+    expect(spec.record.bands).toEqual(["AD", "H_d"]);
+    expect(spec.record.micro).toEqual([
+      {
+        population: "households",
+        agents: ["first", "last"],
+        variables: ["c"]
+      }
+    ]);
+  });
+
   it("normalizes do/for YAML wrappers", () => {
     const viaDo = normalizeAbmSpec({
       populations: [{ name: "households", size: 3, state: ["h", "cd"] }],
@@ -90,6 +131,29 @@ describe("runAbmSpec", () => {
     expect(viaDo.ticks[2]).toEqual({
       kind: "aggregate",
       equations: [["H_d", "sum(households.h)"]]
+    });
+  });
+
+  it("keeps optional equation descriptions and harvests into record.descriptions", () => {
+    const viaDo = normalizeAbmSpec({
+      populations: [{ name: "households", size: 3, state: ["h"] }],
+      ticks: [
+        { do: [["Y", "pr * N", "Output / income (MC mean)"]] },
+        { do: [["H_d", "sum(households.h)", "Total household money"]] }
+      ],
+      params: { pr: 1, N: 1 },
+      record: {
+        series: ["Y", "H_d"],
+        descriptions: { H_d: "Explicit record label wins" }
+      }
+    });
+    expect(viaDo.ticks[0]).toEqual({
+      kind: "aggregate",
+      equations: [["Y", "pr * N", "Output / income (MC mean)"]]
+    });
+    expect(viaDo.record.descriptions).toEqual({
+      Y: "Output / income (MC mean)",
+      H_d: "Explicit record label wins"
     });
   });
 

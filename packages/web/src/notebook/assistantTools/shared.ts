@@ -571,7 +571,8 @@ export function resolveModelTitle(document: NotebookDocument, source: RunCell): 
         (cell.type === "equations" ||
           cell.type === "solver" ||
           cell.type === "externals" ||
-          cell.type === "initial-values") &&
+          cell.type === "initial-values" ||
+          cell.type === "abm-model") &&
         cell.modelId === modelId
     )?.title ?? null
   );

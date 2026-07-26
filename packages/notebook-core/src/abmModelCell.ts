@@ -15,7 +15,7 @@ export function abmSpecFromCell(cell: AbmModelCell): AbmSpec | Record<string, un
     populations: cell.populations as AbmSpec["populations"],
     ...(cell.params != null ? { params: cell.params as AbmSpec["params"] } : {}),
     ticks: cell.ticks as AbmSpec["ticks"],
-    record: cell.record as AbmSpec["record"],
+    ...(cell.record != null ? { record: cell.record as AbmSpec["record"] } : {}),
     ...(cell.check != null ? { check: cell.check as AbmSpec["check"] } : {})
   };
 }

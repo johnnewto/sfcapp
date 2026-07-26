@@ -248,7 +248,7 @@ function lookupQueueRank(state: AbmRuntimeState, populationName: string | undefi
 /**
  * SolverContext bound to the current runtime state. Agent ticks set
  * `state.agentIndex` / `state.activePopulation` before evaluating equations.
- * Pass the Monte Carlo `rng` so `runif(lo, hi)` shares the hire/shuffle stream.
+ * Pass the Monte Carlo `rng` so `random.uniform(low, high, size)` shares the hire/shuffle stream.
  */
 export function createAbmSolverContext(state: AbmRuntimeState, rng: Rng): SolverContext {
   return {

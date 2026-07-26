@@ -18,6 +18,7 @@ import type {
   RunCell,
   SolverCell
 } from "./types";
+import { buildEditorStateFromAbmModelCell, findAbmModelCell } from "./abmInspect";
 
 export function findLegacyModelCell(cells: NotebookCell[], cellId: string): ModelCell | null {
   return cells.find((cell): cell is ModelCell => cell.type === "model" && cell.id === cellId) ?? null;
@@ -131,20 +132,25 @@ export function buildEditorStateForNotebookModel(
   if (typeof modelId === "string" && modelId.trim() !== "") {
     const equationsCell = findEquationsCell(document.cells, modelId);
     const solverCell = findSolverCell(document.cells, modelId);
-    if (!equationsCell || !solverCell) {
-      return null;
+    if (equationsCell && solverCell) {
+      return {
+        equations: equationsCell.equations,
+        externals: collectModelExternals(document.cells, modelId),
+        initialValues: findInitialValuesCell(document.cells, modelId)?.initialValues ?? [],
+        options: {
+          ...solverCell.options,
+          periods: source.periods ?? solverCell.options.periods
+        },
+        scenario: { shocks: [] }
+      };
     }
 
-    return {
-      equations: equationsCell.equations,
-      externals: collectModelExternals(document.cells, modelId),
-      initialValues: findInitialValuesCell(document.cells, modelId)?.initialValues ?? [],
-      options: {
-        ...solverCell.options,
-        periods: source.periods ?? solverCell.options.periods
-      },
-      scenario: { shocks: [] }
-    };
+    const abmCell = findAbmModelCell(document.cells, modelId);
+    if (abmCell) {
+      return buildEditorStateFromAbmModelCell(abmCell, source.periods);
+    }
+
+    return null;
   }
 
   const legacyCellId = source.sourceModelCellId?.trim();

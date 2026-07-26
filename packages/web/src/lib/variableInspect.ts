@@ -2,6 +2,7 @@ import type { SimulationResult } from "@sfcr/core";
 
 import type { EditorState } from "./editorModel";
 import type { NotebookCell, NotebookDocument, RunCell } from "../notebook/types";
+import { buildEditorStateFromAbmModelCell, findAbmModelCell } from "../notebook/abmInspect";
 import { collectModelExternals, findEquationsCell, findInitialValuesCell, findLegacyModelCell, findSolverCell } from "../notebook/modelSections";
 import { buildVariableDescriptions } from "./variableDescriptions";
 import { buildVariableUnitMetadata } from "./units";
@@ -297,15 +298,20 @@ export function buildEditorStateForInspectorModelSource(
 
   const equationsCell = findEquationsCell(document.cells, modelSource.sourceModelId);
   const solverCell = findSolverCell(document.cells, modelSource.sourceModelId);
-  if (!equationsCell || !solverCell) {
-    return null;
+  if (equationsCell && solverCell) {
+    return {
+      equations: equationsCell.equations,
+      externals: collectModelExternals(document.cells, modelSource.sourceModelId),
+      initialValues: findInitialValuesCell(document.cells, modelSource.sourceModelId)?.initialValues ?? [],
+      options: solverCell.options,
+      scenario: { shocks: [] }
+    };
   }
 
-  return {
-    equations: equationsCell.equations,
-    externals: collectModelExternals(document.cells, modelSource.sourceModelId),
-    initialValues: findInitialValuesCell(document.cells, modelSource.sourceModelId)?.initialValues ?? [],
-    options: solverCell.options,
-    scenario: { shocks: [] }
-  };
+  const abmCell = findAbmModelCell(document.cells, modelSource.sourceModelId);
+  if (abmCell) {
+    return buildEditorStateFromAbmModelCell(abmCell);
+  }
+
+  return null;
 }

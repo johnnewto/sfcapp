@@ -72,23 +72,36 @@ describe("compileExpression", () => {
     }
   });
 
-  it("evaluates runif through context.randomUniform", () => {
+  it("evaluates random.uniform through context.randomUniform", () => {
     const context: SolverContext = {
       ...mockContext({ s: 0.2 }),
       randomUniform(lo, hi) {
         return lo + (hi - lo) * 0.25;
       }
     };
-    expectParity("runif(1 - s, 1 + s)", context);
-    const value = compileExpression(parseExpression("runif(0, 10)"))(context);
+    expectParity("random.uniform(1 - s, 1 + s)", context);
+    expectParity("random.uniform(1 - s, 1 + s, 1)", context);
+    const value = compileExpression(parseExpression("random.uniform(0, 10, 1)"))(context);
     expect(value).toBeCloseTo(2.5, 12);
   });
 
-  it("throws when runif has no randomUniform on the context", () => {
+  it("throws when random.uniform has no randomUniform on the context", () => {
     const context = mockContext({});
-    const expr = parseExpression("runif(0, 1)");
+    const expr = parseExpression("random.uniform(0, 1, 1)");
     expect(() => compileExpression(expr)(context)).toThrow(/randomUniform/);
     expect(() => evaluateExpression(expr, context)).toThrow(/randomUniform/);
+  });
+
+  it("throws when random.uniform size is not 1", () => {
+    const context: SolverContext = {
+      ...mockContext({}),
+      randomUniform(lo, hi) {
+        return lo + (hi - lo) * 0.5;
+      }
+    };
+    const expr = parseExpression("random.uniform(0, 1, 2)");
+    expect(() => compileExpression(expr)(context)).toThrow(/size must be 1/);
+    expect(() => evaluateExpression(expr, context)).toThrow(/size must be 1/);
   });
 
   it("matches the interpreter for SIM equation RHS strings", () => {

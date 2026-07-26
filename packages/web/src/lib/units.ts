@@ -784,17 +784,27 @@ function inferFunctionUnits(
       const argument = inferUnits(expr.args[0] ?? { type: "Number", value: 0 }, variableUnits);
       return argument;
     }
-    case "runif": {
+    case "random.uniform": {
       const lo = inferUnits(expr.args[0] ?? { type: "Number", value: 0 }, variableUnits);
       const hi = inferUnits(expr.args[1] ?? { type: "Number", value: 0 }, variableUnits);
-      const diagnostics = mergeDiagnostics(lo, hi);
+      const sizeUnit: InferredUnit =
+        expr.args.length >= 3
+          ? inferUnits(expr.args[2]!, variableUnits)
+          : { signature: DIMENSIONLESS, diagnostics: [] };
+      const diagnostics = mergeDiagnostics(lo, hi, sizeUnit);
+      if (sizeUnit.signature != null && !signaturesEqual(sizeUnit.signature, DIMENSIONLESS)) {
+        diagnostics.push({
+          severity: UNIT_CHECK_SEVERITY,
+          message: `random.uniform() size must be dimensionless, got ${formatSignature(sizeUnit.signature)}.`
+        });
+      }
       if (lo.signature == null || hi.signature == null) {
         return { signature: null, diagnostics };
       }
       if (!signaturesEqual(lo.signature, hi.signature)) {
         diagnostics.push({
           severity: UNIT_CHECK_SEVERITY,
-          message: `runif() bounds must use matching units, got ${formatSignature(lo.signature)} and ${formatSignature(hi.signature)}.`
+          message: `random.uniform() bounds must use matching units, got ${formatSignature(lo.signature)} and ${formatSignature(hi.signature)}.`
         });
         return { signature: null, diagnostics };
       }

@@ -1,9 +1,34 @@
-# ABM-SIM notebook. Agent-based microfoundation of Godley & Lavoie Model SIM
-# (Leeds lectures 2026 / Marco Veronese Passarella). Monte Carlo runs in the
-# browser via a declarative abm-model cell interpreted by runAbmSpec.
-#
-# Reference R: references/leeds_lectures_2026/ABM_SIM.R
-# Upstream: https://github.com/marcoverpas/Leeds_lectures_2026/blob/main/ABM_SIM.R
+# *************************************************************************
+#  Model SIM + agent-based microfoundation (ABM-SIM)
+#  Source: Godley & Lavoie ch.3 (SIM), extended with a "job-lottery"
+#  Author: Marco Veronese Passarella (Leeds lectures 2026)
+# *************************************************************************
+#  Description: A tiny "agent-based" version of the textbook SIM model:
+#  several households, each with its own state money (cash) and its own
+#  spending choice, added up to get the economy-wide totals.
+#  Monte Carlo runs in the browser via a declarative abm-model cell
+#  interpreted by runAbmSpec.
+# *************************************************************************
+#  Conventions: upper-case = MACRO total; lower-case = MICRO (one household)
+# *************************************************************************
+#  Story:
+#    - each household decides how much it wants to spend (its OWN alpha1);
+#    - the economy needs 1/pr workers for each unit people want to buy;
+#    - a random job lottery fills those jobs (some stay unfilled = friction);
+#    - whoever works makes pr goods and is paid a wage w = pr;
+#    - goods are sold first-come-first-served until they run out;
+#    - taxes are paid.
+#  One single random shuffle of households per period decides BOTH who gets a
+#  job AND who reaches the shop first.
+# *************************************************************************
+#  Note on heterogeneity: each household has its own fixed propensity to
+#  consume out of income (alpha1 is a vector, drawn once). Because households
+#  differ, aggregate demand depends on which of them earn income, so the random
+#  order matters for the macro totals too. The effect is smaller than that of
+#  the job-lottery noise.
+# *************************************************************************
+#  Reference R: references/leeds_lectures_2026/ABM_SIM.R
+#  Upstream: https://github.com/marcoverpas/Leeds_lectures_2026/blob/main/ABM_SIM.R
 format: sfcr-notebook-yaml
 formatVersion: 1
 id: abm-sim-notebook
@@ -12,6 +37,7 @@ metadata:
   version: 1
   template: abm-sim
 cells:
+  # Overview (R header story / description)
   - markdown:
       id: intro
       title: Overview
@@ -46,13 +72,14 @@ cells:
         Mean output still converges toward `G / theta`, as in textbook SIM. With hiring
         friction `s > 0`, unemployment emerges, and wealth settles _above_ the frictionless
         SIM value because rationing creates involuntary saving.
+  # Set model parameters / Define macro + micro stores (ABM_SIM.R)
   - abm-model:
       id: abm-sim-model
       title: ABM-SIM specification
       modelId: abm-sim
       description: >
         Declarative agent-based SIM: heterogeneous households, job lottery, FCFS goods
-        market. Tick order matches Leeds ABM_SIM.R (`runif` hiring draw before shuffle).
+        market. Tick order matches Leeds ABM_SIM.R (`random.uniform` hiring draw before shuffle).
         Upper-case names are MACRO totals (Monte Carlo means); lower-case / `*_h*` names
         are MICRO histories from MC run 1 only — the same split as R's `store` vs
         `cHist`/`eHist`/`hHist`.
@@ -60,86 +87,77 @@ cells:
         **Macro vs micro (Leeds convention).** The R script comments
         `upper-case = MACRO total; lower-case = MICRO (one household)`.
 
-        - **Macro** (`record.series`): one value per period, averaged across Monte Carlo
-          runs — `Y`, `C`, `YD`, `H_d`, `H_s`, `UR`, plus policy/accounting helpers
-          `G`, `TAX`, `N`. Banded series also store p10–p90 paths.
-        - **Micro** (`record.micro`): full period paths for selected households from
-          **MC run 1 only** (not averaged). Default probes are the first and last
-          household (`c_h1`, `h_hLast`, …). Author `agents: all` with a raised
-          `maxAgents` to match R's full population panels.
+        - **Macro**: every aggregate tick variable is stored automatically as a Monte
+          Carlo mean (banded p10–p90). No `record.series` allowlist.
+        - **Micro**: first and last household, all state variables, from **MC run 1
+          only** (not averaged) — `c_h1`, `h_hLast`, ….
+        - **MC count**: set on the run cell as `abm.monteCarlo` (not on the model).
 
         Stock-flow check: `|H_d - H_s|` must stay within `tolerance` every period.
       populations:
+        # Number of households (if > output -> unemployment)
         - name: households
           size: 200
           state: [h, yd, cd, c, y, e]
           params:
-            alpha1: { draw: uniform, lo: 0.2, hi: 1.0 }
+            # Heterogeneous, time-invariant propensity to consume out of income
+            # (drawn once; mean alpha1m, spread alpha1d → uniform [0.2, 1.0])
+            alpha1: { draw: uniform, lo: 0.2, hi: 1.0 } # Propensity to consume out of income
       params:
-        alpha2: 0.4
-        theta: 0.2
-        pr: 1.1
-        w: 1.1
-        s: 0.2
-        g0: 20
-        g1: 30
-        shockPeriod: 60
+        alpha2: 0.4 # Propensity to consume out of wealth (common to all)
+        theta: 0.2 # Average tax rate on income
+        pr: 1.1 # Product per worker (labour productivity)
+        w: 1.1 # Wage per worker = productivity (=> zero profit)
+        s: 0.2 # Size of the hiring randomness
+        g0: 20 # Government spending baseline
+        g1: 30 # Government spending after shock
+        shockPeriod: 60 # Shock to government spending in period 60
       ticks:
+        # --- TICK 1: households decide how much to spend ---
         - do:
-            - [G, "if (t >= shockPeriod) { g1 } else { g0 }"]
+            - [G, "if (t >= shockPeriod) { g1 } else { g0 }", "Government spending (shock from period 60)"]
         - for:
             households:
-              - [cd, "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))"]
+              - [cd, "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))", "Planned consumption (own alpha1)"]
         - do:
-            - [AD, "sum(households.cd) + G"]
-            - [Nd, "AD / pr"]
-            - [N, "min(min(floor(Nd * runif(1 - s, 1 + s)), floor(Nd)), households.size)"]
+            - [AD, "sum(households.cd) + G", "Total demand for goods"]
+            - [Nd, "AD / pr", "Labour needed (1/pr workers per good)"]
+            # --- TICK 2: households/workers are hired based on a job lottery ---
+            - [N, "min(min(floor(Nd * random.uniform(1 - s, 1 + s, 1)), floor(Nd)), households.size)", "Job lottery hired count"]
+        # --- TICK 3: households are re-shuffled ---
+        # Random order of households for both jobs and goods (queue)
         - shuffle: households
         - for:
             households:
-              - [e, "if (households.rank <= N) { 1 } else { 0 }"]
+              - [e, "if (households.rank <= N) { 1 } else { 0 }", "Employment flag 0/1 (micro, MC run 1)"]
         - do:
-            - [Y, "pr * N"]
-            - [YG, "min(G, Y)"]
-            - [YC, "Y - YG"]
+            # --- TICK 4: goods are served first-come-first-served (FCFS) ---
+            - [Y, "pr * N", "Output / income (MC mean)"]
+            - [YG, "min(G, Y)", "Actual government spending (served first)"]
+            - [YC, "Y - YG", "Goods left for households"]
+        # Micro: actual consumption via FCFS rationing of YC
         - ration-fcfs:
             population: households
             demand: cd
             supply: YC
-            into: c
+            into: c # Household consumption (micro, MC run 1)
+        # --- TICK 5: wages are earned and then taxes are paid ---
         - for:
             households:
-              - [y, "w * e"]
-              - [yd, "y * (1 - theta)"]
-              - [h, "lag(h) + y - c - theta * y"]
+              - [y, "w * e", "Wage income if hired (w = pr, zero profit)"]
+              - [yd, "y * (1 - theta)", "Disposable income net of taxes"]
+              - [h, "lag(h) + y - c - theta * y", "Household money holdings (micro, MC run 1)"]
+        # --- TICK 6: write down totals, store values and check consistency ---
         - do:
-            - [C, "sum(households.c)"]
-            - [YD, "sum(households.yd)"]
-            - [TAX, "theta * w * N"]
-            - [H_d, "sum(households.h)"]
-            - [H_s, "lag(H_s) + YG - TAX"]
-            - [UR, "(households.size - N) / households.size"]
-      record:
-        series: [Y, C, YD, H_d, H_s, UR, G, TAX, N]
-        bands: [Y, C, YD, H_d, H_s, UR]
-        descriptions:
-          Y: Output / income (MC mean)
-          C: Consumption (MC mean)
-          YD: Disposable income (MC mean)
-          H_d: Total household money (MC mean)
-          H_s: Government money supply (MC mean)
-          UR: Unemployment rate, emergent (MC mean)
-          G: Government spending
-          TAX: Tax revenue
-          N: Employment (hired count)
-          c: Household consumption (micro, MC run 1)
-          h: Household money holdings (micro, MC run 1)
-          e: Employment flag 0/1 (micro, MC run 1)
-        micro:
-          - population: households
-            agents: [first, last]
-            variables: [c, h, e]
+            - [C, "sum(households.c)", "Consumption (MC mean)"]
+            - [YD, "sum(households.yd)", "Disposable income (MC mean)"]
+            - [TAX, "theta * w * N", "Tax revenue"]
+            - [H_d, "sum(households.h)", "Total household money (MC mean)"]
+            - [H_s, "lag(H_s) + YG - TAX", "Government money supply (MC mean)"]
+            - [UR, "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
+      # SFC check: record the worst gap between H_d and H_s
       check: { left: H_d, right: H_s, tolerance: "1e-9" }
+  # Period ticks narrative (matches R ## TICK 1..6 blocks)
   - markdown:
       id: ticks
       title: Period ticks
@@ -156,7 +174,7 @@ cells:
         1. Each household plans `cd = min(alpha1 * yd + alpha2 * h, h)` using its own
            `alpha1` and last period's disposable income and cash.
         2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.
-        3. Hiring: `N = min(floor(Nd * runif(1-s, 1+s)), floor(Nd), households.size)`.
+        3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.
         4. One random shuffle orders both jobs and the shop queue (`households.rank`).
         5. Households with `households.rank <= N` are employed (`e = 1`).
         6. Government is served first from produced goods `N * pr`; remaining output is
@@ -197,29 +215,43 @@ cells:
         - [Taxes, Taxes, -TAX, "", +TAX, "0"]
         - [Money, Change in money stock, +d(H_d), "", -d(H_s), "0"]
         - [Sum, Sum, "0", "0", "0", "0"]
+  # Start the MC loop / Display the results (R: nPeriods, MC, set.seed)
   - run:
       id: baseline-run
       title: Monte Carlo baseline
       description: >
         ABM-SIM Monte Carlo (mean paths). Defaults match the Leeds R script except
-        `monteCarlo: 50` for a snappier browser run (R uses 100).
+        `monteCarlo: 20` for a snappier browser run (R uses 100).
       mode: baseline
       engine: abm
       sourceModelId: abm-sim
+      # Periods
       periods: 100
       resultKey: abm_sim_baseline
       abm:
+        # Number of households
         households: 200
-        monteCarlo: 50
+        # MC simulations (R uses 100)
+        monteCarlo: 20
+        # Mean propensity to consume out of income
         alpha1m: 0.6
+        # Spread of alpha1 around the mean
         alpha1d: 0.4
+        # Propensity to consume out of wealth (common to all)
         alpha2: 0.4
+        # Average tax rate on income
         theta: 0.2
+        # Product per worker (labour productivity); wage w = pr
         pr: 1.1
+        # Size of the hiring randomness
         s: 0.2
+        # Government spending baseline
         g0: 20
+        # Government spending after shock
         g1: 30
+        # Shock to government spending in period 60 (from 20$ to 30$)
         shockPeriod: 60
+  # Chart 1: Total output (R panel a)
   - chart:
       id: chart-output
       title: Total output (MC mean)
@@ -238,6 +270,7 @@ cells:
         G:
           includeZero: true
       sourceRunCellId: baseline-run
+  # Chart 2: Disposable income and consumption (R panel b)
   - chart:
       id: chart-income-consumption
       title: Disposable income and consumption
@@ -256,6 +289,7 @@ cells:
         C:
           includeZero: true
       sourceRunCellId: baseline-run
+  # Chart 3: Total money stock (R panel c; dashed grey = homogeneous-SIM at mean alpha1)
   - chart:
       id: chart-money
       title: Money stock
@@ -275,6 +309,7 @@ cells:
         H_s:
           includeZero: true
       sourceRunCellId: baseline-run
+  # Chart 4: Unemployment rate (emergent) (R panel d)
   - chart:
       id: chart-unemployment
       title: Unemployment rate (emergent)
@@ -290,6 +325,7 @@ cells:
         UR:
           includeZero: true
       sourceRunCellId: baseline-run
+  # Chart 5: Consumption and employment of first household (R panel e; pink = unemployed)
   - chart:
       id: chart-household-first
       title: First household (micro, MC run 1)
@@ -310,6 +346,7 @@ cells:
         e_h1:
           includeZero: true
       sourceRunCellId: baseline-run
+  # Chart 6: Consumption and employment of last household (R panel f; pink = unemployed)
   - chart:
       id: chart-household-last
       title: Last household (micro, MC run 1)
@@ -331,6 +368,7 @@ cells:
         e_hLast:
           includeZero: true
       sourceRunCellId: baseline-run
+  # Calculate average values / Show details (R summary table)
   - table:
       id: baseline-table
       title: Baseline variable summary

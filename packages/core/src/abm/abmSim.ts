@@ -51,7 +51,7 @@ export const ABM_SIM_DEFAULTS = {
 
 /**
  * Declarative ABM-SIM spec matching Leeds ABM_SIM.R / the former hand-rolled tick.
- * Hiring uses `runif` then `shuffle` so the RNG stream matches the original hire-lottery order.
+ * Hiring uses `random.uniform` then `shuffle` so the RNG stream matches the original hire-lottery order.
  */
 export const ABM_SIM_SPEC: AbmSpec = {
   modelId: "abm-sim",
@@ -101,7 +101,7 @@ export const ABM_SIM_SPEC: AbmSpec = {
       equations: [
         [
           "N",
-          "min(min(floor(Nd * runif(1 - s, 1 + s)), floor(Nd)), households.size)"
+          "min(min(floor(Nd * random.uniform(1 - s, 1 + s, 1)), floor(Nd)), households.size)"
         ]
       ]
     },
@@ -148,8 +148,7 @@ export const ABM_SIM_SPEC: AbmSpec = {
     }
   ],
   record: {
-    series: ["Y", "C", "YD", "H_d", "H_s", "UR", "G", "TAX", "N"],
-    bands: ["Y", "C", "YD", "H_d", "H_s", "UR"],
+    // Descriptions only — series/micro fill from defaults at normalize time.
     descriptions: {
       Y: "Output / income (MC mean)",
       C: "Consumption (MC mean)",
@@ -160,17 +159,14 @@ export const ABM_SIM_SPEC: AbmSpec = {
       G: "Government spending",
       TAX: "Tax revenue",
       N: "Employment (hired count)",
+      AD: "Total demand for goods",
+      Nd: "Labour needed (1/pr workers per good)",
+      YG: "Actual government spending (served first)",
+      YC: "Goods left for households",
       c: "Household consumption (micro, MC run 1)",
       h: "Household money holdings (micro, MC run 1)",
       e: "Employment flag 0/1 (micro, MC run 1)"
-    },
-    micro: [
-      {
-        population: "households",
-        agents: ["first", "last"],
-        variables: ["c", "h", "e"]
-      }
-    ]
+    }
   },
   check: { left: "H_d", right: "H_s", tolerance: 1e-9 }
 };

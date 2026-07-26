@@ -220,8 +220,8 @@ export interface AbmModelCell extends NotebookCellBase {
   params?: AbmSpec["params"] | Record<string, number>;
   /** Ordered ticks (typed `{ kind }` or YAML one-key wrappers). */
   ticks: AbmSpec["ticks"] | unknown;
-  /** Macro / micro recording config. */
-  record: AbmSpec["record"] | Record<string, unknown>;
+  /** Optional recording overrides; omit to store all macros + first/last micro. */
+  record?: AbmSpec["record"] | Record<string, unknown> | unknown[];
   /** Optional stock-flow identity check. */
   check?: AbmSpec["check"] | Record<string, unknown>;
 }

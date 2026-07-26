@@ -6,6 +6,7 @@ import {
   type NotebookYamlEnvelope
 } from "./documentTypes";
 import { createNotebookSourceDiagnostic, type NotebookSourceDiagnostic } from "./sourcePipeline";
+import { applyAbmInlineCommentDescriptions } from "./yamlAbmCommentDescriptions";
 import { compileYamlNotebookSource } from "./yamlCompile";
 import { buildYamlParseDiagnostic, validateYamlDialectSource } from "./yamlDialect";
 
@@ -55,5 +56,7 @@ export function parseYamlNotebookSource(
   }
 
   const { format: _format, formatVersion: _formatVersion, ...notebook } = parsed;
-  return { ok: true, value: compileYamlNotebookSource(notebook) };
+  const compiled = compileYamlNotebookSource(notebook);
+  applyAbmInlineCommentDescriptions(document, compiled);
+  return { ok: true, value: compiled };
 }

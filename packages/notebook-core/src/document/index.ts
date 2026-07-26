@@ -101,6 +101,7 @@ export function notebookToJson(document: NotebookDocument): string {
 export { notebookToMarkdown, notebookToCompactYaml, serializeNotebookCell };
 export { graftYamlComments, type YamlCommentGraftResult } from "./yamlCommentGraft";
 export { stampYamlSourceFileName } from "./yamlSourceStamp";
+export { applyAbmInlineCommentDescriptions } from "./yamlAbmCommentDescriptions";
 
 
 export function notebookFromJson(source: string): NotebookDocument {

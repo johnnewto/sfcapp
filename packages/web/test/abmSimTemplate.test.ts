@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { runAbmSpec } from "@sfcr/core";
+import { normalizeAbmSpec, runAbmSpec } from "@sfcr/core";
 import { abmSpecFromCell, validateNotebookDocument } from "@sfcr/notebook-core";
 
 import { abmRunOverridesFromCell } from "../src/notebook/abmRunOverrides";
@@ -17,10 +17,21 @@ describe("ABM-SIM notebook template", () => {
     );
     expect(abmModelCell).toBeDefined();
     expect(abmModelCell?.modelId).toBe("abm-sim");
-    const record = abmModelCell?.record as { descriptions?: Record<string, string>; micro?: unknown[] } | undefined;
-    expect(record?.descriptions?.Y).toMatch(/Output/i);
-    expect(record?.descriptions?.c).toMatch(/micro/i);
-    expect(record?.micro).toHaveLength(1);
+    // Param `#` comments may harvest into record.descriptions; no series/micro allowlist.
+    expect((abmModelCell?.record as { series?: unknown } | undefined)?.series).toBeUndefined();
+    expect((abmModelCell?.record as { micro?: unknown } | undefined)?.micro).toBeUndefined();
+    expect(JSON.stringify(abmModelCell?.ticks)).toMatch(/Output \/ income \(MC mean\)/);
+
+    const normalized = normalizeAbmSpec(abmSpecFromCell(abmModelCell!));
+    expect(normalized.record.series).toContain("AD");
+    expect(normalized.record.series).toContain("Y");
+    expect(normalized.record.micro).toEqual([
+      {
+        population: "households",
+        agents: ["first", "last"],
+        variables: ["h", "yd", "cd", "c", "y", "e"]
+      }
+    ]);
 
     const baselineRunCell = document.cells.find(
       (cell): cell is Extract<(typeof document.cells)[number], { type: "run" }> =>
@@ -58,6 +69,7 @@ describe("ABM-SIM notebook template", () => {
     expect(result.options.periods).toBe(100);
     expect(result.series.Y).toHaveLength(100);
     expect(result.series.H_d).toHaveLength(100);
+    expect(result.series.AD).toHaveLength(100);
     expect(result.series.TAX).toHaveLength(100);
     expect(result.series.Y_p10).toHaveLength(100);
     expect(result.series.Y_p90).toHaveLength(100);

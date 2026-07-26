@@ -280,7 +280,7 @@ describe("core worker handler", () => {
                 ["Nd", "AD / pr"],
                 [
                   "N",
-                  "min(min(floor(Nd * runif(1 - s, 1 + s)), floor(Nd)), households.size)"
+                  "min(min(floor(Nd * random.uniform(1 - s, 1 + s, 1)), floor(Nd)), households.size)"
                 ]
               ]
             },

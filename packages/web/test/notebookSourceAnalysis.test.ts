@@ -306,13 +306,19 @@ cells:
   it("keeps abm-sim template equations as flow-style YAML rows", () => {
     const document = getNotebookTemplateDocument("abm-sim");
     const yaml = notebookToCompactYaml(document, { preserveIds: true });
-    expect(yaml).toMatch(/- \[G, "if \(t >= shockPeriod\) \{ g1 \} else \{ g0 \}"\]/);
-    expect(yaml).toMatch(/- \[cd, "min\(alpha1 \* lag\(yd\) \+ alpha2 \* lag\(h\), lag\(h\)\)"\]/);
+    expect(yaml).toMatch(
+      /- \[G, "if \(t >= shockPeriod\) \{ g1 \} else \{ g0 \}", "Government spending \(shock from period 60\)"\]/
+    );
+    expect(yaml).toMatch(
+      /- \[cd, "min\(alpha1 \* lag\(yd\) \+ alpha2 \* lag\(h\), lag\(h\)\)", "Planned consumption \(own alpha1\)"\]/
+    );
+    expect(yaml).toMatch(/- \[Y, "pr \* N", "Output \/ income \(MC mean\)"\]/);
     expect(yaml).toMatch(/- do:/);
     expect(yaml).toMatch(/for:/);
     expect(yaml).toMatch(/state: \[h, yd, cd, c, y, e\]/);
-    expect(yaml).toMatch(/agents: \[first, last\]/);
-    expect(yaml).toMatch(/variables: \[c, h, e\]/);
+    // series/micro allowlists omitted — defaults apply at runtime; descriptions may remain
+    expect(yaml).not.toMatch(/agents:/);
+    expect(yaml).not.toMatch(/variables: \[c, h, e\]/);
     expect(yaml).not.toMatch(/^\s+- - G$/m);
     expect(yaml).not.toMatch(/^\s+- - cd$/m);
   });

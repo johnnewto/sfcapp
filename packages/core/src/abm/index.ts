@@ -34,7 +34,7 @@ export {
   abmMicroSeriesName,
   expandAbmMicroAgents
 } from "./abmSpec";
-export { normalizeAbmSpec, normalizeAbmTick } from "./normalizeAbmSpec";
+export { normalizeAbmSpec, normalizeAbmTick, normalizeAbmRecord, aggregateAssignedNames, defaultAbmRecord } from "./normalizeAbmSpec";
 export type {
   AbmSpec,
   AbmSpecOverrides,
@@ -50,6 +50,7 @@ export type {
   AbmRationFcfsTick,
   AbmEquationRow,
   AbmRecordSpec,
+  AbmRecordDirective,
   AbmMicroRecord,
   AbmMicroAgentRef,
   AbmCheckSpec

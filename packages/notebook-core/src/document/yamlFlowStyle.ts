@@ -193,7 +193,8 @@ function markFlowSequence(document: YamlDocument, path: Array<string | number>):
 
 /**
  * Keep ABM-SIM-style compact sequences when re-serializing YAML:
- * equation rows as `- [name, "expr"]`, plus state/series/bands/micro lists.
+ * equation rows as `- [name, "expr"]` or `- [name, "expr", "description"]`,
+ * plus state/series/bands/micro lists.
  */
 function markWrappedAbmModelFlowSequences(document: YamlDocument): void {
   const cells = document.get("cells", true);
@@ -224,8 +225,18 @@ function markWrappedAbmModelFlowSequences(document: YamlDocument): void {
       });
     }
 
+    // Legacy object form: series / bands / micro.agents|variables as flow.
     markFlowSequence(document, [...base, "record", "series"]);
     markFlowSequence(document, [...base, "record", "bands"]);
+
+    const recordNode = document.getIn([...base, "record"], true);
+    if (isSeq(recordNode)) {
+      recordNode.items.forEach((_entry, recordIndex) => {
+        markFlowSequence(document, [...base, "record", recordIndex, "agents"]);
+        markFlowSequence(document, [...base, "record", recordIndex, "variables"]);
+        markFlowSequence(document, [...base, "record", recordIndex, "bands"]);
+      });
+    }
 
     const micro = document.getIn([...base, "record", "micro"], true);
     if (isSeq(micro)) {
@@ -261,8 +272,8 @@ function markAbmTickEquationRows(document: YamlDocument, tickPath: Array<string 
   markAbmEquationRowSeq(document.getIn([...tickPath, "equations"], true));
 
   // YAML wrappers:
-  // - do: [[name, expr], ...]
-  // - for: { households: [[name, expr], ...] }
+  // - do: [[name, expr] | [name, expr, description], ...]
+  // - for: { households: [[name, expr] | [name, expr, description], ...] }
   markAbmEquationRowSeq(document.getIn([...tickPath, "do"], true));
 
   const forBody = document.getIn([...tickPath, "for"], true);
@@ -285,6 +296,10 @@ function markAbmEquationRowSeq(rows: unknown): void {
     const expression = row.items[1];
     if (isScalar(expression) && typeof expression.value === "string" && expression.value !== "") {
       expression.type = Scalar.QUOTE_DOUBLE;
+    }
+    const description = row.items[2];
+    if (isScalar(description) && typeof description.value === "string" && description.value !== "") {
+      description.type = Scalar.QUOTE_DOUBLE;
     }
   });
 }

@@ -5,6 +5,7 @@ import type { EquationRow, ExternalRow, InitialValueRow } from "../lib/editorMod
 import { resolveNearestNotebookContextCell } from "./notebookContext";
 import { resolveRunCellModelKey } from "./modelSections";
 import type {
+  AbmModelCell,
   ChartCell,
   EquationsCell,
   ExternalsCell,
@@ -136,6 +137,10 @@ export function isModelVariableNameAvailable(
         return false;
       }
     }
+
+    if (cell.type === "abm-model" && abmModelDefinesVariable(cell, normalizedVariable)) {
+      return false;
+    }
   }
 
   return true;
@@ -237,6 +242,13 @@ export function findModelVariableDefinition(
         )
       ) {
         return { kind: "initial value", cellTitle };
+      }
+    }
+
+    if (cell.type === "abm-model") {
+      const kind = abmModelDefinitionKind(cell, normalizedVariable);
+      if (kind) {
+        return { kind, cellTitle };
       }
     }
   }
@@ -568,7 +580,8 @@ function renameVariableInCell(
     case "run":
       return {
         ...cell,
-        scenario: cell.scenario ? renameScenario(cell.scenario, oldName, newName) : cell.scenario
+        scenario: cell.scenario ? renameScenario(cell.scenario, oldName, newName) : cell.scenario,
+        abm: renameAbmRunOverrides(cell.abm, oldName, newName)
       };
     case "sequence":
       return renameSequenceCell(cell, oldName, newName);
@@ -577,6 +590,8 @@ function renameVariableInCell(
         ...cell,
         source: replaceIdentifierInSource(cell.source, oldName, newName)
       };
+    case "abm-model":
+      return renameVariableInAbmModelCell(cell, oldName, newName);
     default:
       return cell;
   }
@@ -725,16 +740,18 @@ function countReferencesInCell(
       );
     case "run":
       if (!cell.scenario) {
-        return 0;
+        return countAbmRunOverrideReferences(cell, variable);
       }
-      return cell.scenario.shocks.reduce(
-        (total, shock) =>
-          total +
-          Object.keys(shock.variables).reduce(
-            (shockTotal, key) => shockTotal + countExactNameMatch(key, variable),
-            0
-          ),
-        0
+      return (
+        cell.scenario.shocks.reduce(
+          (total, shock) =>
+            total +
+            Object.keys(shock.variables).reduce(
+              (shockTotal, key) => shockTotal + countExactNameMatch(key, variable),
+              0
+            ),
+          0
+        ) + countAbmRunOverrideReferences(cell, variable)
       );
     case "sequence":
       if (cell.source.kind !== "matrix" || !cell.source.aliases) {
@@ -746,6 +763,8 @@ function countReferencesInCell(
       );
     case "markdown":
       return countIdentifierOccurrences(cell.source, variable);
+    case "abm-model":
+      return countReferencesInAbmModelCell(cell, variable);
     default:
       return 0;
   }
@@ -809,6 +828,7 @@ function cellMatchesModelId(cell: NotebookCell, cells: NotebookCell[], modelId: 
     case "observed":
     case "initial-values":
     case "solver":
+    case "abm-model":
       return cell.modelId === modelId;
     case "run":
       return resolveRunCellModelKey(cells, cell) === `model:${modelId}`;
@@ -873,4 +893,447 @@ function runCellMatchesModelId(
 
   const run = cells.find((entry): entry is RunCell => entry.type === "run" && entry.id === sourceRunCellId);
   return run ? resolveRunCellModelKey(cells, run) === `model:${modelId}` : false;
+}
+
+function countAbmRunOverrideReferences(cell: RunCell, variable: string): number {
+  if (!cell.abm || typeof cell.abm !== "object") {
+    return 0;
+  }
+  return Object.keys(cell.abm).reduce((total, key) => total + countExactNameMatch(key, variable), 0);
+}
+
+function renameAbmRunOverrides(
+  abm: RunCell["abm"],
+  oldName: string,
+  newName: string
+): RunCell["abm"] {
+  if (!abm || typeof abm !== "object") {
+    return abm;
+  }
+  const next: Record<string, number | boolean> = {};
+  for (const [key, value] of Object.entries(abm)) {
+    next[key.trim() === oldName ? newName : key] = value;
+  }
+  return next;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function abmModelDefinesVariable(cell: AbmModelCell, variable: string): boolean {
+  return abmModelDefinitionKind(cell, variable) != null;
+}
+
+function abmModelDefinitionKind(
+  cell: AbmModelCell,
+  variable: string
+): ModelVariableDefinition["kind"] | null {
+  if (isRecord(cell.params) && Object.prototype.hasOwnProperty.call(cell.params, variable)) {
+    return "external";
+  }
+
+  const populations = Array.isArray(cell.populations) ? cell.populations : [];
+  for (const pop of populations) {
+    if (!isRecord(pop)) {
+      continue;
+    }
+    if (Array.isArray(pop.state) && pop.state.some((name) => String(name).trim() === variable)) {
+      return "equation";
+    }
+    if (isRecord(pop.params) && Object.prototype.hasOwnProperty.call(pop.params, variable)) {
+      return "external";
+    }
+  }
+
+  for (const row of collectAbmEquationRows(cell.ticks)) {
+    if (row.name.trim() === variable) {
+      return "equation";
+    }
+  }
+
+  if (isRecord(cell.check)) {
+    if (String(cell.check.left ?? "").trim() === variable || String(cell.check.right ?? "").trim() === variable) {
+      return "equation";
+    }
+  }
+
+  return null;
+}
+
+function collectAbmEquationRows(ticks: unknown): Array<{ name: string; expression: string; description?: string }> {
+  if (!Array.isArray(ticks)) {
+    return [];
+  }
+  const rows: Array<{ name: string; expression: string; description?: string }> = [];
+  for (const tick of ticks) {
+    if (!isRecord(tick)) {
+      continue;
+    }
+    if (Array.isArray(tick.do)) {
+      rows.push(...parseAbmEquationRowList(tick.do));
+    }
+    if (Array.isArray(tick.equations)) {
+      rows.push(...parseAbmEquationRowList(tick.equations));
+    }
+    if (isRecord(tick.for)) {
+      for (const equations of Object.values(tick.for)) {
+        if (Array.isArray(equations)) {
+          rows.push(...parseAbmEquationRowList(equations));
+        }
+      }
+    }
+    if (isRecord(tick["hire-lottery"])) {
+      const body = tick["hire-lottery"];
+      rows.push({
+        name: String(body.into ?? ""),
+        expression: `hire_lottery(${String(body.demand ?? "")}, ${String(body.spread ?? "")}, ${String(body.cap ?? "")})`
+      });
+    }
+    if (isRecord(tick["ration-fcfs"])) {
+      const body = tick["ration-fcfs"];
+      rows.push({
+        name: String(body.into ?? ""),
+        expression: `ration_fcfs(${String(body.demand ?? "")}, ${String(body.supply ?? "")})`
+      });
+    }
+    if (tick.kind === "hire-lottery") {
+      rows.push({
+        name: String(tick.into ?? ""),
+        expression: `hire_lottery(${String(tick.demand ?? "")}, ${String(tick.spread ?? "")}, ${String(tick.cap ?? "")})`
+      });
+    }
+    if (tick.kind === "ration-fcfs") {
+      rows.push({
+        name: String(tick.into ?? ""),
+        expression: `ration_fcfs(${String(tick.demand ?? "")}, ${String(tick.supply ?? "")})`
+      });
+    }
+  }
+  return rows.filter((row) => row.name.trim() !== "");
+}
+
+function parseAbmEquationRowList(
+  rows: unknown[]
+): Array<{ name: string; expression: string; description?: string }> {
+  return rows.flatMap((row) => {
+    if (!Array.isArray(row) || row.length < 2) {
+      return [];
+    }
+    const name = String(row[0] ?? "");
+    const expression = String(row[1] ?? "");
+    const description =
+      row.length >= 3 && row[2] != null && String(row[2]).trim() !== "" ? String(row[2]) : undefined;
+    return description != null ? [{ name, expression, description }] : [{ name, expression }];
+  });
+}
+
+function countReferencesInAbmModelCell(cell: AbmModelCell, variable: string): number {
+  let total = 0;
+
+  if (isRecord(cell.params)) {
+    total += Object.keys(cell.params).reduce(
+      (sum, key) => sum + countExactNameMatch(key, variable),
+      0
+    );
+  }
+
+  const populations = Array.isArray(cell.populations) ? cell.populations : [];
+  for (const pop of populations) {
+    if (!isRecord(pop)) {
+      continue;
+    }
+    if (Array.isArray(pop.state)) {
+      total += pop.state.reduce(
+        (sum, name) => sum + countExactNameMatch(String(name), variable),
+        0
+      );
+    }
+    if (isRecord(pop.params)) {
+      total += Object.keys(pop.params).reduce(
+        (sum, key) => sum + countExactNameMatch(key, variable),
+        0
+      );
+    }
+  }
+
+  for (const row of collectAbmEquationRows(cell.ticks)) {
+    total += countExactNameMatch(row.name, variable);
+    total += countIdentifierOccurrences(row.expression, variable);
+    if (row.description) {
+      total += countIdentifierOccurrences(row.description, variable);
+    }
+  }
+
+  if (isRecord(cell.record)) {
+    if (Array.isArray(cell.record.series)) {
+      total += cell.record.series.reduce(
+        (sum, name) => sum + countExactNameMatch(String(name), variable),
+        0
+      );
+    }
+    if (Array.isArray(cell.record.bands)) {
+      total += cell.record.bands.reduce(
+        (sum, name) => sum + countExactNameMatch(String(name), variable),
+        0
+      );
+    }
+    if (isRecord(cell.record.descriptions)) {
+      total += Object.keys(cell.record.descriptions).reduce(
+        (sum, key) => sum + countExactNameMatch(key, variable),
+        0
+      );
+      for (const description of Object.values(cell.record.descriptions)) {
+        if (typeof description === "string") {
+          total += countIdentifierOccurrences(description, variable);
+        }
+      }
+    }
+    if (Array.isArray(cell.record.micro)) {
+      for (const entry of cell.record.micro) {
+        if (!isRecord(entry) || !Array.isArray(entry.variables)) {
+          continue;
+        }
+        total += entry.variables.reduce(
+          (sum, name) => sum + countExactNameMatch(String(name), variable),
+          0
+        );
+      }
+    }
+  } else if (Array.isArray(cell.record)) {
+    for (const item of cell.record) {
+      if (!isRecord(item)) {
+        continue;
+      }
+      if (Array.isArray(item.variables)) {
+        total += item.variables.reduce(
+          (sum, name) => sum + countExactNameMatch(String(name), variable),
+          0
+        );
+      }
+      if (Array.isArray(item.bands)) {
+        total += item.bands.reduce(
+          (sum, name) => sum + countExactNameMatch(String(name), variable),
+          0
+        );
+      }
+      if (isRecord(item.descriptions)) {
+        total += Object.keys(item.descriptions).reduce(
+          (sum, key) => sum + countExactNameMatch(key, variable),
+          0
+        );
+        for (const description of Object.values(item.descriptions)) {
+          if (typeof description === "string") {
+            total += countIdentifierOccurrences(description, variable);
+          }
+        }
+      }
+    }
+  }
+
+  if (isRecord(cell.check)) {
+    total += countExactNameMatch(String(cell.check.left ?? ""), variable);
+    total += countExactNameMatch(String(cell.check.right ?? ""), variable);
+  }
+
+  return total;
+}
+
+function renameVariableInAbmModelCell(
+  cell: AbmModelCell,
+  oldName: string,
+  newName: string
+): AbmModelCell {
+  const nextParams = isRecord(cell.params)
+    ? Object.fromEntries(
+        Object.entries(cell.params).map(([key, value]) => [
+          key.trim() === oldName ? newName : key,
+          value
+        ])
+      )
+    : cell.params;
+
+  const nextPopulations = Array.isArray(cell.populations)
+    ? cell.populations.map((pop) => {
+        if (!isRecord(pop)) {
+          return pop;
+        }
+        return {
+          ...pop,
+          state: Array.isArray(pop.state)
+            ? pop.state.map((name) => (String(name).trim() === oldName ? newName : name))
+            : pop.state,
+          params: isRecord(pop.params)
+            ? Object.fromEntries(
+                Object.entries(pop.params).map(([key, value]) => [
+                  key.trim() === oldName ? newName : key,
+                  value
+                ])
+              )
+            : pop.params
+        };
+      })
+    : cell.populations;
+
+  const nextTicks = Array.isArray(cell.ticks)
+    ? cell.ticks.map((tick) => renameAbmTick(tick, oldName, newName))
+    : cell.ticks;
+
+  const nextRecord = Array.isArray(cell.record)
+    ? cell.record.map((item) => {
+        if (!isRecord(item)) {
+          return item;
+        }
+        return {
+          ...item,
+          variables: Array.isArray(item.variables)
+            ? item.variables.map((name) => (String(name).trim() === oldName ? newName : name))
+            : item.variables,
+          bands: Array.isArray(item.bands)
+            ? item.bands.map((name) => (String(name).trim() === oldName ? newName : name))
+            : item.bands,
+          descriptions: isRecord(item.descriptions)
+            ? Object.fromEntries(
+                Object.entries(item.descriptions).map(([key, value]) => [
+                  key.trim() === oldName ? newName : key,
+                  typeof value === "string"
+                    ? replaceIdentifierInSource(value, oldName, newName)
+                    : value
+                ])
+              )
+            : item.descriptions
+        };
+      })
+    : isRecord(cell.record)
+      ? {
+          ...cell.record,
+          series: Array.isArray(cell.record.series)
+            ? cell.record.series.map((name) => (String(name).trim() === oldName ? newName : name))
+            : cell.record.series,
+          bands: Array.isArray(cell.record.bands)
+            ? cell.record.bands.map((name) => (String(name).trim() === oldName ? newName : name))
+            : cell.record.bands,
+          descriptions: isRecord(cell.record.descriptions)
+            ? Object.fromEntries(
+                Object.entries(cell.record.descriptions).map(([key, value]) => [
+                  key.trim() === oldName ? newName : key,
+                  typeof value === "string"
+                    ? replaceIdentifierInSource(value, oldName, newName)
+                    : value
+                ])
+              )
+            : cell.record.descriptions,
+          micro: Array.isArray(cell.record.micro)
+            ? cell.record.micro.map((entry) => {
+                if (!isRecord(entry)) {
+                  return entry;
+                }
+                return {
+                  ...entry,
+                  variables: Array.isArray(entry.variables)
+                    ? entry.variables.map((name) =>
+                        String(name).trim() === oldName ? newName : name
+                      )
+                    : entry.variables
+                };
+              })
+            : cell.record.micro
+        }
+      : cell.record;
+
+  const nextCheck = isRecord(cell.check)
+    ? {
+        ...cell.check,
+        left:
+          String(cell.check.left ?? "").trim() === oldName ? newName : cell.check.left,
+        right:
+          String(cell.check.right ?? "").trim() === oldName ? newName : cell.check.right
+      }
+    : cell.check;
+
+  return {
+    ...cell,
+    params: nextParams as AbmModelCell["params"],
+    populations: nextPopulations as AbmModelCell["populations"],
+    ticks: nextTicks as AbmModelCell["ticks"],
+    record: nextRecord as AbmModelCell["record"],
+    check: nextCheck as AbmModelCell["check"]
+  };
+}
+
+function renameAbmTick(tick: unknown, oldName: string, newName: string): unknown {
+  if (!isRecord(tick)) {
+    return tick;
+  }
+
+  const next: Record<string, unknown> = { ...tick };
+
+  if (Array.isArray(tick.do)) {
+    next.do = renameAbmEquationRowList(tick.do, oldName, newName);
+  }
+  if (Array.isArray(tick.equations)) {
+    next.equations = renameAbmEquationRowList(tick.equations, oldName, newName);
+  }
+  if (isRecord(tick.for)) {
+    next.for = Object.fromEntries(
+      Object.entries(tick.for).map(([population, equations]) => [
+        population,
+        Array.isArray(equations) ? renameAbmEquationRowList(equations, oldName, newName) : equations
+      ])
+    );
+  }
+  if (isRecord(tick["hire-lottery"])) {
+    const body = tick["hire-lottery"];
+    next["hire-lottery"] = {
+      ...body,
+      demand: String(body.demand ?? "").trim() === oldName ? newName : body.demand,
+      spread: String(body.spread ?? "").trim() === oldName ? newName : body.spread,
+      into: String(body.into ?? "").trim() === oldName ? newName : body.into,
+      cap:
+        typeof body.cap === "string" && body.cap.trim() === oldName ? newName : body.cap
+    };
+  }
+  if (isRecord(tick["ration-fcfs"])) {
+    const body = tick["ration-fcfs"];
+    next["ration-fcfs"] = {
+      ...body,
+      demand: String(body.demand ?? "").trim() === oldName ? newName : body.demand,
+      supply: String(body.supply ?? "").trim() === oldName ? newName : body.supply,
+      into: String(body.into ?? "").trim() === oldName ? newName : body.into
+    };
+  }
+  if (tick.kind === "hire-lottery" || tick.kind === "ration-fcfs" || tick.kind === "agent" || tick.kind === "aggregate") {
+    if (typeof tick.demand === "string" && tick.demand.trim() === oldName) {
+      next.demand = newName;
+    }
+    if (typeof tick.spread === "string" && tick.spread.trim() === oldName) {
+      next.spread = newName;
+    }
+    if (typeof tick.supply === "string" && tick.supply.trim() === oldName) {
+      next.supply = newName;
+    }
+    if (typeof tick.into === "string" && tick.into.trim() === oldName) {
+      next.into = newName;
+    }
+    if (typeof tick.cap === "string" && tick.cap.trim() === oldName) {
+      next.cap = newName;
+    }
+  }
+
+  return next;
+}
+
+function renameAbmEquationRowList(rows: unknown[], oldName: string, newName: string): unknown[] {
+  return rows.map((row) => {
+    if (!Array.isArray(row) || row.length < 2) {
+      return row;
+    }
+    const next = [...row];
+    next[0] = String(row[0]).trim() === oldName ? newName : row[0];
+    next[1] = replaceIdentifierInSource(String(row[1] ?? ""), oldName, newName);
+    if (row.length >= 3 && row[2] != null) {
+      next[2] = replaceIdentifierInSource(String(row[2]), oldName, newName);
+    }
+    return next;
+  });
 }

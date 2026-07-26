@@ -176,6 +176,18 @@ export function buildVariableCatalogRows(args: {
       pushCatalogRow(node.name);
     }
 
+    // Include equation/external names even when expressions fail to parse (ABM ticks).
+    for (const equation of context.editor.equations) {
+      if (!isRowComment(equation) && equation.name.trim()) {
+        pushCatalogRow(equation.name.trim());
+      }
+    }
+    for (const external of context.editor.externals) {
+      if (!isRowComment(external) && external.name.trim()) {
+        pushCatalogRow(external.name.trim());
+      }
+    }
+
     const preferredRun = findPreferredRunForModelKey(args.document, context.modelKey);
     if (preferredRun?.sourceModelId) {
       for (const columnRef of collectMatrixColumnSumRefsFromMatrices({

@@ -408,12 +408,18 @@ class Parser {
         this.expect("RPAREN");
         return fn("pow", [base, exponent]);
       }
-      case "RUNIF": {
-        const lo = this.parseTopLevelExpression();
+      case "RANDOM.UNIFORM": {
+        const low = this.parseTopLevelExpression();
         this.expect("COMMA");
-        const hi = this.parseTopLevelExpression();
+        const high = this.parseTopLevelExpression();
+        if (this.peekType() === "COMMA") {
+          this.advance();
+          const size = this.parseTopLevelExpression();
+          this.expect("RPAREN");
+          return fn("random.uniform", [low, high, size]);
+        }
         this.expect("RPAREN");
-        return fn("runif", [lo, hi]);
+        return fn("random.uniform", [low, high]);
       }
       default:
         throw new Error(`Unsupported function: ${identifier}`);
@@ -570,7 +576,7 @@ function binary(op: "+" | "-" | "*" | "/", left: Expr, right: Expr): Expr {
 }
 
 function fn(
-  name: "exp" | "log" | "abs" | "sqrt" | "floor" | "min" | "max" | "pow" | "runif",
+  name: "exp" | "log" | "abs" | "sqrt" | "floor" | "min" | "max" | "pow" | "random.uniform",
   args: Expr[]
 ): Expr {
   return { type: "Function", name, args };

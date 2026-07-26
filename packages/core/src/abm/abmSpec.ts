@@ -10,7 +10,7 @@ import {
   type AbmRuntimeState,
   type PopulationRuntime
 } from "./abmSpecContext";
-import { normalizeAbmSpec } from "./normalizeAbmSpec";
+import { normalizeAbmSpec, aggregateAssignedNames, defaultAbmRecord } from "./normalizeAbmSpec";
 import {
   ABM_MICRO_DEFAULT_MAX_AGENTS,
   type AbmEquationRow,
@@ -37,7 +37,8 @@ interface CompiledSpec {
 }
 
 function compileEquations(rows: AbmEquationRow[]): CompiledEq[] {
-  return rows.map(([name, expression]) => {
+  return rows.map((row) => {
+    const [name, expression] = row;
     const parsed = parseEquation(name, expression);
     return { name: parsed.name, evaluate: parsed.evaluate };
   });
@@ -128,7 +129,7 @@ export function expandAbmMicroAgents(
 function compileMicro(spec: AbmSpec, populationSizes: Record<string, number>): CompiledSpec["microBindings"] {
   const bindings: CompiledSpec["microBindings"] = [];
   const seenNames = new Set<string>();
-  for (const entry of spec.record.micro ?? []) {
+  for (const entry of spec.record?.micro ?? []) {
     const size = populationSizes[entry.population];
     if (size == null) {
       throw new Error(`ABM micro record references unknown population "${entry.population}".`);
@@ -152,33 +153,6 @@ function compileMicro(spec: AbmSpec, populationSizes: Record<string, number>): C
   return bindings;
 }
 
-function assignedNames(ticks: AbmTickSpec[]): Set<string> {
-  const names = new Set<string>();
-  for (const tick of ticks) {
-    switch (tick.kind) {
-      case "agent":
-        for (const [name] of tick.equations) {
-          names.add(name);
-        }
-        break;
-      case "aggregate":
-        for (const [name] of tick.equations) {
-          names.add(name);
-        }
-        break;
-      case "hire-lottery":
-        names.add(tick.into);
-        break;
-      case "ration-fcfs":
-        names.add(tick.into);
-        break;
-      case "shuffle":
-        break;
-    }
-  }
-  return names;
-}
-
 /** Validate an AbmSpec; throws on structural errors. */
 export function validateAbmSpec(spec: AbmSpec, overrides?: AbmSpecOverrides): void {
   if (!spec.populations?.length) {
@@ -187,8 +161,22 @@ export function validateAbmSpec(spec: AbmSpec, overrides?: AbmSpecOverrides): vo
   if (!spec.ticks?.length) {
     throw new Error("ABM spec requires at least one tick.");
   }
-  if (!spec.record?.series?.length) {
-    throw new Error("ABM spec requires record.series.");
+
+  const defaults = defaultAbmRecord(spec.populations, spec.ticks);
+  const record = {
+    ...defaults,
+    ...spec.record,
+    series: spec.record?.series?.length ? spec.record.series : defaults.series,
+    bands: spec.record?.bands !== undefined ? spec.record.bands : defaults.bands,
+    micro: spec.record?.micro?.length ? spec.record.micro : defaults.micro,
+    descriptions: {
+      ...(defaults.descriptions ?? {}),
+      ...(spec.record?.descriptions ?? {})
+    }
+  };
+
+  if (!record.series?.length) {
+    throw new Error("ABM spec requires record.series (normalize the spec first for auto macros).");
   }
 
   const popNames = new Set(spec.populations.map((p) => p.name));
@@ -258,19 +246,21 @@ export function validateAbmSpec(spec: AbmSpec, overrides?: AbmSpecOverrides): vo
 
   // <pop>.rank / legacy position is only usable after shuffle — soft-checked at runtime.
 
-  const assigned = assignedNames(spec.ticks);
-  for (const name of spec.record.series) {
-    if (!assigned.has(name)) {
-      throw new Error(`ABM record.series "${name}" is never assigned by any tick.`);
+  const aggregates = new Set(aggregateAssignedNames(spec.ticks));
+  for (const name of record.series ?? []) {
+    if (!aggregates.has(name)) {
+      throw new Error(
+        `ABM record.series "${name}" is never assigned by an aggregate (or hire-lottery) tick.`
+      );
     }
   }
-  for (const name of spec.record.bands ?? []) {
-    if (!spec.record.series.includes(name)) {
+  for (const name of record.bands ?? []) {
+    if (!(record.series ?? []).includes(name)) {
       throw new Error(`ABM record.bands "${name}" must also appear in record.series.`);
     }
   }
 
-  for (const entry of spec.record.micro ?? []) {
+  for (const entry of record.micro ?? []) {
     if (!popNames.has(entry.population)) {
       throw new Error(`ABM micro record references unknown population "${entry.population}".`);
     }
@@ -490,11 +480,11 @@ export function runAbmSpec(specInput: AbmSpec | unknown, overrides: AbmSpecOverr
   const spec = resolveSpecInput(specInput);
   const compiled = compileSpec(spec, overrides);
   const periods = overrides.periods ?? 100;
-  const monteCarlo = overrides.monteCarlo ?? 50;
+  const monteCarlo = overrides.monteCarlo ?? spec.record?.monteCarlo ?? 50;
   const baseSeed = overrides.baseSeed ?? 0;
   const bandKind = overrides.bandKind ?? "percentile";
-  const seriesNames = spec.record.series;
-  const bandSeriesNames = bandKind === "none" ? [] : (spec.record.bands ?? []);
+  const seriesNames = spec.record?.series ?? [];
+  const bandSeriesNames = bandKind === "none" ? [] : (spec.record?.bands ?? []);
 
   const externals: Record<string, { kind: "constant"; value: number }> = {};
   for (const [name, value] of Object.entries({ ...(spec.params ?? {}), ...(overrides.params ?? {}) })) {
@@ -558,20 +548,6 @@ export function abmMicroSeriesName(
   return microSeriesName(variable, agent);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === "object" && !Array.isArray(value);
-}
-
 function resolveSpecInput(specInput: unknown): AbmSpec {
-  if (!isRecord(specInput) || !Array.isArray(specInput.ticks)) {
-    return normalizeAbmSpec(specInput);
-  }
-  if (hasTypedTicks(specInput.ticks)) {
-    return specInput as unknown as AbmSpec;
-  }
   return normalizeAbmSpec(specInput);
-}
-
-function hasTypedTicks(ticks: unknown[]): boolean {
-  return ticks.every((tick) => isRecord(tick) && typeof tick.kind === "string");
 }

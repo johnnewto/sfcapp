@@ -125,15 +125,25 @@ function emit(expr: Expr, ctx: string): string {
         ? (${emit(expr.whenTrue, ctx)})
         : (${emit(expr.whenFalse, ctx)}))`;
     case "Function": {
-      if (expr.name === "runif") {
-        const lo = emit(expr.args[0]!, ctx);
-        const hi = emit(expr.args[1]!, ctx);
+      if (expr.name === "random.uniform") {
+        const low = emit(expr.args[0]!, ctx);
+        const high = emit(expr.args[1]!, ctx);
+        const size =
+          expr.args.length >= 3 ? emit(expr.args[2]!, ctx) : null;
         return `(function () {
         var randomUniform = ${ctx}.randomUniform;
         if (!randomUniform) {
-          throw new Error("runif(lo, hi) requires a solver context with randomUniform.");
+          throw new Error("random.uniform(low, high, size) requires a solver context with randomUniform.");
         }
-        return randomUniform(${lo}, ${hi});
+        ${
+          size == null
+            ? ""
+            : `var size = ${size};
+        if (size !== 1) {
+          throw new Error("random.uniform size must be 1 (scalar draws only); got " + size);
+        }
+        `
+        }return randomUniform(${low}, ${high});
       })()`;
       }
       const args = expr.args.map((arg) => emit(arg, ctx)).join(", ");

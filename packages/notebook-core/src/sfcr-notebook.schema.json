@@ -451,7 +451,12 @@
         "sourceModelId": { "type": "string" },
         "populations": { "type": "array" },
         "ticks": { "type": "array" },
-        "record": { "type": "object" },
+        "record": {
+          "oneOf": [
+            { "type": "object" },
+            { "type": "array", "items": { "type": "object" } }
+          ]
+        },
         "params": { "type": "object" },
         "check": { "type": "object" },
         "baselineRunCellId": { "type": "string" },
@@ -618,7 +623,7 @@
         },
         {
           "if": { "properties": { "type": { "const": "abm-model" } } },
-          "then": { "required": ["modelId", "populations", "ticks", "record"] }
+          "then": { "required": ["modelId", "populations", "ticks"] }
         },
         {
           "if": { "properties": { "type": { "const": "run" } } },

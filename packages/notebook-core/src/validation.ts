@@ -333,9 +333,6 @@ function validateAbmModelCell(cell: AbmModelCell, issues: NotebookValidationIssu
   if (!Array.isArray(cell.ticks) || cell.ticks.length < 1) {
     issues.push(createNotebookIssue(`ABM model cell '${cell.id}' needs ticks.`));
   }
-  if (cell.record == null || typeof cell.record !== "object" || Array.isArray(cell.record)) {
-    issues.push(createNotebookIssue(`ABM model cell '${cell.id}' needs record.`));
-  }
 }
 
 function validateSequenceCellReferences(

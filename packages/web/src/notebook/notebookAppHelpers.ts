@@ -8,6 +8,7 @@ import {
 } from "./templates";
 import { hasNotebookShareInLocation } from "./notebookShareLink";
 import type { NotebookCell } from "./types";
+import { buildAbmVariableDescriptions } from "./abmInspect";
 
 const APP_BASE_URL = import.meta.env.BASE_URL;
 
@@ -34,7 +35,9 @@ export function buildNotebookVariableDescriptions(cells: NotebookCell[]): Variab
           ? buildVariableDescriptions({ equations: cell.equations })
           : cell.type === "externals"
             ? buildVariableDescriptions({ externals: cell.externals })
-            : null;
+            : cell.type === "abm-model"
+              ? buildAbmVariableDescriptions(cell)
+              : null;
 
     for (const [name, description] of nextDescriptions ?? []) {
       if (!descriptions.has(name)) {

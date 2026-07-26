@@ -682,3 +682,106 @@
   text-align: right;
   width: fit-content;
 }
+
+/* ABM model cell read view */
+.notebook-abm-model-view {
+  display: grid;
+  gap: 0.85rem;
+}
+.notebook-abm-model-meta,
+.notebook-abm-model-convention,
+.notebook-abm-model-hint {
+  color: #475569;
+  font-size: 0.86rem;
+  margin: 0;
+}
+.notebook-abm-model-section h4 {
+  font-size: 0.92rem;
+  margin: 0 0 0.35rem;
+}
+.notebook-abm-model-section ul,
+.notebook-abm-model-ticks {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.notebook-abm-model-equations {
+  margin: 0.25rem 0 0.4rem;
+  padding-left: 1.1rem;
+}
+.notebook-abm-model-populations > li {
+  margin-bottom: 0.55rem;
+}
+.notebook-abm-model-population-row {
+  margin-top: 0.2rem;
+}
+.notebook-abm-model-populations .notebook-abm-model-params {
+  margin-top: 0.25rem;
+}
+.notebook-abm-model-view .result-variable-button:hover .variable-label-inline {
+  text-decoration: underline;
+  text-decoration-color: rgba(37, 99, 235, 0.32);
+}
+.notebook-abm-model-view .formula-token.formula-parameter {
+  color: #ea580c;
+}
+.notebook-abm-model-series-grid {
+  display: grid;
+  gap: 0.2rem 0.35rem;
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+}
+.notebook-abm-model-series-row {
+  align-items: baseline;
+  column-gap: 0.35rem;
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 7.5rem) minmax(6.5rem, 8.5rem) minmax(0, 1fr);
+}
+.notebook-abm-model-series-name {
+  min-width: 0;
+}
+.notebook-abm-model-series-value {
+  font-variant-numeric: tabular-nums;
+  justify-self: stretch;
+  text-align: right;
+}
+.notebook-abm-model-series-value .notebook-current-value {
+  align-items: baseline;
+  column-gap: 0;
+  display: grid;
+  grid-template-columns: 1.25ch minmax(0, 1fr) auto 2.1ch;
+  width: 100%;
+}
+.notebook-abm-model-series-value .notebook-current-value-leading {
+  text-align: right;
+}
+.notebook-abm-model-series-value .notebook-current-value-integer {
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+.notebook-abm-model-series-value .notebook-current-value-separator {
+  text-align: center;
+}
+.notebook-abm-model-series-value .notebook-current-value-fraction {
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.notebook-abm-model-series-desc {
+  color: #475569;
+  font-size: 0.86rem;
+  min-width: 0;
+  padding-left: 0.15rem;
+}
+.notebook-abm-model-check .notebook-abm-model-series-value {
+  display: inline-grid;
+  margin: 0 0.15rem;
+  min-width: 5.5rem;
+  width: auto;
+}
+.notebook-abm-model-expression {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  font-size: 0.92em;
+}

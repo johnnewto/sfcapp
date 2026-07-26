@@ -1,99 +1,232 @@
 {
   "id": "abm-sim-notebook",
   "title": "ABM-SIM Browser Notebook",
-  "metadata": { "version": 1, "template": "abm-sim" },
+  "metadata": {
+    "version": 1,
+    "template": "abm-sim"
+  },
   "cells": [
-    { "id": "intro", "type": "markdown", "title": "Overview", "source": "Model **ABM-SIM** is Godley and Lavoie Model SIM populated by many households. Each household holds its own money, forms its own disposable income, and has its own propensity to consume. Macro totals emerge by summing over agents. This notebook runs a Monte Carlo of that agent-based model in the browser from a YAML-authored `abm-model` cell. The R reference is `references/leeds_lectures_2026/ABM_SIM.R`.\n", "more": "Aggregate and IO models are **top-down**: they write economy-wide behavioural\nrules directly. **Agent-based models (ABMs)** are **bottom-up**: they specify\nmany individual agents — here households — and obtain macro variables by\n_summing over agents_. Aggregate regularities then **emerge** from interaction\nrather than being imposed.\n\nThree features distinguish this style:\n\n1. **Heterogeneity.** Each household has its own propensity to consume out of\n   income (`alpha1`).\n2. **Interaction and matching.** A random **job lottery** (who is hired) and a\n   **first-come-first-served** goods market (who gets served when output is short).\n3. **Sequential decisions.** Agents act from _last_ period's information, so there\n   is no simultaneous equation system to iterate within the period.\n\nThe model remains **stock-flow consistent**: money is only transferred between\nagents, so household money `H_d` tracks government money supply `H_s` to machine\nprecision. The ABM is repeated with different random seeds (**Monte Carlo**); charts\nshow the **mean** across runs.\n\nMean output still converges toward `G / theta`, as in textbook SIM. With hiring\nfriction `s > 0`, unemployment emerges, and wealth settles _above_ the frictionless\nSIM value because rationing creates involuntary saving.\n" },
+    {
+      "id": "intro",
+      "type": "markdown",
+      "title": "Overview",
+      "source": "Model **ABM-SIM** is Godley and Lavoie Model SIM populated by many households. Each household holds its own money, forms its own disposable income, and has its own propensity to consume. Macro totals emerge by summing over agents. This notebook runs a Monte Carlo of that agent-based model in the browser from a YAML-authored `abm-model` cell. The R reference is `references/leeds_lectures_2026/ABM_SIM.R`.\n",
+      "more": "Aggregate and IO models are **top-down**: they write economy-wide behavioural\nrules directly. **Agent-based models (ABMs)** are **bottom-up**: they specify\nmany individual agents — here households — and obtain macro variables by\n_summing over agents_. Aggregate regularities then **emerge** from interaction\nrather than being imposed.\n\nThree features distinguish this style:\n\n1. **Heterogeneity.** Each household has its own propensity to consume out of\n   income (`alpha1`).\n2. **Interaction and matching.** A random **job lottery** (who is hired) and a\n   **first-come-first-served** goods market (who gets served when output is short).\n3. **Sequential decisions.** Agents act from _last_ period's information, so there\n   is no simultaneous equation system to iterate within the period.\n\nThe model remains **stock-flow consistent**: money is only transferred between\nagents, so household money `H_d` tracks government money supply `H_s` to machine\nprecision. The ABM is repeated with different random seeds (**Monte Carlo**); charts\nshow the **mean** across runs.\n\nMean output still converges toward `G / theta`, as in textbook SIM. With hiring\nfriction `s > 0`, unemployment emerges, and wealth settles _above_ the frictionless\nSIM value because rationing creates involuntary saving.\n"
+    },
     {
       "id": "abm-sim-model",
       "type": "abm-model",
       "title": "ABM-SIM specification",
       "modelId": "abm-sim",
-      "description": "Declarative agent-based SIM: heterogeneous households, job lottery, FCFS goods market. Tick order matches Leeds ABM_SIM.R (`runif` hiring draw before shuffle). Upper-case names are MACRO totals (Monte Carlo means); lower-case / `*_h*` names are MICRO histories from MC run 1 only — the same split as R's `store` vs `cHist`/`eHist`/`hHist`.\n",
-      "more": "**Macro vs micro (Leeds convention).** The R script comments\n`upper-case = MACRO total; lower-case = MICRO (one household)`.\n\n- **Macro** (`record.series`): one value per period, averaged across Monte Carlo\n  runs — `Y`, `C`, `YD`, `H_d`, `H_s`, `UR`, plus policy/accounting helpers\n  `G`, `TAX`, `N`. Banded series also store p10–p90 paths.\n- **Micro** (`record.micro`): full period paths for selected households from\n  **MC run 1 only** (not averaged). Default probes are the first and last\n  household (`c_h1`, `h_hLast`, …). Author `agents: all` with a raised\n  `maxAgents` to match R's full population panels.\n\nStock-flow check: `|H_d - H_s|` must stay within `tolerance` every period.\n",
+      "description": "Declarative agent-based SIM: heterogeneous households, job lottery, FCFS goods market. Tick order matches Leeds ABM_SIM.R (`random.uniform` hiring draw before shuffle). Upper-case names are MACRO totals (Monte Carlo means); lower-case / `*_h*` names are MICRO histories from MC run 1 only — the same split as R's `store` vs `cHist`/`eHist`/`hHist`.\n",
+      "more": "**Macro vs micro (Leeds convention).** The R script comments\n`upper-case = MACRO total; lower-case = MICRO (one household)`.\n\n- **Macro**: every aggregate tick variable is stored automatically as a Monte\n  Carlo mean (banded p10–p90). No `record.series` allowlist.\n- **Micro**: first and last household, all state variables, from **MC run 1\n  only** (not averaged) — `c_h1`, `h_hLast`, ….\n- **MC count**: set on the run cell as `abm.monteCarlo` (not on the model).\n\nStock-flow check: `|H_d - H_s|` must stay within `tolerance` every period.\n",
       "populations": [
-        { "name": "households", "size": 200, "state": ["h", "yd", "cd", "c", "y", "e"], "params": { "alpha1": { "draw": "uniform", "lo": 0.2, "hi": 1 } } }
+        {
+          "name": "households",
+          "size": 200,
+          "state": [
+            "h",
+            "yd",
+            "cd",
+            "c",
+            "y",
+            "e"
+          ],
+          "params": {
+            "alpha1": {
+              "draw": "uniform",
+              "lo": 0.2,
+              "hi": 1
+            }
+          }
+        }
       ],
-      "params": { "alpha2": 0.4, "theta": 0.2, "pr": 1.1, "w": 1.1, "s": 0.2, "g0": 20, "g1": 30, "shockPeriod": 60 },
+      "params": {
+        "alpha2": 0.4,
+        "theta": 0.2,
+        "pr": 1.1,
+        "w": 1.1,
+        "s": 0.2,
+        "g0": 20,
+        "g1": 30,
+        "shockPeriod": 60
+      },
       "ticks": [
         {
           "do": [
-            ["G", "if (t >= shockPeriod) { g1 } else { g0 }"]
+            [
+              "G",
+              "if (t >= shockPeriod) { g1 } else { g0 }"
+            ]
           ]
         },
         {
           "for": {
             "households": [
-              ["cd", "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))"]
+              [
+                "cd",
+                "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))"
+              ]
             ]
           }
         },
         {
           "do": [
-            ["AD", "sum(households.cd) + G"],
-            ["Nd", "AD / pr"],
-            ["N", "min(min(floor(Nd * runif(1 - s, 1 + s)), floor(Nd)), households.size)"]
+            [
+              "AD",
+              "sum(households.cd) + G"
+            ],
+            [
+              "Nd",
+              "AD / pr"
+            ],
+            [
+              "N",
+              "min(min(floor(Nd * random.uniform(1 - s, 1 + s, 1)), floor(Nd)), households.size)"
+            ]
           ]
         },
-        { "shuffle": "households" },
+        {
+          "shuffle": "households"
+        },
         {
           "for": {
             "households": [
-              ["e", "if (households.rank <= N) { 1 } else { 0 }"]
+              [
+                "e",
+                "if (households.rank <= N) { 1 } else { 0 }"
+              ]
             ]
           }
         },
         {
           "do": [
-            ["Y", "pr * N"],
-            ["YG", "min(G, Y)"],
-            ["YC", "Y - YG"]
+            [
+              "Y",
+              "pr * N"
+            ],
+            [
+              "YG",
+              "min(G, Y)"
+            ],
+            [
+              "YC",
+              "Y - YG"
+            ]
           ]
         },
-        { "ration-fcfs": { "population": "households", "demand": "cd", "supply": "YC", "into": "c" } },
+        {
+          "ration-fcfs": {
+            "population": "households",
+            "demand": "cd",
+            "supply": "YC",
+            "into": "c"
+          }
+        },
         {
           "for": {
             "households": [
-              ["y", "w * e"],
-              ["yd", "y * (1 - theta)"],
-              ["h", "lag(h) + y - c - theta * y"]
+              [
+                "y",
+                "w * e"
+              ],
+              [
+                "yd",
+                "y * (1 - theta)"
+              ],
+              [
+                "h",
+                "lag(h) + y - c - theta * y"
+              ]
             ]
           }
         },
         {
           "do": [
-            ["C", "sum(households.c)"],
-            ["YD", "sum(households.yd)"],
-            ["TAX", "theta * w * N"],
-            ["H_d", "sum(households.h)"],
-            ["H_s", "lag(H_s) + YG - TAX"],
-            ["UR", "(households.size - N) / households.size"]
+            [
+              "C",
+              "sum(households.c)"
+            ],
+            [
+              "YD",
+              "sum(households.yd)"
+            ],
+            [
+              "TAX",
+              "theta * w * N"
+            ],
+            [
+              "H_d",
+              "sum(households.h)"
+            ],
+            [
+              "H_s",
+              "lag(H_s) + YG - TAX"
+            ],
+            [
+              "UR",
+              "(households.size - N) / households.size"
+            ]
           ]
         }
       ],
-      "record": {
-        "series": ["Y", "C", "YD", "H_d", "H_s", "UR", "G", "TAX", "N"],
-        "bands": ["Y", "C", "YD", "H_d", "H_s", "UR"],
-        "descriptions": { "Y": "Output / income (MC mean)", "C": "Consumption (MC mean)", "YD": "Disposable income (MC mean)", "H_d": "Total household money (MC mean)", "H_s": "Government money supply (MC mean)", "UR": "Unemployment rate, emergent (MC mean)", "G": "Government spending", "TAX": "Tax revenue", "N": "Employment (hired count)", "c": "Household consumption (micro, MC run 1)", "h": "Household money holdings (micro, MC run 1)", "e": "Employment flag 0/1 (micro, MC run 1)" },
-        "micro": [
-          { "population": "households", "agents": ["first", "last"], "variables": ["c", "h", "e"] }
-        ]
-      },
-      "check": { "left": "H_d", "right": "H_s", "tolerance": "1e-9" }
+      "check": {
+        "left": "H_d",
+        "right": "H_s",
+        "tolerance": "1e-9"
+      }
     },
-    { "id": "ticks", "type": "markdown", "title": "Period ticks", "source": "One period unfolds as the ordered tick list in the ABM-SIM specification above: plan consumption, hire via a job lottery, shuffle the queue, serve government then households first-come-first-served, pay wages and taxes, and update money holdings. Government spending rises from `20` to `30` at period `60`.\n", "more": "Conventions: upper-case = MACRO total; lower-case = one household (MICRO).\nRecorded MACRO series are Monte Carlo means; MICRO probes (`c_h1`, `h_hLast`, …)\ncome from MC run 1 only — see the ABM-SIM specification cell.\n\n1. Each household plans `cd = min(alpha1 * yd + alpha2 * h, h)` using its own\n   `alpha1` and last period's disposable income and cash.\n2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.\n3. Hiring: `N = min(floor(Nd * runif(1-s, 1+s)), floor(Nd), households.size)`.\n4. One random shuffle orders both jobs and the shop queue (`households.rank`).\n5. Households with `households.rank <= N` are employed (`e = 1`).\n6. Government is served first from produced goods `N * pr`; remaining output is\n   rationed FCFS to households.\n7. Hired households earn wage `w = pr` (zero profit). Taxes `theta * y` are paid;\n   money updates as `h = h + y - c - tax`. Money supply grows by `YG - TAX`.\n\nSetting `s = 0` with homogeneous `alpha1` recovers the textbook SIM money stock\n`H = (1 - theta) * (G / theta) * (1 - alpha1) / alpha2` in the limit.\n" },
+    {
+      "id": "ticks",
+      "type": "markdown",
+      "title": "Period ticks",
+      "source": "One period unfolds as the ordered tick list in the ABM-SIM specification above: plan consumption, hire via a job lottery, shuffle the queue, serve government then households first-come-first-served, pay wages and taxes, and update money holdings. Government spending rises from `20` to `30` at period `60`.\n",
+      "more": "Conventions: upper-case = MACRO total; lower-case = one household (MICRO).\nRecorded MACRO series are Monte Carlo means; MICRO probes (`c_h1`, `h_hLast`, …)\ncome from MC run 1 only — see the ABM-SIM specification cell.\n\n1. Each household plans `cd = min(alpha1 * yd + alpha2 * h, h)` using its own\n   `alpha1` and last period's disposable income and cash.\n2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.\n3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.\n4. One random shuffle orders both jobs and the shop queue (`households.rank`).\n5. Households with `households.rank <= N` are employed (`e = 1`).\n6. Government is served first from produced goods `N * pr`; remaining output is\n   rationed FCFS to households.\n7. Hired households earn wage `w = pr` (zero profit). Taxes `theta * y` are paid;\n   money updates as `h = h + y - c - tax`. Money supply grows by `YG - TAX`.\n\nSetting `s = 0` with homogeneous `alpha1` recovers the textbook SIM money stock\n`H = (1 - theta) * (G / theta) * (1 - alpha1) / alpha2` in the limit.\n"
+    },
     {
       "id": "balance-sheet",
       "type": "matrix",
       "title": "ABM-SIM balance sheet (MC means)",
       "sourceRunCellId": "baseline-run",
       "accountingKind": "balance-sheet",
-      "columns": ["Households", "Government", "Sum"],
-      "sectors": ["Households", "Government", ""],
+      "columns": [
+        "Households",
+        "Government",
+        "Sum"
+      ],
+      "sectors": [
+        "Households",
+        "Government",
+        ""
+      ],
       "rows": [
-        { "band": "Money", "label": "Money stock", "values": ["+H_d", "-H_s", "0"] },
-        { "band": "Balance", "label": "Net worth", "values": ["-H_d", "+H_s", "0"] },
-        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0"] }
+        {
+          "band": "Money",
+          "label": "Money stock",
+          "values": [
+            "+H_d",
+            "-H_s",
+            "0"
+          ]
+        },
+        {
+          "band": "Balance",
+          "label": "Net worth",
+          "values": [
+            "-H_d",
+            "+H_s",
+            "0"
+          ]
+        },
+        {
+          "band": "Sum",
+          "label": "Sum",
+          "values": [
+            "0",
+            "0",
+            "0"
+          ]
+        }
       ],
       "description": "Household money holdings mirror government money liabilities. Cells are linear in the Monte Carlo mean series, so row and column sums remain watertight.\n"
     },
@@ -103,25 +236,257 @@
       "title": "ABM-SIM transactions-flow matrix (MC means)",
       "sourceRunCellId": "baseline-run",
       "accountingKind": "transaction-flow",
-      "columns": ["Households", "Production", "Government", "Sum"],
-      "sectors": ["Households", "Firms", "Government", ""],
+      "columns": [
+        "Households",
+        "Production",
+        "Government",
+        "Sum"
+      ],
+      "sectors": [
+        "Households",
+        "Firms",
+        "Government",
+        ""
+      ],
       "rows": [
-        { "band": "Consumption", "label": "Consumption", "values": ["-C", "+C", "", "0"] },
-        { "band": "Government", "label": "Government expenditure", "values": ["", "+G", "-G", "0"] },
-        { "band": "Income", "label": "Wages", "values": ["+Y", "-Y", "", "0"] },
-        { "band": "Taxes", "label": "Taxes", "values": ["-TAX", "", "+TAX", "0"] },
-        { "band": "Money", "label": "Change in money stock", "values": ["+d(H_d)", "", "-d(H_s)", "0"] },
-        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0"] }
+        {
+          "band": "Consumption",
+          "label": "Consumption",
+          "values": [
+            "-C",
+            "+C",
+            "",
+            "0"
+          ]
+        },
+        {
+          "band": "Government",
+          "label": "Government expenditure",
+          "values": [
+            "",
+            "+G",
+            "-G",
+            "0"
+          ]
+        },
+        {
+          "band": "Income",
+          "label": "Wages",
+          "values": [
+            "+Y",
+            "-Y",
+            "",
+            "0"
+          ]
+        },
+        {
+          "band": "Taxes",
+          "label": "Taxes",
+          "values": [
+            "-TAX",
+            "",
+            "+TAX",
+            "0"
+          ]
+        },
+        {
+          "band": "Money",
+          "label": "Change in money stock",
+          "values": [
+            "+d(H_d)",
+            "",
+            "-d(H_s)",
+            "0"
+          ]
+        },
+        {
+          "band": "Sum",
+          "label": "Sum",
+          "values": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
       ],
       "description": "Period flows among households, production, and government. Use the period scrubber to inspect a single period after the run.\n"
     },
-    { "id": "baseline-run", "type": "run", "title": "Monte Carlo baseline", "description": "ABM-SIM Monte Carlo (mean paths). Defaults match the Leeds R script except `monteCarlo: 50` for a snappier browser run (R uses 100).\n", "mode": "baseline", "engine": "abm", "sourceModelId": "abm-sim", "periods": 100, "resultKey": "abm_sim_baseline", "abm": { "households": 200, "monteCarlo": 50, "alpha1m": 0.6, "alpha1d": 0.4, "alpha2": 0.4, "theta": 0.2, "pr": 1.1, "s": 0.2, "g0": 20, "g1": 30, "shockPeriod": 60 } },
-    { "id": "chart-output", "type": "chart", "title": "Total output (MC mean)", "description": "MACRO output `Y` (MC mean with p10–p90 band). Vertical shift at period 60 is the government-spending shock.\n", "sourceRunCellId": "baseline-run", "variables": ["Y", "G"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "Y": { "includeZero": true }, "G": { "includeZero": true } } },
-    { "id": "chart-income-consumption", "type": "chart", "title": "Disposable income and consumption", "description": "MACRO means of disposable income `YD` and consumption `C` with p10–p90 bands (R panel b).\n", "sourceRunCellId": "baseline-run", "variables": ["YD", "C"], "axisMode": "shared", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "YD": { "includeZero": true }, "C": { "includeZero": true } } },
-    { "id": "chart-money", "type": "chart", "title": "Money stock", "description": "MACRO household money `H_d` and government money `H_s` (MC means with p10–p90 bands). With hiring friction, wealth sits above the frictionless SIM benchmark at mean alpha1.\n", "sourceRunCellId": "baseline-run", "variables": ["H_d", "H_s"], "axisMode": "shared", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "H_d": { "includeZero": true }, "H_s": { "includeZero": true } } },
-    { "id": "chart-unemployment", "type": "chart", "title": "Unemployment rate (emergent)", "description": "MACRO unemployment rate `UR` (MC mean with p10–p90 band). Emerges from the job lottery when hiring friction `s > 0` (R panel d).\n", "sourceRunCellId": "baseline-run", "variables": ["UR"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "UR": { "includeZero": true } } },
-    { "id": "chart-household-first", "type": "chart", "title": "First household (micro, MC run 1)", "description": "MICRO paths for household 1 from MC run 1 only (not averaged): consumption `c_h1`, cash `h_h1`, employment `e_h1` (1 when employed). Matches R panel e.\n", "sourceRunCellId": "baseline-run", "variables": ["c_h1", "h_h1", "e_h1"], "axisMode": "separate", "axisSnapTolarance": 0.5, "seriesRanges": { "c_h1": { "includeZero": true }, "h_h1": { "includeZero": true }, "e_h1": { "includeZero": true } } },
-    { "id": "chart-household-last", "type": "chart", "title": "Last household (micro, MC run 1)", "description": "MICRO paths for the last household from MC run 1 only: `c_hLast`, `h_hLast`, `e_hLast`. Matches R panel f — compare with the first household to see heterogeneity and queue order.\n", "sourceRunCellId": "baseline-run", "variables": ["c_hLast", "h_hLast", "e_hLast"], "axisMode": "separate", "axisSnapTolarance": 0.5, "seriesRanges": { "c_hLast": { "includeZero": true }, "h_hLast": { "includeZero": true }, "e_hLast": { "includeZero": true } } },
-    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "description": "MACRO series summary (MC means). Micro probes `c_h1` / `h_hLast` / … are available on the household charts above.\n", "sourceRunCellId": "baseline-run", "variables": ["Y", "C", "YD", "H_d", "H_s", "UR", "G", "TAX", "N"] }
+    {
+      "id": "baseline-run",
+      "type": "run",
+      "title": "Monte Carlo baseline",
+      "description": "ABM-SIM Monte Carlo (mean paths). Defaults match the Leeds R script except `monteCarlo: 20` for a snappier browser run (R uses 100).\n",
+      "mode": "baseline",
+      "engine": "abm",
+      "sourceModelId": "abm-sim",
+      "periods": 100,
+      "resultKey": "abm_sim_baseline",
+      "abm": {
+        "households": 200,
+        "monteCarlo": 20,
+        "alpha1m": 0.6,
+        "alpha1d": 0.4,
+        "alpha2": 0.4,
+        "theta": 0.2,
+        "pr": 1.1,
+        "s": 0.2,
+        "g0": 20,
+        "g1": 30,
+        "shockPeriod": 60
+      }
+    },
+    {
+      "id": "chart-output",
+      "type": "chart",
+      "title": "Total output (MC mean)",
+      "description": "MACRO output `Y` (MC mean with p10–p90 band). Vertical shift at period 60 is the government-spending shock.\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": [
+        "Y",
+        "G"
+      ],
+      "axisMode": "separate",
+      "axisSnapTolarance": 0.5,
+      "showMcBands": true,
+      "seriesRanges": {
+        "Y": {
+          "includeZero": true
+        },
+        "G": {
+          "includeZero": true
+        }
+      }
+    },
+    {
+      "id": "chart-income-consumption",
+      "type": "chart",
+      "title": "Disposable income and consumption",
+      "description": "MACRO means of disposable income `YD` and consumption `C` with p10–p90 bands (R panel b).\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": [
+        "YD",
+        "C"
+      ],
+      "axisMode": "shared",
+      "axisSnapTolarance": 0.5,
+      "showMcBands": true,
+      "seriesRanges": {
+        "YD": {
+          "includeZero": true
+        },
+        "C": {
+          "includeZero": true
+        }
+      }
+    },
+    {
+      "id": "chart-money",
+      "type": "chart",
+      "title": "Money stock",
+      "description": "MACRO household money `H_d` and government money `H_s` (MC means with p10–p90 bands). With hiring friction, wealth sits above the frictionless SIM benchmark at mean alpha1.\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": [
+        "H_d",
+        "H_s"
+      ],
+      "axisMode": "shared",
+      "axisSnapTolarance": 0.5,
+      "showMcBands": true,
+      "seriesRanges": {
+        "H_d": {
+          "includeZero": true
+        },
+        "H_s": {
+          "includeZero": true
+        }
+      }
+    },
+    {
+      "id": "chart-unemployment",
+      "type": "chart",
+      "title": "Unemployment rate (emergent)",
+      "description": "MACRO unemployment rate `UR` (MC mean with p10–p90 band). Emerges from the job lottery when hiring friction `s > 0` (R panel d).\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": [
+        "UR"
+      ],
+      "axisMode": "separate",
+      "axisSnapTolarance": 0.5,
+      "showMcBands": true,
+      "seriesRanges": {
+        "UR": {
+          "includeZero": true
+        }
+      }
+    },
+    {
+      "id": "chart-household-first",
+      "type": "chart",
+      "title": "First household (micro, MC run 1)",
+      "description": "MICRO paths for household 1 from MC run 1 only (not averaged): consumption `c_h1`, cash `h_h1`, employment `e_h1` (1 when employed). Matches R panel e.\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": [
+        "c_h1",
+        "h_h1",
+        "e_h1"
+      ],
+      "axisMode": "separate",
+      "axisSnapTolarance": 0.5,
+      "seriesRanges": {
+        "c_h1": {
+          "includeZero": true
+        },
+        "h_h1": {
+          "includeZero": true
+        },
+        "e_h1": {
+          "includeZero": true
+        }
+      }
+    },
+    {
+      "id": "chart-household-last",
+      "type": "chart",
+      "title": "Last household (micro, MC run 1)",
+      "description": "MICRO paths for the last household from MC run 1 only: `c_hLast`, `h_hLast`, `e_hLast`. Matches R panel f — compare with the first household to see heterogeneity and queue order.\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": [
+        "c_hLast",
+        "h_hLast",
+        "e_hLast"
+      ],
+      "axisMode": "separate",
+      "axisSnapTolarance": 0.5,
+      "seriesRanges": {
+        "c_hLast": {
+          "includeZero": true
+        },
+        "h_hLast": {
+          "includeZero": true
+        },
+        "e_hLast": {
+          "includeZero": true
+        }
+      }
+    },
+    {
+      "id": "baseline-table",
+      "type": "table",
+      "title": "Baseline variable summary",
+      "description": "MACRO series summary (MC means). Micro probes `c_h1` / `h_hLast` / … are available on the household charts above.\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": [
+        "Y",
+        "C",
+        "YD",
+        "H_d",
+        "H_s",
+        "UR",
+        "G",
+        "TAX",
+        "N"
+      ]
+    }
   ]
 }

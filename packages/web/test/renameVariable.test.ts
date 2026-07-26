@@ -363,4 +363,65 @@ describe("renameVariable", () => {
     expect(equations?.equations.find((row) => row.id === "eq-ls")?.name).toBe("d(Loans)");
     expect(equations?.equations.find((row) => row.id === "eq-ls")?.expression).toBe("d(Ld)");
   });
+
+  it("counts ABM-model params, tick expressions, charts, and run overrides", () => {
+    const cells: NotebookCell[] = [
+      {
+        id: "abm-sim-model",
+        type: "abm-model",
+        title: "ABM-SIM specification",
+        modelId: "abm-sim",
+        populations: [{ name: "households", size: 10, state: ["h"] }],
+        params: { pr: 1.1, theta: 0.2 },
+        ticks: [
+          { do: [["Y", "pr * N", "Output"]] },
+          { do: [["Nd", "AD / pr"]] }
+        ],
+        record: { series: ["Y"], descriptions: { Y: "Output uses pr in ticks" } },
+        check: { left: "H_d", right: "H_s", tolerance: "1e-9" }
+      },
+      {
+        id: "baseline-run",
+        type: "run",
+        title: "Monte Carlo baseline",
+        mode: "baseline",
+        engine: "abm",
+        sourceModelId: "abm-sim",
+        periods: 10,
+        resultKey: "baseline",
+        abm: { pr: 1.1, households: 10 }
+      },
+      {
+        id: "chart-output",
+        type: "chart",
+        title: "Output",
+        sourceRunCellId: "baseline-run",
+        variables: ["Y"]
+      }
+    ];
+
+    const prUsages = countVariableReferences(cells, { kind: "modelId", modelId: "abm-sim" }, "pr");
+    expect(prUsages.affectedCells.map((entry) => entry.cellId).sort()).toEqual([
+      "abm-sim-model",
+      "baseline-run"
+    ]);
+    expect(prUsages.referenceCount).toBeGreaterThanOrEqual(4);
+
+    const yUsages = countVariableReferences(cells, { kind: "modelId", modelId: "abm-sim" }, "Y");
+    expect(yUsages.affectedCells.some((entry) => entry.cellId === "chart-output")).toBe(true);
+    expect(yUsages.affectedCells.some((entry) => entry.cellId === "abm-sim-model")).toBe(true);
+
+    const renamed = renameVariableInNotebook(cells, { kind: "modelId", modelId: "abm-sim" }, "pr", "prod");
+    const abm = renamed.find((cell): cell is Extract<NotebookCell, { type: "abm-model" }> => cell.type === "abm-model");
+    const run = renamed.find((cell): cell is RunCell => cell.type === "run");
+    expect((abm?.params as Record<string, number> | undefined)?.prod).toBe(1.1);
+    expect((abm?.params as Record<string, number> | undefined)?.pr).toBeUndefined();
+    expect((abm?.ticks as Array<{ do?: unknown[] }>)[0]?.do?.[0]).toEqual([
+      "Y",
+      "prod * N",
+      "Output"
+    ]);
+    expect(run?.abm?.prod).toBe(1.1);
+    expect(run?.abm?.pr).toBeUndefined();
+  });
 });

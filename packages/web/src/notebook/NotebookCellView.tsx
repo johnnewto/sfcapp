@@ -24,6 +24,7 @@ import {
   findInitialValuesCell,
   findSolverCell
 } from "./modelSections";
+import { buildAbmVariableDescriptions } from "./abmInspect";
 import { resolveNearestNotebookContextCell } from "./notebookContext";
 import { MatrixUnitMetaDialog } from "./components/MatrixUnitMetaDialog";
 import { NotebookCellMore } from "./components/NotebookCellMore";
@@ -428,6 +429,19 @@ function NotebookCellViewComponent({
   const chartInspectionContext = useMemo(
     () =>
       cell.type === "chart"
+        ? resolveNotebookInspectionContext({
+            cell,
+            cells,
+            getModelCurrentValues,
+            runner,
+            selectedPeriodIndex
+          })
+        : null,
+    [cell, cells, getModelCurrentValues, runner, selectedPeriodIndex]
+  );
+  const abmInspectionContext = useMemo(
+    () =>
+      cell.type === "abm-model"
         ? resolveNotebookInspectionContext({
             cell,
             cells,
@@ -1321,7 +1335,24 @@ function NotebookCellViewComponent({
             highlightedVariable={highlightedVariable            }
           />
         ) : null}
-        {isCollapsed ? null : cell.type === "abm-model" ? <AbmModelCellView cell={cell} /> : null}
+        {isCollapsed ? null : cell.type === "abm-model" ? (
+          <AbmModelCellView
+            cell={cell}
+            currentValues={abmInspectionContext?.currentValues ?? {}}
+            highlightedVariable={highlightedVariable}
+            variableDescriptions={variableDescriptions}
+            variableUnitMetadata={variableUnitMetadata}
+            onVariableInspectRequest={(args) => {
+              if (!abmInspectionContext) {
+                return;
+              }
+              onVariableInspectRequest({
+                ...abmInspectionContext,
+                selectedVariable: args.selectedVariable
+              });
+            }}
+          />
+        ) : null}
         {isCollapsed ? null : cell.type === "solver" ? (
           <SolverCellView
             cell={cell}
@@ -2159,6 +2190,10 @@ function resolveCellVariableDescriptions(
     });
   }
 
+  if (cell.type === "abm-model") {
+    return buildAbmVariableDescriptions(cell);
+  }
+
   if (
     cell.type === "equations" ||
     cell.type === "externals" ||
@@ -2218,6 +2253,22 @@ function resolveCellVariableUnitMetadata(
     return buildVariableUnitMetadata({
       equations: cell.editor.equations,
       externals: cell.editor.externals
+    });
+  }
+
+  if (cell.type === "abm-model") {
+    const editor = buildEditorStateForNotebookModel(
+      {
+        id: "notebook",
+        title: "notebook",
+        metadata: { version: 1 },
+        cells
+      },
+      { modelId: cell.modelId }
+    );
+    return buildVariableUnitMetadata({
+      equations: editor?.equations,
+      externals: editor?.externals
     });
   }
 
@@ -2365,6 +2416,33 @@ function resolveNotebookInspectionContext({
       variableUnitMetadata: buildVariableUnitMetadata({
         equations: cell.editor.equations,
         externals: cell.editor.externals
+      })
+    };
+  }
+
+  if (cell.type === "abm-model") {
+    const modelSource = { sourceModelId: cell.modelId };
+    const editor = buildEditorStateForNotebookModel(
+      {
+        id: "notebook",
+        title: "notebook",
+        metadata: { version: 1 },
+        cells
+      },
+      { modelId: cell.modelId }
+    );
+    if (!editor) {
+      return null;
+    }
+    return {
+      currentValues: getModelCurrentValues({ modelId: cell.modelId }),
+      editor,
+      modelSource,
+      sourceRunCellId: findRunCellForInspectorModelSource(cells, modelSource)?.id ?? null,
+      variableDescriptions: buildAbmVariableDescriptions(cell),
+      variableUnitMetadata: buildVariableUnitMetadata({
+        equations: editor.equations,
+        externals: editor.externals
       })
     };
   }

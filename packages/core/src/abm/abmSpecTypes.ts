@@ -26,8 +26,11 @@ export interface AbmPopulationSpec {
   params?: Record<string, AbmPopulationParam>;
 }
 
-/** `[target, expression]` row — same shape as notebook equation rows. */
-export type AbmEquationRow = [string, string];
+/**
+ * `[target, expression]` or `[target, expression, description]` — same compact
+ * row shape as notebook equation cells (description is optional metadata only).
+ */
+export type AbmEquationRow = [string, string] | [string, string, string];
 
 export interface AbmAgentTick {
   kind: "agent";
@@ -102,23 +105,44 @@ export interface AbmMicroRecord {
   maxAgents?: number;
 }
 
+/**
+ * Optional recording overrides. When omitted, the engine stores every aggregate
+ * macro (MC means + bands) and first/last-agent micro for each population (MC run 1).
+ *
+ * Legacy authoring still accepts an object (`series` / `micro` / …) or a directive list.
+ */
+export type AbmRecordDirective =
+  | {
+      population: string;
+      agents?: AbmMicroAgentRef[] | "all";
+      variables?: string[];
+      maxAgents?: number;
+    }
+  | { "monte-carlo-run": number }
+  | { monteCarlo: number }
+  | { bands: string[] | "all" | "none" }
+  | { descriptions: Record<string, string> };
+
 export interface AbmRecordSpec {
   /**
-   * Macro series averaged across Monte Carlo runs (upper-case by convention,
-   * matching Leeds ABM_SIM.R).
+   * Macro series averaged across Monte Carlo runs (upper-case by convention).
+   * Omitted / empty → every aggregate assignment from ticks (auto-all macros).
    */
-  series: string[];
+  series?: string[];
   /** Subset of `series` for which `_p10`/`_p90` (or min/max) bands are stored. */
   bands?: string[];
   /**
+   * Optional default Monte Carlo count when the run cell does not set `monteCarlo`.
+   * Prefer setting `abm.monteCarlo` on the run cell.
+   */
+  monteCarlo?: number;
+  /**
    * Micro histories from MC run 1 only (lower-case / `*_h*` by convention).
-   * Mirrors R's `cHist` / `eHist` / `hHist` panels for selected agents.
+   * Default: first + last agent, all state variables, for every population.
    */
   micro?: AbmMicroRecord[];
   /**
-   * Human-readable labels for macro series names and micro base variables
-   * (R-style comments on `store` / `cHist`). Example:
-   * `{ Y: "Output", c: "Household consumption" }`.
+   * Human-readable labels for macro series names and micro base variables.
    */
   descriptions?: Record<string, string>;
 }
@@ -137,7 +161,8 @@ export interface AbmSpec {
   /** Scalar params shared by all agents and aggregates. */
   params?: Record<string, number>;
   ticks: AbmTickSpec[];
-  record: AbmRecordSpec;
+  /** Optional; defaults to all macros + first/last micro per population. */
+  record?: AbmRecordSpec;
   check?: AbmCheckSpec;
 }
 
