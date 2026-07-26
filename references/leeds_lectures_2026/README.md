@@ -9,3 +9,5 @@ Upstream repository: [marcoverpas/Leeds_lectures_2026](https://github.com/marcov
 ## Contents
 
 - `ABM_SIM.R` — agent-based microfoundation of Godley & Lavoie Model SIM (job lottery + FCFS goods market, Monte Carlo).
+- `ABM_PC.R` — agent-based microfoundation of Godley & Lavoie Model PC (portfolio bills/cash, interest-rate shock, job lottery).
+- `ABM_BMW.R` — agent-based microfoundation of Godley & Lavoie Model BMW (deposits, investment accelerator, residual wage bill, job lottery).

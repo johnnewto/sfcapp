@@ -1,0 +1,361 @@
+# *************************************************************************
+#  Model BMW + agent-based microfoundation (ABM-BMW)
+#  Source: Godley & Lavoie ch.7 (BMW), extended with a "job-lottery"
+#  Author: Marco Veronese Passarella (Leeds lectures 2026)
+# *************************************************************************
+#  Description: A tiny "agent-based" version of the textbook BMW model:
+#  several households, each with its own bank money (deposits) and its own
+#  spending choice, added up to get the economy-wide totals.
+#  Monte Carlo runs in the browser via a declarative abm-model cell
+#  interpreted by runAbmSpec.
+# *************************************************************************
+#  Conventions: upper-case = MACRO total; lower-case = MICRO (one household)
+# *************************************************************************
+#  Story:
+#    - each household decides how much it wants to spend (its OWN alpha1);
+#    - the economy needs 1/pr workers for each unit people want to buy;
+#    - a random job lottery fills those jobs (some stay unfilled = friction);
+#    - whoever works makes pr goods; the wage bill left after interest and
+#      depreciation, WB = Y - r_l*L(-1) - DA, is split equally among the
+#      employed;
+#    - goods are sold first-come-first-served until they run out
+#      (investment served first);
+#    - taxes are paid (here: no income tax — disposable income is wage + deposit interest).
+#  One single random shuffle of households per period decides BOTH who gets a
+#  job AND who reaches the shop first.
+# *************************************************************************
+#  BMW-specific wrinkle: when hiring falls short, output < demand, so INVESTMENT
+#  (served first) as well as consumption gets constrained — and because the
+#  investment accelerator feeds on output, the friction's recessionary bias is
+#  AMPLIFIED.
+# *************************************************************************
+#  Reference R: references/leeds_lectures_2026/ABM_BMW.R
+#  Upstream: https://github.com/marcoverpas/Leeds_lectures_2026/blob/main/ABM_BMW.R
+format: sfcr-notebook-yaml
+formatVersion: 1
+id: abm-bmw-notebook
+title: ABM-BMW Browser Notebook
+metadata:
+  version: 1
+  template: abm-bmw
+cells:
+  - markdown:
+      id: intro
+      title: Overview
+      source: >
+        Model **ABM-BMW** is Godley and Lavoie Model BMW populated by many households.
+        Each household holds bank deposits, forms its own disposable income, and has its
+        own propensity to consume. Firms invest via a capital accelerator; banks create
+        deposits when they lend. Macro totals emerge by summing over agents. The R
+        reference is `references/leeds_lectures_2026/ABM_BMW.R`.
+      more: |
+        Aggregate and IO models are **top-down**. **Agent-based models (ABMs)** are
+        **bottom-up**: many households, with macro variables obtained by _summing over
+        agents_.
+
+        Relative to ABM-SIM / ABM-PC, Model BMW adds **private bank money**, a
+        **capital stock**, and an **investment accelerator**. When hiring friction
+        cuts output below demand, investment is rationed first — and lower output
+        feeds back into a lower capital target, amplifying the recessionary bias.
+
+        Stock-flow check: household deposits `M_h` track bank deposit supply `M_s`
+        (and loans `L`). Charts show Monte Carlo **means** with p10–p90 bands.
+        Frictionless BMW steady state is about `Y = 200`, `I = 20`, `K = 200`,
+        `M_h = 200` at the default parameters.
+  - abm-model:
+      id: abm-bmw-model
+      title: ABM-BMW specification
+      modelId: abm-bmw
+      description: >
+        Declarative agent-based BMW: heterogeneous households, job lottery, FCFS goods
+        market with investment served first, residual wage bill. Tick order matches
+        Leeds ABM_BMW.R. Upper-case = MACRO (MC means); lower-case / `*_h*` = MICRO
+        from MC run 1 only.
+      more: |
+        **Macro vs micro (Leeds convention).**
+
+        - **Macro**: every aggregate tick variable is stored as a Monte Carlo mean
+          (banded p10–p90).
+        - **Micro**: first and last household state from **MC run 1 only**.
+        - **MC count**: set on the run cell as `abm.monteCarlo`.
+
+        Stock-flow check: `|M_h - M_s|` must stay within `tolerance` every period.
+      populations:
+        - name: households
+          size: 200
+          state: [m, yd, cd, c, wage, e]
+          params:
+            # Mean 0.75, spread 0.1 → uniform [0.65, 0.85] (R defaults)
+            alpha1: { draw: uniform, lo: 0.65, hi: 0.85 } # Propensity to consume out of income
+      params:
+        alpha0: 25 # Autonomous consumption (split across households)
+        alpha2: 0.1 # Propensity to consume out of wealth (deposits)
+        delta: 0.1 # Depreciation rate
+        gamma: 0.15 # Speed of adjustment of capital to its target
+        kappa: 1 # Capital-output ratio
+        pr: 1 # Labour productivity
+        rl: 0.04 # Loan rate (= deposit rate)
+        rm: 0.04 # Deposit rate (= loan rate)
+        s: 0.1 # Hiring-lottery spread (0 = no friction)
+      ticks:
+        # --- FIRMS (aggregate): investment from the accelerator ---
+        - do:
+            - [DA, "delta * lag(K)", "Depreciation"]
+            - [Ipl, "max(0, gamma * (kappa * lag(Y) - lag(K)) + DA)", "Planned gross investment"]
+        # --- HOUSEHOLDS plan consumption ---
+        - for:
+            households:
+              - [cd, "max(alpha0 / households.size + alpha1 * lag(yd) + alpha2 * lag(m), 0)", "Planned consumption (own alpha1)"]
+        - do:
+            - [D, "sum(households.cd) + Ipl", "Total demand for goods"]
+            - [Ln, "D / pr", "Labour needed"]
+            # --- JOB LOTTERY ---
+            - [Nemp, "min(min(floor(Ln * random.uniform(1 - s, 1 + s, 1)), floor(Ln)), households.size)", "Job lottery hired count"]
+            - [Y, "Nemp * pr", "Output / income (MC mean)"]
+            # --- RATIONING: investment served first ---
+            - [I, "min(Ipl, Y)", "Realised gross investment"]
+            - [hPool, "Y - I", "Goods left for households"]
+        - shuffle: households
+        - for:
+            households:
+              - [e, "if (households.rank <= Nemp) { 1 } else { 0 }", "Employment flag 0/1 (micro, MC run 1)"]
+        - ration-fcfs:
+            population: households
+            demand: cd
+            supply: hPool
+            into: c # Household consumption (micro, MC run 1)
+        # --- WAGES (residual) + interest, then deposits ---
+        - do:
+            - [WB, "Y - rl * lag(L) - DA", "Wage bill = residual after interest and depreciation"]
+            - [wagePerWorker, "if (Nemp >= 1) { WB / Nemp } else { 0 }", "Wage per employed worker"]
+        - for:
+            households:
+              - [wage, "wagePerWorker * e", "Wage if employed"]
+              - [yd, "wage + rm * lag(m)", "Disposable income = wage + deposit interest"]
+              - [m, "lag(m) + yd - c", "Deposit accumulation"]
+        # --- FIRMS borrow, BANK creates deposits ---
+        - do:
+            - [C, "sum(households.c)", "Consumption (MC mean)"]
+            - [INT, "rm * lag(M_h)", "Deposit interest paid to households"]
+            - [K, "lag(K) + I - DA", "Capital stock"]
+            - [L, "lag(L) + I - DA", "Bank loans"]
+            - [M_s, "lag(M_s) + I - DA", "Deposit supply from new loans"]
+            - [M_h, "sum(households.m)", "Deposits held by households"]
+            - [UR, "(households.size - Nemp) / households.size", "Unemployment rate, emergent (MC mean)"]
+      check: { left: M_h, right: M_s, tolerance: "1e-9" }
+  - markdown:
+      id: ticks
+      title: Period ticks
+      source: >
+        One period unfolds as the ordered tick list in the ABM-BMW specification above:
+        firms plan investment from the accelerator, households plan consumption, hiring
+        via a job lottery sets output, investment is served first then households
+        first-come-first-served, residual wages are paid, and banks create deposits to
+        fund net investment.
+      more: |
+        Conventions: upper-case = MACRO total; lower-case = one household (MICRO).
+
+        1. Depreciation `DA = delta * K`. Planned investment
+           `Ipl = max(0, gamma * (kappa * Ylag - K) + DA)`.
+        2. Each household plans `cd = max(alpha0/N + alpha1 * yd + alpha2 * m, 0)`.
+        3. Total demand `D = sum(cd) + Ipl`. Labour needed `Ln = D / pr`.
+        4. Hiring lottery sets `Nemp` and output `Y = Nemp * pr`.
+        5. Realised investment `I = min(Ipl, Y)`; remaining goods are rationed FCFS.
+        6. Wage bill `WB = Y - rl * L - DA` is split equally among the employed.
+        7. Deposits update as `m = m + yd - c`. Capital and loans rise by net investment
+           `I - DA`; banks create matching deposits.
+  - matrix:
+      id: balance-sheet
+      accountingKind: balance-sheet
+      title: ABM-BMW balance sheet (MC means)
+      description: >
+        Household deposits equal bank deposit liabilities. Firm capital is financed by
+        bank loans. In this simplified BMW, `M_h = M_s = L` and `K = L`.
+      sourceRunCellId: baseline-run
+      columns: [Households, Firms, Banks, Sum]
+      sectors: [Households, Firms, Banks, ""]
+      rows:
+        - [Deposits, Bank deposits, +M_h, "", -M_s, "0"]
+        - [Loans, Loans, "", -L, +L, "0"]
+        - [Capital, Fixed capital, "", +K, "", +K]
+        - [Balance, Net worth, -M_h, "0", "0", "0"]
+        - [Sum, Sum, "0", "0", "0", "0"]
+  - matrix:
+      id: transaction-flow
+      accountingKind: transaction-flow
+      title: ABM-BMW transactions-flow matrix (MC means)
+      description: >
+        Period flows among households, firms, and banks. Use the period scrubber after
+        the run.
+      sourceRunCellId: baseline-run
+      columns: [Households, Firms, Banks, Sum]
+      sectors: [Households, Firms, Banks, ""]
+      rows:
+        - [Consumption, Consumption, -C, +C, "", "0"]
+        - [Investment, Gross investment, "", +I, "", "0"]
+        - [Wages, Wages, +WB, -WB, "", "0"]
+        - [Interest, Interest on deposits, +INT, -INT, "", "0"]
+        - [Depreciation, Depreciation allowance, "", -DA, "", "0"]
+        - [Deposits, Change in deposits, +d(M_h), "", -d(M_s), "0"]
+        - [Loans, Change in loans, "", -d(L), +d(L), "0"]
+        - [Capital, Change in capital, "", +d(K), "", "0"]
+        - [Sum, Sum, "0", "0", "0", "0"]
+  - run:
+      id: baseline-run
+      title: Monte Carlo baseline
+      description: >
+        ABM-BMW Monte Carlo (mean paths). Defaults match the Leeds R script except
+        `households: 200` and `monteCarlo: 12` for a snappier browser run (R uses
+        500 households and 50 MC runs).
+      mode: baseline
+      engine: abm
+      sourceModelId: abm-bmw
+      periods: 150
+      resultKey: abm_bmw_baseline
+      abm:
+        households: 200
+        monteCarlo: 12
+        alpha1m: 0.75
+        alpha1d: 0.1
+        alpha0: 25
+        alpha2: 0.1
+        delta: 0.1
+        gamma: 0.15
+        kappa: 1
+        pr: 1
+        rl: 0.04
+        rm: 0.04
+        s: 0.1
+  - chart:
+      id: chart-output
+      title: Output Y
+      description: >
+        MACRO output `Y` (MC mean with p10–p90 band). Dashed frictionless BMW steady
+        state is about 200 at these parameters (R panel a).
+      showMcBands: true
+      variables:
+        - Y
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        Y:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-consumption
+      title: Consumption
+      description: >
+        MACRO consumption `C` (MC mean with p10–p90 band). R panel b.
+      showMcBands: true
+      variables:
+        - C
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        C:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-investment
+      title: Investment and depreciation
+      description: >
+        MACRO realised investment `I` and depreciation `DA` (MC means with bands).
+        R panel c.
+      showMcBands: true
+      variables:
+        - I
+        - DA
+      axisMode: shared
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        I:
+          includeZero: true
+        DA:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-capital
+      title: Capital stock
+      description: >
+        MACRO capital stock `K` (MC mean with p10–p90 band). R panel d.
+      showMcBands: true
+      variables:
+        - K
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        K:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-deposits
+      title: Deposits (= loans)
+      description: >
+        MACRO household deposits `M_h` (MC mean with band). In this BMW closure
+        deposits equal loans (R panel e).
+      showMcBands: true
+      variables:
+        - M_h
+        - L
+      axisMode: shared
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        M_h:
+          includeZero: true
+        L:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-unemployment
+      title: Unemployment rate (emergent)
+      description: >
+        MACRO unemployment rate `UR` (MC mean with p10–p90 band). Emerges from the
+        job lottery when `s > 0` (R panel f).
+      showMcBands: true
+      variables:
+        - UR
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        UR:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - chart:
+      id: chart-household-first
+      title: First household (micro, MC run 1)
+      description: >
+        MICRO paths for household 1 from MC run 1 only: consumption `c_h1`, deposits
+        `m_h1`, employment `e_h1`.
+      variables:
+        - c_h1
+        - m_h1
+        - e_h1
+      axisMode: separate
+      axisSnapTolarance: 0.5
+      seriesRanges:
+        c_h1:
+          includeZero: true
+        m_h1:
+          includeZero: true
+        e_h1:
+          includeZero: true
+      sourceRunCellId: baseline-run
+  - table:
+      id: baseline-table
+      title: Baseline variable summary
+      description: >
+        MACRO series summary (MC means). Late-sample frictionless BMW targets are
+        about Y=200, I=20, K=200, M_h=200.
+      variables:
+        - Y
+        - C
+        - I
+        - K
+        - DA
+        - M_h
+        - M_s
+        - L
+        - UR
+        - Nemp
+        - WB
+      sourceRunCellId: baseline-run

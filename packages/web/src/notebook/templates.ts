@@ -1,3 +1,5 @@
+import abmBmwNotebookYaml from "./templates/abm_bmw.notebook.yaml?raw";
+import abmPcNotebookYaml from "./templates/abm_pc.notebook.yaml?raw";
 import abmSimNotebookYaml from "./templates/abm_sim.notebook.yaml?raw";
 import io3PcNotebookYaml from "./templates/3io-pc.notebook.yaml?raw";
 import bmwNotebookYaml from "./templates/bmw.notebook.yaml?raw";
@@ -21,6 +23,8 @@ import type { NotebookDocument } from "./types";
 
 export type NotebookTemplateId =
   | "3io-pc"
+  | "abm-bmw"
+  | "abm-pc"
   | "abm-sim"
   | "bmw"
   | "eco-3io-pc"
@@ -52,6 +56,8 @@ export type NotebookTemplateLoadResult =
 
 const NOTEBOOK_TEMPLATE_YAML: Record<NotebookTemplateId, string> = {
   sim: simNotebookYaml,
+  "abm-bmw": abmBmwNotebookYaml,
+  "abm-pc": abmPcNotebookYaml,
   "abm-sim": abmSimNotebookYaml,
   bmw: bmwNotebookYaml,
   "3io-pc": io3PcNotebookYaml,
@@ -83,6 +89,18 @@ export const NOTEBOOK_TEMPLATES: Record<NotebookTemplateId, NotebookTemplateDefi
     label: "ABM-SIM",
     description:
       "Agent-based SIM (Leeds lectures 2026): heterogeneous households, job lottery, FCFS goods market, Monte Carlo means."
+  },
+  "abm-pc": {
+    id: "abm-pc",
+    label: "ABM-PC",
+    description:
+      "Agent-based PC (Leeds lectures 2026): bill/cash portfolio, interest-rate shock, job lottery, Monte Carlo means."
+  },
+  "abm-bmw": {
+    id: "abm-bmw",
+    label: "ABM-BMW",
+    description:
+      "Agent-based BMW (Leeds lectures 2026): deposits, investment accelerator, residual wages, job lottery, Monte Carlo means."
   },
   bmw: {
     id: "bmw",

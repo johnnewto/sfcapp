@@ -1,0 +1,130 @@
+{
+  "id": "abm-bmw-notebook",
+  "title": "ABM-BMW Browser Notebook",
+  "metadata": { "version": 1, "template": "abm-bmw" },
+  "cells": [
+    { "id": "intro", "type": "markdown", "title": "Overview", "source": "Model **ABM-BMW** is Godley and Lavoie Model BMW populated by many households. Each household holds bank deposits, forms its own disposable income, and has its own propensity to consume. Firms invest via a capital accelerator; banks create deposits when they lend. Macro totals emerge by summing over agents. The R reference is `references/leeds_lectures_2026/ABM_BMW.R`.\n", "more": "Aggregate and IO models are **top-down**. **Agent-based models (ABMs)** are\n**bottom-up**: many households, with macro variables obtained by _summing over\nagents_.\n\nRelative to ABM-SIM / ABM-PC, Model BMW adds **private bank money**, a\n**capital stock**, and an **investment accelerator**. When hiring friction\ncuts output below demand, investment is rationed first — and lower output\nfeeds back into a lower capital target, amplifying the recessionary bias.\n\nStock-flow check: household deposits `M_h` track bank deposit supply `M_s`\n(and loans `L`). Charts show Monte Carlo **means** with p10–p90 bands.\nFrictionless BMW steady state is about `Y = 200`, `I = 20`, `K = 200`,\n`M_h = 200` at the default parameters.\n" },
+    {
+      "id": "abm-bmw-model",
+      "type": "abm-model",
+      "title": "ABM-BMW specification",
+      "modelId": "abm-bmw",
+      "description": "Declarative agent-based BMW: heterogeneous households, job lottery, FCFS goods market with investment served first, residual wage bill. Tick order matches Leeds ABM_BMW.R. Upper-case = MACRO (MC means); lower-case / `*_h*` = MICRO from MC run 1 only.\n",
+      "more": "**Macro vs micro (Leeds convention).**\n\n- **Macro**: every aggregate tick variable is stored as a Monte Carlo mean\n  (banded p10–p90).\n- **Micro**: first and last household state from **MC run 1 only**.\n- **MC count**: set on the run cell as `abm.monteCarlo`.\n\nStock-flow check: `|M_h - M_s|` must stay within `tolerance` every period.\n",
+      "populations": [
+        { "name": "households", "size": 200, "state": ["m", "yd", "cd", "c", "wage", "e"], "params": { "alpha1": { "draw": "uniform", "lo": 0.65, "hi": 0.85 } } }
+      ],
+      "params": { "alpha0": 25, "alpha2": 0.1, "delta": 0.1, "gamma": 0.15, "kappa": 1, "pr": 1, "rl": 0.04, "rm": 0.04, "s": 0.1 },
+      "ticks": [
+        {
+          "do": [
+            ["DA", "delta * lag(K)", "Depreciation"],
+            ["Ipl", "max(0, gamma * (kappa * lag(Y) - lag(K)) + DA)", "Planned gross investment"]
+          ]
+        },
+        {
+          "for": {
+            "households": [
+              ["cd", "max(alpha0 / households.size + alpha1 * lag(yd) + alpha2 * lag(m), 0)", "Planned consumption (own alpha1)"]
+            ]
+          }
+        },
+        {
+          "do": [
+            ["D", "sum(households.cd) + Ipl", "Total demand for goods"],
+            ["Ln", "D / pr", "Labour needed"],
+            ["Nemp", "min(min(floor(Ln * random.uniform(1 - s, 1 + s, 1)), floor(Ln)), households.size)", "Job lottery hired count"],
+            ["Y", "Nemp * pr", "Output / income (MC mean)"],
+            ["I", "min(Ipl, Y)", "Realised gross investment"],
+            ["hPool", "Y - I", "Goods left for households"]
+          ]
+        },
+        { "shuffle": "households" },
+        {
+          "for": {
+            "households": [
+              ["e", "if (households.rank <= Nemp) { 1 } else { 0 }", "Employment flag 0/1 (micro, MC run 1)"]
+            ]
+          }
+        },
+        { "ration-fcfs": { "population": "households", "demand": "cd", "supply": "hPool", "into": "c" } },
+        {
+          "do": [
+            ["WB", "Y - rl * lag(L) - DA", "Wage bill = residual after interest and depreciation"],
+            ["wagePerWorker", "if (Nemp >= 1) { WB / Nemp } else { 0 }", "Wage per employed worker"]
+          ]
+        },
+        {
+          "for": {
+            "households": [
+              ["wage", "wagePerWorker * e", "Wage if employed"],
+              ["yd", "wage + rm * lag(m)", "Disposable income = wage + deposit interest"],
+              ["m", "lag(m) + yd - c", "Deposit accumulation"]
+            ]
+          }
+        },
+        {
+          "do": [
+            ["C", "sum(households.c)", "Consumption (MC mean)"],
+            ["INT", "rm * lag(M_h)", "Deposit interest paid to households"],
+            ["K", "lag(K) + I - DA", "Capital stock"],
+            ["L", "lag(L) + I - DA", "Bank loans"],
+            ["M_s", "lag(M_s) + I - DA", "Deposit supply from new loans"],
+            ["M_h", "sum(households.m)", "Deposits held by households"],
+            ["UR", "(households.size - Nemp) / households.size", "Unemployment rate, emergent (MC mean)"]
+          ]
+        }
+      ],
+      "check": { "left": "M_h", "right": "M_s", "tolerance": "1e-9" },
+      "record": { "descriptions": { "alpha0": "Autonomous consumption (split across households)", "alpha2": "Propensity to consume out of wealth (deposits)", "delta": "Depreciation rate", "gamma": "Speed of adjustment of capital to its target", "kappa": "Capital-output ratio", "pr": "Labour productivity", "rl": "Loan rate (= deposit rate)", "rm": "Deposit rate (= loan rate)", "s": "Hiring-lottery spread (0 = no friction)", "alpha1": "Propensity to consume out of income" } }
+    },
+    { "id": "ticks", "type": "markdown", "title": "Period ticks", "source": "One period unfolds as the ordered tick list in the ABM-BMW specification above: firms plan investment from the accelerator, households plan consumption, hiring via a job lottery sets output, investment is served first then households first-come-first-served, residual wages are paid, and banks create deposits to fund net investment.\n", "more": "Conventions: upper-case = MACRO total; lower-case = one household (MICRO).\n\n1. Depreciation `DA = delta * K`. Planned investment\n   `Ipl = max(0, gamma * (kappa * Ylag - K) + DA)`.\n2. Each household plans `cd = max(alpha0/N + alpha1 * yd + alpha2 * m, 0)`.\n3. Total demand `D = sum(cd) + Ipl`. Labour needed `Ln = D / pr`.\n4. Hiring lottery sets `Nemp` and output `Y = Nemp * pr`.\n5. Realised investment `I = min(Ipl, Y)`; remaining goods are rationed FCFS.\n6. Wage bill `WB = Y - rl * L - DA` is split equally among the employed.\n7. Deposits update as `m = m + yd - c`. Capital and loans rise by net investment\n   `I - DA`; banks create matching deposits.\n" },
+    {
+      "id": "balance-sheet",
+      "type": "matrix",
+      "title": "ABM-BMW balance sheet (MC means)",
+      "sourceRunCellId": "baseline-run",
+      "accountingKind": "balance-sheet",
+      "columns": ["Households", "Firms", "Banks", "Sum"],
+      "sectors": ["Households", "Firms", "Banks", ""],
+      "rows": [
+        { "band": "Deposits", "label": "Bank deposits", "values": ["+M_h", "", "-M_s", "0"] },
+        { "band": "Loans", "label": "Loans", "values": ["", "-L", "+L", "0"] },
+        { "band": "Capital", "label": "Fixed capital", "values": ["", "+K", "", "+K"] },
+        { "band": "Balance", "label": "Net worth", "values": ["-M_h", "0", "0", "0"] },
+        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0"] }
+      ],
+      "description": "Household deposits equal bank deposit liabilities. Firm capital is financed by bank loans. In this simplified BMW, `M_h = M_s = L` and `K = L`.\n"
+    },
+    {
+      "id": "transaction-flow",
+      "type": "matrix",
+      "title": "ABM-BMW transactions-flow matrix (MC means)",
+      "sourceRunCellId": "baseline-run",
+      "accountingKind": "transaction-flow",
+      "columns": ["Households", "Firms", "Banks", "Sum"],
+      "sectors": ["Households", "Firms", "Banks", ""],
+      "rows": [
+        { "band": "Consumption", "label": "Consumption", "values": ["-C", "+C", "", "0"] },
+        { "band": "Investment", "label": "Gross investment", "values": ["", "+I", "", "0"] },
+        { "band": "Wages", "label": "Wages", "values": ["+WB", "-WB", "", "0"] },
+        { "band": "Interest", "label": "Interest on deposits", "values": ["+INT", "-INT", "", "0"] },
+        { "band": "Depreciation", "label": "Depreciation allowance", "values": ["", "-DA", "", "0"] },
+        { "band": "Deposits", "label": "Change in deposits", "values": ["+d(M_h)", "", "-d(M_s)", "0"] },
+        { "band": "Loans", "label": "Change in loans", "values": ["", "-d(L)", "+d(L)", "0"] },
+        { "band": "Capital", "label": "Change in capital", "values": ["", "+d(K)", "", "0"] },
+        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0"] }
+      ],
+      "description": "Period flows among households, firms, and banks. Use the period scrubber after the run.\n"
+    },
+    { "id": "baseline-run", "type": "run", "title": "Monte Carlo baseline", "description": "ABM-BMW Monte Carlo (mean paths). Defaults match the Leeds R script except `households: 200` and `monteCarlo: 12` for a snappier browser run (R uses 500 households and 50 MC runs).\n", "mode": "baseline", "engine": "abm", "sourceModelId": "abm-bmw", "periods": 150, "resultKey": "abm_bmw_baseline", "abm": { "households": 200, "monteCarlo": 12, "alpha1m": 0.75, "alpha1d": 0.1, "alpha0": 25, "alpha2": 0.1, "delta": 0.1, "gamma": 0.15, "kappa": 1, "pr": 1, "rl": 0.04, "rm": 0.04, "s": 0.1 } },
+    { "id": "chart-output", "type": "chart", "title": "Output Y", "description": "MACRO output `Y` (MC mean with p10–p90 band). Dashed frictionless BMW steady state is about 200 at these parameters (R panel a).\n", "sourceRunCellId": "baseline-run", "variables": ["Y"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "Y": { "includeZero": true } } },
+    { "id": "chart-consumption", "type": "chart", "title": "Consumption", "description": "MACRO consumption `C` (MC mean with p10–p90 band). R panel b.\n", "sourceRunCellId": "baseline-run", "variables": ["C"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "C": { "includeZero": true } } },
+    { "id": "chart-investment", "type": "chart", "title": "Investment and depreciation", "description": "MACRO realised investment `I` and depreciation `DA` (MC means with bands). R panel c.\n", "sourceRunCellId": "baseline-run", "variables": ["I", "DA"], "axisMode": "shared", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "I": { "includeZero": true }, "DA": { "includeZero": true } } },
+    { "id": "chart-capital", "type": "chart", "title": "Capital stock", "description": "MACRO capital stock `K` (MC mean with p10–p90 band). R panel d.\n", "sourceRunCellId": "baseline-run", "variables": ["K"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "K": { "includeZero": true } } },
+    { "id": "chart-deposits", "type": "chart", "title": "Deposits (= loans)", "description": "MACRO household deposits `M_h` (MC mean with band). In this BMW closure deposits equal loans (R panel e).\n", "sourceRunCellId": "baseline-run", "variables": ["M_h", "L"], "axisMode": "shared", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "M_h": { "includeZero": true }, "L": { "includeZero": true } } },
+    { "id": "chart-unemployment", "type": "chart", "title": "Unemployment rate (emergent)", "description": "MACRO unemployment rate `UR` (MC mean with p10–p90 band). Emerges from the job lottery when `s > 0` (R panel f).\n", "sourceRunCellId": "baseline-run", "variables": ["UR"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "UR": { "includeZero": true } } },
+    { "id": "chart-household-first", "type": "chart", "title": "First household (micro, MC run 1)", "description": "MICRO paths for household 1 from MC run 1 only: consumption `c_h1`, deposits `m_h1`, employment `e_h1`.\n", "sourceRunCellId": "baseline-run", "variables": ["c_h1", "m_h1", "e_h1"], "axisMode": "separate", "axisSnapTolarance": 0.5, "seriesRanges": { "c_h1": { "includeZero": true }, "m_h1": { "includeZero": true }, "e_h1": { "includeZero": true } } },
+    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "description": "MACRO series summary (MC means). Late-sample frictionless BMW targets are about Y=200, I=20, K=200, M_h=200.\n", "sourceRunCellId": "baseline-run", "variables": ["Y", "C", "I", "K", "DA", "M_h", "M_s", "L", "UR", "Nemp", "WB"] }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "id": "abm-pc-notebook",
+  "title": "ABM-PC Browser Notebook",
+  "metadata": { "version": 1, "template": "abm-pc" },
+  "cells": [
+    { "id": "intro", "type": "markdown", "title": "Overview", "source": "Model **ABM-PC** is Godley and Lavoie Model PC populated by many households. Each household holds cash and bills, earns wage and interest income, and has its own propensity to consume. Macro totals emerge by summing over agents. This notebook runs a Monte Carlo of that agent-based model in the browser from a YAML-authored `abm-model` cell. The R reference is `references/leeds_lectures_2026/ABM_PC.R`.\n", "more": "Aggregate and IO models are **top-down**: they write economy-wide behavioural\nrules directly. **Agent-based models (ABMs)** are **bottom-up**: they specify\nmany individual agents — here households — and obtain macro variables by\n_summing over agents_. Aggregate regularities then **emerge** from interaction\nrather than being imposed.\n\nRelative to ABM-SIM, Model PC adds a **portfolio choice** between bills and\ncash, and interest income on bills. Taxes fall on labour _and_ interest.\nThe baseline experiment raises the policy rate from `2.5%` to `3.5%` at\nperiod `60`, which shifts household wealth toward bills.\n\nThe model remains **stock-flow consistent**: household cash `H_h` tracks\ncentral-bank cash supply `H_s`, and government bills satisfy\n`B_s = B_h + B_cb`. Charts show Monte Carlo **means** with p10–p90 bands.\n" },
+    {
+      "id": "abm-pc-model",
+      "type": "abm-model",
+      "title": "ABM-PC specification",
+      "modelId": "abm-pc",
+      "description": "Declarative agent-based PC: heterogeneous households, job lottery, FCFS goods market, bill/cash portfolio. Tick order matches Leeds ABM_PC.R. Upper-case names are MACRO totals (Monte Carlo means); lower-case / `*_h*` names are MICRO histories from MC run 1 only.\n",
+      "more": "**Macro vs micro (Leeds convention).** The R script comments\n`upper-case = MACRO total; lower-case = MICRO (one household)`.\n\n- **Macro**: every aggregate tick variable is stored automatically as a Monte\n  Carlo mean (banded p10–p90).\n- **Micro**: first and last household, all state variables, from **MC run 1\n  only** (not averaged) — `c_h1`, `v_hLast`, ….\n- **MC count**: set on the run cell as `abm.monteCarlo` (not on the model).\n\nStock-flow check: `|H_h - H_s|` must stay within `tolerance` every period.\n",
+      "populations": [
+        { "name": "households", "size": 200, "state": ["v", "b", "h", "yd", "cd", "c", "y", "e"], "params": { "alpha1": { "draw": "uniform", "lo": 0.6, "hi": 0.6 } } }
+      ],
+      "params": { "alpha2": 0.4, "theta": 0.2, "pr": 1.1, "w": 1.1, "s": 0.2, "g0": 20, "lambda0": 0.635, "lambda1": 5, "lambda2": 0.01, "r0": 0.025, "r1": 0.035, "shockPeriod": 60 },
+      "ticks": [
+        {
+          "do": [
+            ["r", "if (t >= shockPeriod) { r1 } else { r0 }", "Policy interest rate (shock from period 60)"],
+            ["G", "g0", "Government spending (goods)"]
+          ]
+        },
+        {
+          "for": {
+            "households": [
+              ["cd", "min(max(alpha1 * lag(yd) + alpha2 * lag(v), 0), lag(v))", "Planned consumption (own alpha1)"]
+            ]
+          }
+        },
+        {
+          "do": [
+            ["AD", "sum(households.cd) + G", "Total demand for goods"],
+            ["Nd", "AD / pr", "Labour needed (1/pr workers per good)"],
+            ["N", "min(min(floor(Nd * random.uniform(1 - s, 1 + s, 1)), floor(Nd)), households.size)", "Job lottery hired count"]
+          ]
+        },
+        { "shuffle": "households" },
+        {
+          "for": {
+            "households": [
+              ["e", "if (households.rank <= N) { 1 } else { 0 }", "Employment flag 0/1 (micro, MC run 1)"]
+            ]
+          }
+        },
+        {
+          "do": [
+            ["Y", "pr * N", "Output / income (MC mean)"],
+            ["YG", "min(G, Y)", "Actual government spending (served first)"],
+            ["YC", "Y - YG", "Goods left for households"]
+          ]
+        },
+        { "ration-fcfs": { "population": "households", "demand": "cd", "supply": "YC", "into": "c" } },
+        {
+          "for": {
+            "households": [
+              ["y", "w * e", "Wage income if hired (w = pr, zero profit)"],
+              ["yd", "(y + lag(r) * lag(b)) * (1 - theta)", "Disposable income net of tax on labour and interest"],
+              ["v", "lag(v) - c + yd", "Household wealth = old wealth - spending + saving"],
+              ["b", "min(max(v * (lambda0 + lambda1 * r) - lambda2 * yd, 0), v)", "Bills held (portfolio)"],
+              ["h", "v - b", "Cash held (residual)"]
+            ]
+          }
+        },
+        {
+          "do": [
+            ["C", "sum(households.c)", "Consumption (MC mean)"],
+            ["YD", "sum(households.yd)", "Disposable income (MC mean)"],
+            ["V", "sum(households.v)", "Household wealth (MC mean)"],
+            ["B_h", "sum(households.b)", "Bills demanded by households"],
+            ["H_h", "sum(households.h)", "Cash held by households"],
+            ["TAX", "theta / (1 - theta) * YD", "Tax revenue (labour + interest)"],
+            ["B_s", "lag(B_s) + YG + lag(r) * lag(B_s) - TAX - lag(r) * lag(B_cb)", "Bills supplied by government"],
+            ["B_cb", "B_s - B_h", "Bills held by central bank"],
+            ["H_s", "lag(H_s) + B_cb - lag(B_cb)", "Cash supplied by central bank"],
+            ["UR", "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
+          ]
+        }
+      ],
+      "check": { "left": "H_h", "right": "H_s", "tolerance": "1e-9" },
+      "record": { "descriptions": { "alpha2": "Propensity to consume out of wealth (common to all)", "theta": "Tax rate (on labour AND interest income)", "pr": "Product per worker (labour productivity)", "w": "Wage per worker = productivity (=> zero profit)", "s": "Size of the hiring randomness", "g0": "Government spending (goods)", "lambda0": "Portfolio: baseline share of bills", "lambda1": "Portfolio: sensitivity of bill share to interest rate", "lambda2": "Portfolio: sensitivity of bill share to income/wealth", "r0": "Baseline policy rate", "r1": "Policy rate after shock", "shockPeriod": "Rate rises from 2.5% to 3.5% at period 60", "alpha1": "Propensity to consume out of income" } }
+    },
+    { "id": "ticks", "type": "markdown", "title": "Period ticks", "source": "One period unfolds as the ordered tick list in the ABM-PC specification above: plan consumption, hire via a job lottery, shuffle the queue, serve government then households first-come-first-served, pay wages and interest taxes, update wealth, and allocate the portfolio between bills and cash. The policy rate rises from `2.5%` to `3.5%` at period `60`.\n", "more": "Conventions: upper-case = MACRO total; lower-case = one household (MICRO).\n\n1. Each household plans `cd = min(max(alpha1 * yd + alpha2 * v, 0), v)` using its\n   own `alpha1` and last period's disposable income and wealth.\n2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.\n3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.\n4. One random shuffle orders both jobs and the shop queue.\n5. Government is served first; remaining output is rationed FCFS to households.\n6. Hired households earn wage `w = pr`. Interest `lag(r) * lag(b)` is taxed with\n   labour income at rate `theta`. Wealth updates as `v = v - c + yd`.\n7. Portfolio: `b = v * (lambda0 + lambda1 * r) - lambda2 * yd` (clamped to `[0, v]`);\n   cash is the residual `h = v - b`.\n8. Government issues bills to cover its deficit; the central bank absorbs unwanted\n   bills and issues cash one-for-one with the change in its bill holdings.\n" },
+    {
+      "id": "balance-sheet",
+      "type": "matrix",
+      "title": "ABM-PC balance sheet (MC means)",
+      "sourceRunCellId": "baseline-run",
+      "accountingKind": "balance-sheet",
+      "columns": ["Households", "Government", "Central bank", "Sum"],
+      "sectors": ["Households", "Government", "Central bank", ""],
+      "rows": [
+        { "band": "Bills", "label": "Bills", "values": ["+B_h", "-B_s", "+B_cb", "0"] },
+        { "band": "Cash", "label": "High-powered money", "values": ["+H_h", "", "-H_s", "0"] },
+        { "band": "Balance", "label": "Net worth", "values": ["-V", "+B_s", "0", "0"] },
+        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0"] }
+      ],
+      "description": "Household wealth is bills plus cash. Government bills equal household demand plus central-bank holdings. Cash supply mirrors the central bank's bill buffer.\n"
+    },
+    {
+      "id": "transaction-flow",
+      "type": "matrix",
+      "title": "ABM-PC transactions-flow matrix (MC means)",
+      "sourceRunCellId": "baseline-run",
+      "accountingKind": "transaction-flow",
+      "columns": ["Households", "Production", "Government", "Central bank", "Sum"],
+      "sectors": ["Households", "Firms", "Government", "Central bank", ""],
+      "rows": [
+        { "band": "Consumption", "label": "Consumption", "values": ["-C", "+C", "", "", "0"] },
+        { "band": "Government", "label": "Government expenditure", "values": ["", "+G", "-G", "", "0"] },
+        { "band": "Income", "label": "Wages", "values": ["+Y", "-Y", "", "", "0"] },
+        { "band": "Taxes", "label": "Taxes", "values": ["-TAX", "", "+TAX", "", "0"] },
+        { "band": "Bills", "label": "Change in bills", "values": ["+d(B_h)", "", "-d(B_s)", "+d(B_cb)", "0"] },
+        { "band": "Cash", "label": "Change in cash", "values": ["+d(H_h)", "", "", "-d(H_s)", "0"] },
+        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0", "0"] }
+      ],
+      "description": "Period flows among households, production, government, and the central bank. Use the period scrubber to inspect a single period after the run.\n"
+    },
+    { "id": "baseline-run", "type": "run", "title": "Monte Carlo baseline", "description": "ABM-PC Monte Carlo (mean paths). Defaults match the Leeds R script except `monteCarlo: 20` for a snappier browser run (R uses 100). Rate shock at period 60.\n", "mode": "baseline", "engine": "abm", "sourceModelId": "abm-pc", "periods": 100, "resultKey": "abm_pc_baseline", "abm": { "households": 200, "monteCarlo": 20, "alpha1m": 0.6, "alpha1d": 0, "alpha2": 0.4, "theta": 0.2, "pr": 1.1, "s": 0.2, "g0": 20, "lambda0": 0.635, "lambda1": 5, "lambda2": 0.01, "r0": 0.025, "r1": 0.035, "shockPeriod": 60 } },
+    { "id": "chart-output", "type": "chart", "title": "Total output (MC mean)", "description": "MACRO output `Y` (MC mean with p10–p90 band). Vertical marker at period 60 is the interest-rate shock.\n", "sourceRunCellId": "baseline-run", "variables": ["Y"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "Y": { "includeZero": true } } },
+    { "id": "chart-income-consumption", "type": "chart", "title": "Disposable income and consumption", "description": "MACRO means of disposable income `YD` and consumption `C` with p10–p90 bands (R panel b).\n", "sourceRunCellId": "baseline-run", "variables": ["YD", "C"], "axisMode": "shared", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "YD": { "includeZero": true }, "C": { "includeZero": true } } },
+    { "id": "chart-wealth", "type": "chart", "title": "Household wealth", "description": "MACRO household wealth `V` (MC mean with p10–p90 band). R panel c.\n", "sourceRunCellId": "baseline-run", "variables": ["V"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "V": { "includeZero": true } } },
+    { "id": "chart-portfolio", "type": "chart", "title": "Portfolio — bills and cash", "description": "MACRO bills `B_h` and cash `H_h` (MC means with bands). The rate shock shifts wealth toward bills (R panel d).\n", "sourceRunCellId": "baseline-run", "variables": ["B_h", "H_h"], "axisMode": "shared", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "B_h": { "includeZero": true }, "H_h": { "includeZero": true } } },
+    { "id": "chart-unemployment", "type": "chart", "title": "Unemployment rate (emergent)", "description": "MACRO unemployment rate `UR` (MC mean with p10–p90 band). Emerges from the job lottery when hiring friction `s > 0` (R panel e).\n", "sourceRunCellId": "baseline-run", "variables": ["UR"], "axisMode": "separate", "axisSnapTolarance": 0.5, "showMcBands": true, "seriesRanges": { "UR": { "includeZero": true } } },
+    { "id": "chart-household-first", "type": "chart", "title": "First household (micro, MC run 1)", "description": "MICRO paths for household 1 from MC run 1 only: consumption `c_h1`, wealth `v_h1`, employment `e_h1`. Matches R panel f.\n", "sourceRunCellId": "baseline-run", "variables": ["c_h1", "v_h1", "e_h1"], "axisMode": "separate", "axisSnapTolarance": 0.5, "seriesRanges": { "c_h1": { "includeZero": true }, "v_h1": { "includeZero": true }, "e_h1": { "includeZero": true } } },
+    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "description": "MACRO series summary (MC means). Micro probes are on the household chart above.\n", "sourceRunCellId": "baseline-run", "variables": ["Y", "C", "YD", "V", "B_h", "H_h", "H_s", "UR", "r", "TAX", "N"] }
+  ]
+}
