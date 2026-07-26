@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import type { ShockVariableDef } from "@sfcr/core";
+import { parseLenientJsonValue } from "@sfcr/notebook-core";
 
 import { type ModelRenameScope } from "./renameVariable";
 import type { NotebookCell, RunCell } from "./types";
@@ -141,7 +142,7 @@ export function useRunShockVariableRename({
       patch: (nextCells) => {
         let parsedRunCell: RunCell | null = null;
         try {
-          const parsed = JSON.parse(value) as NotebookCell;
+          const parsed = parseLenientJsonValue(value) as NotebookCell;
           parsedRunCell = parsed.type === "run" ? parsed : null;
         } catch {
           parsedRunCell = null;

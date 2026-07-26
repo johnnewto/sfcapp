@@ -5,7 +5,9 @@ import { externalRowsOnly, isRowComment, type EquationRow } from "@sfcr/notebook
 
 import {
   detectNotebookSourceFormat,
+  graftYamlComments,
   parseNotebookSource,
+  stampYamlSourceFileName,
   type NotebookSourceFormat
 } from "./document";
 import {
@@ -113,6 +115,7 @@ import {
   DEFAULT_NOTEBOOK_TEMPLATE_ID,
   type NotebookTemplateId,
   formatNotebookTemplateLoadError,
+  getNotebookTemplateYamlSource,
   isNotebookTemplateId,
   isNotebookTemplateLoadable,
   loadNotebookTemplate,
@@ -309,7 +312,56 @@ export { CUSTOM_NOTEBOOK_STORAGE_KEY } from "./notebookVariants";
 const LEGACY_CUSTOM_NOTEBOOK_HASH = "#/notebook/custom";
 const UNNAMED_NOTEBOOK_SELECT_VALUE = "__unnamed__";
 const OPEN_FILE_SELECT_VALUE = "__open_file__";
-const NOTEBOOK_SOURCE_FORMATS: readonly NotebookSourceFormat[] = ["json", "markdown", "yaml"];
+const SOURCE_PANEL_FORMAT: NotebookSourceFormat = "yaml";
+
+function buildGraftedYamlPanelSource(
+  document: NotebookDocument,
+  previousYaml: string
+): { droppedCount: number; source: string } {
+  const nextSource = serializeNotebookSource(document, SOURCE_PANEL_FORMAT);
+  if (!previousYaml.trim()) {
+    return { droppedCount: 0, source: nextSource };
+  }
+
+  const documentJson = serializeNotebookSource(document, "json");
+  const grafted = graftYamlComments(previousYaml, nextSource);
+  try {
+    const verified = parseNotebookSource(grafted.source, SOURCE_PANEL_FORMAT).document;
+    if (serializeNotebookSource(verified, "json") === documentJson) {
+      return grafted;
+    }
+  } catch {
+    // Fall through and try keeping the previous editor text.
+  }
+
+  // If the editor YAML already matches the document, keep it byte-for-byte (comments included).
+  try {
+    const previousDocument = parseNotebookSource(previousYaml, SOURCE_PANEL_FORMAT).document;
+    if (serializeNotebookSource(previousDocument, "json") === documentJson) {
+      return { droppedCount: 0, source: previousYaml };
+    }
+  } catch {
+    // Fall back to ungrafted serialization.
+  }
+
+  return { droppedCount: 0, source: nextSource };
+}
+
+function buildInitialYamlPanelState(document: NotebookDocument): {
+  importText: string;
+  lastYaml: string;
+} {
+  const templateMeta = document.metadata?.template;
+  const previousYaml =
+    typeof templateMeta === "string" && isNotebookTemplateId(templateMeta)
+      ? getNotebookTemplateYamlSource(templateMeta)
+      : "";
+  const grafted = buildGraftedYamlPanelSource(document, previousYaml);
+  return {
+    importText: grafted.source,
+    lastYaml: grafted.source
+  };
+}
 
 function notebookRouteWouldLoadDocument(args: {
   activeVariantId: string | null;
@@ -358,14 +410,6 @@ function isNotebookAssistantLocalLiveTestEnabled(): boolean {
   );
 }
 
-function getNextNotebookSourceFormat(format: NotebookSourceFormat): NotebookSourceFormat {
-  const currentIndex = NOTEBOOK_SOURCE_FORMATS.indexOf(format);
-  return NOTEBOOK_SOURCE_FORMATS[(currentIndex + 1) % NOTEBOOK_SOURCE_FORMATS.length] ?? "json";
-}
-
-function formatNotebookSourceFormatOptions(): string {
-  return NOTEBOOK_SOURCE_FORMATS.map(formatNotebookSourceLabel).join(" / ");
-}
 
 function limitNotebookHistory(entries: NotebookHistoryEntry[]): NotebookHistoryEntry[] {
   return entries.length > NOTEBOOK_HISTORY_LIMIT
@@ -804,13 +848,13 @@ export function NotebookApp() {
   const [uiMessage, setUiMessage] = useState<string | null>(
     initialNotebookSession.initialUiMessage ?? null
   );
-  const [sourceFormat, setSourceFormat] = useState<NotebookSourceFormat>("yaml");
-  const [importText, setImportText] = useState(() =>
-    serializeNotebookSource(notebookDocument, sourceFormat)
+  const initialYamlPanel = useMemo(
+    () => buildInitialYamlPanelState(initialNotebookSession.document),
+    [initialNotebookSession.document]
   );
-  const [committedImportText, setCommittedImportText] = useState(() =>
-    serializeNotebookSource(notebookDocument, sourceFormat)
-  );
+  const lastYamlSourceRef = useRef(initialYamlPanel.lastYaml);
+  const [importText, setImportText] = useState(() => initialYamlPanel.importText);
+  const [committedImportText, setCommittedImportText] = useState(() => initialYamlPanel.importText);
   const [selectedPeriodIndex, setSelectedPeriodIndex] = useState(0);
   // Render the heavy notebook canvas at a lower priority so period scrubbing
   // stays responsive; period-sensitive cells catch up to the deferred value.
@@ -1384,8 +1428,8 @@ export function NotebookApp() {
   });
   const hasPendingImportTextChanges = importText !== committedImportText;
   const sourceValidation = useMemo(
-    () => buildNotebookSourceValidation(importText, sourceFormat),
-    [importText, sourceFormat]
+    () => buildNotebookSourceValidation(importText, SOURCE_PANEL_FORMAT),
+    [importText]
   );
   const sourceValidationWarningCount =
     sourceValidation.notebookWarningCount + sourceValidation.modelWarningCount;
@@ -1933,10 +1977,16 @@ export function NotebookApp() {
       return;
     }
 
-    const nextSource = serializeNotebookSource(notebookDocument, sourceFormat);
-    setImportText(nextSource);
-    setCommittedImportText(nextSource);
-  }, [notebookDocument, sourceFormat]);
+    const grafted = buildGraftedYamlPanelSource(notebookDocument, lastYamlSourceRef.current);
+    lastYamlSourceRef.current = grafted.source;
+    setImportText(grafted.source);
+    setCommittedImportText(grafted.source);
+    if (grafted.droppedCount > 0) {
+      setUiMessage(
+        `${grafted.droppedCount} comment${grafted.droppedCount === 1 ? "" : "s"} dropped with deleted structure.`
+      );
+    }
+  }, [notebookDocument]);
 
   function updateCell(cellId: string, updater: (cell: NotebookCell) => NotebookCell): void {
     const previousCell = notebookDocument.cells.find((cell) => cell.id === cellId);
@@ -2515,6 +2565,7 @@ export function NotebookApp() {
     }
 
     resetNotebookImportedFileContext();
+    lastYamlSourceRef.current = getNotebookTemplateYamlSource(templateId);
     replaceNotebookDocument(structuredClone(loaded.document), "template load");
     return true;
   }
@@ -2847,23 +2898,6 @@ export function NotebookApp() {
       .catch(() => setUiMessage("Could not copy share link to the clipboard."));
   }
 
-  function handleSourceFormatChange(nextFormat: NotebookSourceFormat): void {
-    if (nextFormat === sourceFormat) {
-      return;
-    }
-
-    if (hasPendingImportTextChanges) {
-      setUiMessage("Apply or discard the source draft before changing format.");
-      return;
-    }
-
-    const nextSource = serializeNotebookSource(notebookDocument, nextFormat);
-    setSourceFormat(nextFormat);
-    setImportText(nextSource);
-    setCommittedImportText(nextSource);
-    setImportPreview(null);
-    setUiMessage(null);
-  }
 
   function handleImportJson(): void {
     try {
@@ -2878,7 +2912,7 @@ export function NotebookApp() {
       setUiMessage(
         error instanceof Error
           ? error.message
-          : `Invalid notebook ${formatNotebookSourceLabel(sourceFormat)}`
+          : `Invalid notebook ${formatNotebookSourceLabel(SOURCE_PANEL_FORMAT)}`
       );
     }
   }
@@ -2891,6 +2925,9 @@ export function NotebookApp() {
 
     try {
       const parsed = parseNotebookSource(importText);
+      if (parsed.format === "yaml") {
+        lastYamlSourceRef.current = importText;
+      }
       completeNotebookImport(
         parsed.document,
         `Imported notebook ${formatNotebookSourceLabel(parsed.format)}.`
@@ -2902,7 +2939,7 @@ export function NotebookApp() {
       setUiMessage(
         error instanceof Error
           ? error.message
-          : `Invalid notebook ${formatNotebookSourceLabel(sourceFormat)}`
+          : `Invalid notebook ${formatNotebookSourceLabel(SOURCE_PANEL_FORMAT)}`
       );
     }
   }
@@ -2913,10 +2950,12 @@ export function NotebookApp() {
       const inferredFormat = inferFormatFromFileName(file.name) ?? detectNotebookSourceFormat(text);
       const parsed = parseNotebookSource(text, inferredFormat);
       markNotebookImportedFile(file.name);
-      setImportText(text);
-      setCommittedImportText(text);
+      const panelSource =
+        parsed.format === "yaml" ? text : serializeNotebookSource(parsed.document, SOURCE_PANEL_FORMAT);
+      lastYamlSourceRef.current = panelSource;
+      setImportText(panelSource);
+      setCommittedImportText(panelSource);
       setImportPreview({ document: parsed.document, source: parsed.format });
-      setSourceFormat(parsed.format);
       setActiveRailTab("editor");
       setUiMessage(
         `Previewed ${file.name} as ${formatNotebookSourceLabel(parsed.format)}. Apply to replace the current notebook.`
@@ -2932,6 +2971,9 @@ export function NotebookApp() {
       return;
     }
 
+    if (importPreview.source === "yaml") {
+      lastYamlSourceRef.current = importText;
+    }
     completeNotebookImport(
       importPreview.document,
       `Imported notebook ${formatNotebookSourceLabel(importPreview.source)}.`
@@ -2946,9 +2988,10 @@ export function NotebookApp() {
   }
 
   function handleDiscardImportTextChanges(): void {
-    const currentSource = serializeNotebookSource(notebookDocument, sourceFormat);
-    setImportText(currentSource);
-    setCommittedImportText(currentSource);
+    const grafted = buildGraftedYamlPanelSource(notebookDocument, lastYamlSourceRef.current);
+    lastYamlSourceRef.current = grafted.source;
+    setImportText(grafted.source);
+    setCommittedImportText(grafted.source);
     setImportPreview(null);
     setUiMessage("Discarded import text changes.");
   }
@@ -3020,16 +3063,27 @@ export function NotebookApp() {
         fallbackId: notebookDocument.id
       }),
       counter: saveNameCounter,
-      format: sourceFormat
+      format: SOURCE_PANEL_FORMAT
     });
-    const documentForSave = withNotebookSourceFileName(notebookDocument, fileName);
-    const exported = serializeNotebookSource(documentForSave, sourceFormat);
+
+    // Save the RHS editor text directly so comments and formatting are preserved.
+    const editorText = importText.trim() ? importText : committedImportText;
+    let exported: string;
+    try {
+      exported = stampYamlSourceFileName(editorText, fileName);
+      parseNotebookSource(exported, SOURCE_PANEL_FORMAT);
+    } catch (error) {
+      setUiMessage(
+        error instanceof Error ? error.message : "Unable to save notebook YAML from the editor."
+      );
+      return;
+    }
 
     try {
       const result = await saveNotebookSourceFile({
         content: exported,
         fileName,
-        format: sourceFormat,
+        format: SOURCE_PANEL_FORMAT,
         useSaveDialog: saveDialogEnabled
       });
 
@@ -3038,16 +3092,53 @@ export function NotebookApp() {
         return;
       }
 
+      const savedText = stampYamlSourceFileName(exported, result.fileName);
+      const savedDocument = parseNotebookSource(savedText, SOURCE_PANEL_FORMAT).document;
+      lastYamlSourceRef.current = savedText;
+      setImportText(savedText);
+      setCommittedImportText(savedText);
+      setImportPreview(null);
       setSaveNameCounter((current) => current + 1);
       markNotebookImportedFile(result.fileName);
-      commitNotebookDocument("save", (current) =>
-        withNotebookSourceFileName(current, result.fileName)
-      );
+      commitNotebookDocument("save", savedDocument);
       setUiMessage(
-        `Saved notebook ${formatNotebookSourceLabel(sourceFormat)} as ${result.fileName}.`
+        `Saved notebook ${formatNotebookSourceLabel(SOURCE_PANEL_FORMAT)} as ${result.fileName}.`
       );
     } catch (error) {
       setUiMessage(error instanceof Error ? error.message : "Unable to save notebook file");
+    }
+  }
+
+  async function handleExportNotebookJson(): Promise<void> {
+    const fileName = buildIncrementalNotebookSaveFileName({
+      baseName: resolveNotebookSaveBaseName({
+        sourceFileName: notebookDocument.metadata.sourceFileName,
+        loadedFileName: selectedImportFileName,
+        fallbackId: notebookDocument.id
+      }),
+      counter: saveNameCounter,
+      format: "json"
+    });
+    const documentForSave = withNotebookSourceFileName(notebookDocument, fileName);
+    const exported = serializeNotebookSource(documentForSave, "json");
+
+    try {
+      const result = await saveNotebookSourceFile({
+        content: exported,
+        fileName,
+        format: "json",
+        useSaveDialog: saveDialogEnabled
+      });
+
+      if (result.status === "cancelled") {
+        setUiMessage("Export cancelled.");
+        return;
+      }
+
+      setSaveNameCounter((current) => current + 1);
+      setUiMessage(`Exported notebook JSON as ${result.fileName}.`);
+    } catch (error) {
+      setUiMessage(error instanceof Error ? error.message : "Unable to export notebook JSON");
     }
   }
 
@@ -4057,7 +4148,6 @@ export function NotebookApp() {
     }
     return groups;
   }, [variantIndex]);
-  const nextNotebookSourceFormat = getNextNotebookSourceFormat(sourceFormat);
 
   const renderVariableInspector = (isPinned: boolean) => (
     <VariableInspector
@@ -4445,15 +4535,6 @@ export function NotebookApp() {
           {activeRailTab === "editor" ? (
             <section className="notebook-sidebar-panel notebook-source-panel" role="tabpanel">
               <div className="notebook-utility-actions notebook-editor-actions">
-                <button
-                  type="button"
-                  className="notebook-utility-button notebook-source-format-toggle"
-                  aria-label={`Source format is ${formatNotebookSourceLabel(sourceFormat)}. Switch to ${formatNotebookSourceLabel(nextNotebookSourceFormat)}.`}
-                  title={`Source format: ${formatNotebookSourceLabel(sourceFormat)}. Click to switch to ${formatNotebookSourceLabel(nextNotebookSourceFormat)}.`}
-                  onClick={() => handleSourceFormatChange(nextNotebookSourceFormat)}
-                >
-                  {formatNotebookSourceFormatOptions()}
-                </button>
                 <label className="notebook-file-picker" htmlFor="notebook-import-file-input">
                   <span className="notebook-utility-button notebook-utility-button-muted notebook-file-input-trigger">
                     Choose file
@@ -4467,7 +4548,16 @@ export function NotebookApp() {
                     void handleSaveNotebook();
                   }}
                 >
-                  Save {formatNotebookSourceLabel(sourceFormat)}
+                  Save YAML
+                </button>
+                <button
+                  type="button"
+                  className="notebook-utility-button notebook-utility-button-muted"
+                  onClick={() => {
+                    void handleExportNotebookJson();
+                  }}
+                >
+                  Export JSON
                 </button>
                 <button
                   type="button"
@@ -4498,9 +4588,9 @@ export function NotebookApp() {
                   schemaValid: sourceValidation.schema.status === "valid"
                 }}
                 document={notebookDocument}
-                format={sourceFormat}
+                format={SOURCE_PANEL_FORMAT}
                 onChange={updateImportText}
-                placeholderText={getNotebookSourcePlaceholder(sourceFormat)}
+                placeholderText={getNotebookSourcePlaceholder(SOURCE_PANEL_FORMAT)}
                 selectedCellId={activeEditorCellId ? null : selectedCellId}
                 validationSummary={buildSourceCodeEditorValidationSummary(sourceValidation)}
                 value={importText}

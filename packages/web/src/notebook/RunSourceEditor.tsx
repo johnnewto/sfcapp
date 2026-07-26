@@ -1,4 +1,5 @@
 import type { ScenarioDefinition, ShockVariableDef } from "@sfcr/core";
+import { parseLenientJsonValue } from "@sfcr/notebook-core";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -621,7 +622,7 @@ function ScenarioVariableRow({
 
 function parseRunCellSource(source: string): RunCellSourceDraft | null {
   try {
-    const parsed = JSON.parse(source) as NotebookCell;
+    const parsed = parseLenientJsonValue(source) as NotebookCell;
     return parsed.type === "run" ? (parsed as RunCellSourceDraft) : null;
   } catch {
     return null;

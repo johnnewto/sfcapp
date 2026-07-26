@@ -1,3 +1,4 @@
+import { parseLenientJsonValue } from "@sfcr/notebook-core";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -753,7 +754,7 @@ function NotebookCellViewComponent({
 
     if (nextMode === "grid" || nextMode === "run") {
       try {
-        const parsed = JSON.parse(sourceDraft) as NotebookCell;
+        const parsed = parseLenientJsonValue(sourceDraft) as NotebookCell;
         setSourceDraft(formatCellBody(parsed, "compact"));
       } catch {
         // Keep the current draft; the structured matrix editor only renders from valid cell state.
@@ -764,7 +765,7 @@ function NotebookCellViewComponent({
     }
 
     try {
-      const parsed = JSON.parse(sourceDraft) as NotebookCell;
+      const parsed = parseLenientJsonValue(sourceDraft) as NotebookCell;
       setSourceDraft(formatCellBody(parsed, nextMode));
       setSourceLayoutMode(nextMode);
     } catch {

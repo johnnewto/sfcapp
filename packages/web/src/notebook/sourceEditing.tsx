@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { isRowComment } from "@sfcr/notebook-core";
+import { isRowComment, parseLenientJsonValue } from "@sfcr/notebook-core";
 
 import { stringifyJsonWithCompactLeaves } from "../lib/jsonFormat";
 import { normalizeUnitMetaAliases } from "../lib/unitMeta";
@@ -183,7 +183,7 @@ export function formatCellBody(
 /** Read `"title"` from a non-markdown cell source draft when JSON is valid. */
 export function readCellSourceTitle(source: string): string | null {
   try {
-    const parsed = JSON.parse(source) as { title?: unknown };
+    const parsed = parseLenientJsonValue(source) as { title?: unknown };
     return typeof parsed?.title === "string" ? parsed.title : null;
   } catch {
     return null;
@@ -200,7 +200,7 @@ export function writeCellSourceTitle(
   mode: "pretty" | "compact" = "compact"
 ): string | null {
   try {
-    const parsed = JSON.parse(source) as Record<string, unknown>;
+    const parsed = parseLenientJsonValue(source) as Record<string, unknown>;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return null;
     }
@@ -243,7 +243,7 @@ export function parseCellSource(
     );
   }
 
-  const parsed = JSON.parse(source) as NotebookCell;
+  const parsed = parseLenientJsonValue(source) as NotebookCell;
   if (!parsed || typeof parsed !== "object") {
     throw new Error("Cell source must parse to an object.");
   }

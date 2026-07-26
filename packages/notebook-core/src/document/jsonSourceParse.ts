@@ -1,4 +1,5 @@
 import type { NotebookDocument } from "../types";
+import { parseLenientJsonValue } from "../lenientJsonParse";
 import { createNotebookSourceDiagnostic, type NotebookSourceDiagnostic } from "./sourcePipeline";
 import { offsetToLineColumn } from "./documentUtils";
 
@@ -8,7 +9,7 @@ export function parseJsonNotebookSource(
   | { ok: true; value: Partial<NotebookDocument> }
   | { diagnostics: NotebookSourceDiagnostic[]; ok: false } {
   try {
-    const parsed = JSON.parse(source) as Partial<NotebookDocument>;
+    const parsed = parseLenientJsonValue(source) as Partial<NotebookDocument>;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return {
         diagnostics: [
@@ -34,7 +35,7 @@ export function parseJsonNotebookSource(
 
 function buildJsonParseDiagnostic(source: string, error: unknown): NotebookSourceDiagnostic {
   const message = error instanceof Error ? error.message : "Unable to parse JSON notebook source.";
-  const offsetMatch = message.match(/position\s+(\d+)/i);
+  const offsetMatch = message.match(/at\s+(\d+)/i) ?? message.match(/position\s+(\d+)/i);
   const offset = offsetMatch ? Number.parseInt(offsetMatch[1], 10) : undefined;
   const position = offset == null ? null : offsetToLineColumn(source, offset);
   return {

@@ -99,6 +99,9 @@ export function notebookToJson(document: NotebookDocument): string {
 }
 
 export { notebookToMarkdown, notebookToCompactYaml, serializeNotebookCell };
+export { graftYamlComments, type YamlCommentGraftResult } from "./yamlCommentGraft";
+export { stampYamlSourceFileName } from "./yamlSourceStamp";
+
 
 export function notebookFromJson(source: string): NotebookDocument {
   return parseNotebookSource(source, "json").document;
@@ -117,11 +120,12 @@ export function detectNotebookSourceFormat(source: string): NotebookSourceFormat
   if (normalized.startsWith("{") || normalized.startsWith("[")) {
     return "json";
   }
-  if (normalized.startsWith("#")) {
-    return "markdown";
-  }
+  // YAML notebooks often start with `#` comments; prefer YAML when the body looks like one.
   if (looksLikeYamlNotebookSource(normalized)) {
     return "yaml";
+  }
+  if (normalized.startsWith("#")) {
+    return "markdown";
   }
   throw new Error("Unable to detect notebook format. Expected JSON, Markdown, or YAML.");
 }

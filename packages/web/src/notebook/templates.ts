@@ -255,6 +255,11 @@ export function getNotebookTemplateDocument(id: NotebookTemplateId): NotebookDoc
   return result.document;
 }
 
+/** Raw YAML source for a template (includes author comments). */
+export function getNotebookTemplateYamlSource(id: NotebookTemplateId): string {
+  return NOTEBOOK_TEMPLATE_YAML[id];
+}
+
 export function createNotebookFromTemplate(
   id: NotebookTemplateId = DEFAULT_NOTEBOOK_TEMPLATE_ID
 ): NotebookDocument {

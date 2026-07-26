@@ -1,4 +1,4 @@
-import { normalizeMatrixAccountBadgeRole } from "@sfcr/notebook-core";
+import { normalizeMatrixAccountBadgeRole, parseLenientJsonValue } from "@sfcr/notebook-core";
 import { useMemo, type ChangeEvent } from "react";
 
 import type { MatrixCell } from "./types";
@@ -526,7 +526,7 @@ export function MatrixSourceEditor({ value, onChange }: MatrixSourceEditorProps)
 
 function parseMatrixCell(value: string): { ok: true; value: MatrixCell } | { ok: false; error: string } {
   try {
-    const parsed = JSON.parse(value) as MatrixCell;
+    const parsed = parseLenientJsonValue(value) as MatrixCell;
     if (!parsed || typeof parsed !== "object") {
       return { ok: false, error: "Matrix source must parse to an object." };
     }

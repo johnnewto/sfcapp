@@ -5,6 +5,7 @@ import {
   type NotebookSourceFormat
 } from "./document";
 import type { NotebookDocument } from "./types";
+import { parseLenientJsonValue } from "@sfcr/notebook-core";
 import { stringifyJsonWithCompactLeaves } from "../lib/jsonFormat";
 
 export interface SourceRange {
@@ -138,7 +139,7 @@ function resolveJsonCellSourceRange(source: string, cellId: string): SourceRange
     }
 
     try {
-      const parsed = JSON.parse(source.slice(objectStart, objectEnd + 1)) as { id?: unknown };
+      const parsed = parseLenientJsonValue(source.slice(objectStart, objectEnd + 1)) as { id?: unknown };
       if (parsed.id === cellId) {
         return {
           from: objectStart,

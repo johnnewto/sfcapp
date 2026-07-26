@@ -8,6 +8,7 @@ export * from "./types";
 export * from "./abmModelCell";
 export * from "./validation";
 export * from "./jsonFormat";
+export * from "./lenientJsonParse";
 export * from "./unitMetaAliases";
 export * from "./rowComments";
 export * from "./sectionBoundary";

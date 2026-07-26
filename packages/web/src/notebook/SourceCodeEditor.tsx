@@ -126,7 +126,8 @@ export function SourceCodeEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [completionData, document, format, placeholderText, value]);
+    // Omit `value` so typing does not remount the editor and steal focus.
+  }, [completionData, document, format, placeholderText]);
 
   useEffect(() => {
     const view = viewRef.current;

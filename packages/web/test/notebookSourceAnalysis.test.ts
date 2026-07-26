@@ -45,6 +45,13 @@ describe("analyzeNotebookSource", () => {
     expect(detectNotebookSourceFormat(jsonSource)).toBe("json");
     expect(detectNotebookSourceFormat(markdownSource)).toBe("markdown");
     expect(detectNotebookSourceFormat(yamlSource)).toBe("yaml");
+    expect(
+      detectNotebookSourceFormat(
+        ["# leading comment", "format: sfcr-notebook-yaml", "formatVersion: 1", "id: example", "title: Example", "cells: []"].join(
+          "\n"
+        )
+      )
+    ).toBe("yaml");
     expect(() => detectNotebookSourceFormat("title = 'Example'")).toThrow(/Expected JSON, Markdown, or YAML/);
     expect(parseNotebookSource(jsonSource).document.title).toBe("Example");
     expect(parseNotebookSource(markdownSource).document.cells[0]?.type).toBe("markdown");

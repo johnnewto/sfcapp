@@ -8,7 +8,7 @@ import {
   getNotebookSourceEditor,
   getNotebookSourceTextArea,
   screen,
-  setNotebookSourceFormat,
+  openNotebookSourceEditor,
   setNotebookSourceValue,
   setupAppTestEnv,
   userEvent
@@ -28,20 +28,19 @@ import { createNotebookFromTemplate } from "../src/notebook/templates";
 setupAppTestEnv();
 
 describe("App notebook source and import workflows", () => {
-  it("renders notebook JSON in the editor when JSON is selected", async () => {
+  it("keeps the source panel on YAML and offers Export JSON", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
 
     expect(getNotebookSourceEditor()).toBeInTheDocument();
-    expect(getNotebookSourceTextArea().value).toMatch(/"title": "BMW Browser Notebook"/i);
-    expect(getNotebookSourceTextArea().value).toMatch(
-      /\{ "id": "intro", "type": "markdown", "title": "Overview", "source":/i
-    );
-    expect(document.querySelector(".notebook-code-editor .cm-lineWrapping")).toBeNull();
+    expect(getNotebookSourceTextArea().value).toContain("format: sfcr-notebook-yaml");
+    expect(getNotebookSourceTextArea().value).toContain("title: BMW Browser Notebook");
+    expect(screen.getByRole("button", { name: /^save yaml$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^export json$/i })).toBeInTheDocument();
     expect(document.querySelector(".notebook-code-editor .cm-scroller")).toBeTruthy();
   }, 15000);
 
@@ -102,16 +101,16 @@ describe("App notebook source and import workflows", () => {
     });
   });
 
-  it("shows live schema validation and blocks applying invalid JSON", async () => {
+  it("shows live schema validation and blocks applying invalid YAML", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
     const textarea = getNotebookSourceTextArea();
 
-    setNotebookSourceValue(textarea.value.replace('"version": 1', '"version": 2'));
+    setNotebookSourceValue(textarea.value.replace("formatVersion: 1", "formatVersion: 2"));
 
     await waitFor(() => {
       expect(screen.getByRole("region", { name: /notebook source validation/i })).toHaveTextContent(
@@ -121,16 +120,17 @@ describe("App notebook source and import workflows", () => {
     });
   }, 30000);
 
-  it("shows detailed model validation issues for invalid notebook JSON", async () => {
+  it("shows detailed model validation issues for invalid notebook YAML", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
     const textarea = getNotebookSourceTextArea();
 
-    setNotebookSourceValue(textarea.value.replace(/"expression":\s*"[^"]+"/, '"expression": ""'));
+    // Compact equation rows are [name, expression, ...]; blank the first expression.
+    setNotebookSourceValue(textarea.value.replace(/\[Cs, Cd,/, "[Cs, ,"));
 
     await waitFor(() => {
       expect(screen.getByRole("region", { name: /notebook source validation/i })).toHaveTextContent(
@@ -162,36 +162,19 @@ describe("App notebook source and import workflows", () => {
 
     await user.click(within(sequenceCell).getByRole("button", { name: /show exogenous/i }));
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
 
     const exportArea = getNotebookSourceTextArea();
-    expect(exportArea.value).toContain('"showExogenous": true');
+    expect(exportArea.value).toMatch(/showExogenous:\s*true/);
   }, 15000);
 
-  it("renders notebook Markdown in the editor when Markdown is selected", async () => {
+  it("renders notebook YAML in the source editor", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "markdown");
-
-    expect(getNotebookSourceTextArea().value).toMatch(/```sfcr-equations/i);
-    expect(getNotebookSourceTextArea().value).toMatch(/```sfcr-solver/i);
-    expect(getNotebookSourceTextArea().value).toMatch(/```sfcr-externals/i);
-    expect(getNotebookSourceTextArea().value).toMatch(/```sfcr-initial-values/i);
-    expect(getNotebookSourceTextArea().value).toMatch(/```sfcr-matrix/i);
-    expect(getNotebookSourceTextArea().value).toMatch(/```sfcr-sequence/i);
-    expect(getNotebookSourceTextArea().value).toMatch(/# BMW Browser Notebook/i);
-  }, 15000);
-
-  it("renders notebook YAML in the editor when YAML is selected", async () => {
-    const user = userEvent.setup();
-    window.location.hash = "#/notebook";
-
-    render(<App />);
-
-    await setNotebookSourceFormat(user, "yaml");
+    await openNotebookSourceEditor(user);
 
     expect(getNotebookSourceTextArea().value).toMatch(/format: sfcr-notebook-yaml/i);
     expect(getNotebookSourceTextArea().value).toMatch(/title: BMW Browser Notebook/i);
@@ -203,17 +186,21 @@ describe("App notebook source and import workflows", () => {
     expect(document.querySelector(".notebook-code-editor .cm-scroller")).toBeTruthy();
   });
 
-  it("auto-detects Markdown during preview import even when JSON is selected", async () => {
+  it("auto-detects Markdown during preview import from the YAML editor", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "markdown");
-    const markdownTextarea = getNotebookSourceTextArea();
-    const markdownSource = markdownTextarea.value;
-
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
+    const markdownSource = [
+      "# Markdown Import Notebook",
+      "",
+      "## Overview",
+      "",
+      "Hello from markdown.",
+      ""
+    ].join("\n");
     setNotebookSourceValue(markdownSource);
     await user.click(screen.getByRole("button", { name: /preview import/i }));
 
@@ -223,7 +210,7 @@ describe("App notebook source and import workflows", () => {
     ).toBeGreaterThan(0);
   }, 15000);
 
-  it("auto-detects YAML during preview import even when JSON is selected", async () => {
+  it("previews edited YAML from the source editor", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
@@ -234,7 +221,7 @@ describe("App notebook source and import workflows", () => {
       "YAML Notebook"
     );
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
     setNotebookSourceValue(yamlSource);
     await user.click(screen.getByRole("button", { name: /preview import/i }));
 
@@ -251,15 +238,12 @@ describe("App notebook source and import workflows", () => {
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
 
-    const textarea = getNotebookSourceTextArea();
-    const nextValue = textarea.value.replace("BMW Browser Notebook", "Imported Notebook");
-
-    if (!nextValue) {
-      throw new Error("Expected notebook export text.");
-    }
-
+    const nextValue = notebookToJson(createNotebookFromTemplate("bmw")).replace(
+      "BMW Browser Notebook",
+      "Imported Notebook"
+    );
     setNotebookSourceValue(nextValue);
     await user.click(screen.getByRole("button", { name: /preview import/i }));
 
@@ -277,7 +261,7 @@ describe("App notebook source and import workflows", () => {
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
 
     const textarea = getNotebookSourceTextArea();
     const customSource = textarea.value.replace("BMW Browser Notebook", "Stored Custom Notebook");
@@ -418,13 +402,13 @@ describe("App notebook source and import workflows", () => {
     });
   }, 15000);
 
-  it("imports a JSON notebook file while YAML is selected without leaving the editor rail", async () => {
+  it("imports a JSON notebook file and shows it as YAML in the editor rail", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "yaml");
+    await openNotebookSourceEditor(user);
 
     const jsonSource = notebookToJson(createNotebookFromTemplate("bmw")).replace(
       "BMW Browser Notebook",
@@ -443,7 +427,7 @@ describe("App notebook source and import workflows", () => {
       expect(screen.getByRole("tab", { name: /^editor$/i })).toHaveAttribute("aria-selected", "true");
       expect(screen.getByRole("tab", { name: /^inspect$/i })).toHaveAttribute("aria-selected", "false");
       expect(getNotebookSourceTextArea().value).toContain("Imported JSON File Notebook");
-      expect(getNotebookSourceTextArea().value).not.toContain("format: sfcr-notebook-yaml");
+      expect(getNotebookSourceTextArea().value).toContain("format: sfcr-notebook-yaml");
     });
   }, 15000);
 
@@ -453,10 +437,9 @@ describe("App notebook source and import workflows", () => {
 
     render(<App />);
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
 
     const textarea = getNotebookSourceTextArea();
-    const originalValue = textarea.value;
     const editedValue = textarea.value.replace("BMW Browser Notebook", "Draft Notebook");
 
     setNotebookSourceValue(editedValue);
@@ -465,20 +448,14 @@ describe("App notebook source and import workflows", () => {
       expect(screen.getByRole("button", { name: /apply text/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /discard text/i })).toBeInTheDocument();
     });
-    await setNotebookSourceFormat(user, "markdown");
-    expect(screen.getByRole("status")).toHaveTextContent(
-      /apply or discard the source draft before changing format/i
-    );
-    expect(getNotebookSourceTextArea()).toHaveValue(editedValue);
 
     await user.click(screen.getByRole("button", { name: /apply text/i }));
 
     expect(screen.getAllByText(/^Draft Notebook$/i).length).toBeGreaterThan(0);
 
-    await setNotebookSourceFormat(user, "json");
-
     const refreshedTextarea = getNotebookSourceTextArea();
-    setNotebookSourceValue(originalValue);
+    const afterApply = refreshedTextarea.value;
+    setNotebookSourceValue(afterApply.replace("Draft Notebook", "BMW Browser Notebook"));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /discard text/i })).toBeInTheDocument();
@@ -486,8 +463,7 @@ describe("App notebook source and import workflows", () => {
 
     await user.click(screen.getByRole("button", { name: /discard text/i }));
 
-    expect(refreshedTextarea.value).toContain("Draft Notebook");
-    expect(refreshedTextarea.value).not.toBe(originalValue);
+    expect(getNotebookSourceTextArea().value).toContain("Draft Notebook");
   }, 15000);
 
   it("loads a shared notebook from ?nbz= query params and cleans the URL", async () => {

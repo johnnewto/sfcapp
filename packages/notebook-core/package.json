@@ -18,6 +18,10 @@
   "dependencies": {
     "@sfcr/core": "workspace:*",
     "ajv": "^8.20.0",
+    "hjson": "^3.2.2",
     "yaml": "^2.8.4"
+  },
+  "devDependencies": {
+    "@types/hjson": "^2.4.6"
   }
 }

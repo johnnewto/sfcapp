@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent as testingFireEvent, screen as testingScreen, w
 import userEventLib from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { runBaseline as runCoreBaseline } from "@sfcr/core";
-import { afterEach, beforeAll, beforeEach, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, vi } from "vitest";
 
 import { bmwBaselineModel, bmwBaselineOptions } from "../../core/src/fixtures/bmw";
 import { NotebookApp } from "../src/notebook/NotebookApp";
@@ -168,44 +168,22 @@ export async function openNotebookCommandsPanel(
   return screen.findByRole("dialog", { name: /notebook commands/i });
 }
 
-export async function setNotebookSourceFormat(
-  user: ReturnType<typeof userEventLib.setup>,
-  format: "json" | "markdown" | "yaml"
+/** Open the YAML source editor rail and wait for CodeMirror to mount. */
+export async function openNotebookSourceEditor(
+  user: ReturnType<typeof userEventLib.setup>
 ): Promise<void> {
   const editorTab = screen.getByRole("tab", { name: /^editor$/i });
   if (editorTab.getAttribute("aria-selected") !== "true") {
     await user.click(editorTab);
   }
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const saveButton = screen.getByRole("button", { name: /^save /i });
-    const currentFormat = resolveNotebookSourceFormatFromText(saveButton.textContent ?? "");
-    if (currentFormat === format) {
-      break;
-    }
-    await user.click(screen.getByRole("button", { name: /source format is /i }));
-  }
-
-  if (format !== "markdown") {
-    await screen.findByRole("textbox", { name: /notebook source editor/i });
-    await waitFor(() => {
-      if (!document.querySelector(".notebook-code-editor .cm-scroller")) {
-        throw new Error("Notebook source editor has not finished mounting yet.");
-      }
-    });
-  } else {
-    await screen.findByTestId("notebook-source-text");
-  }
-
+  await screen.findByRole("textbox", { name: /notebook source editor/i });
   await waitFor(() => {
-    const currentFormat = resolveNotebookSourceFormatFromSource(getNotebookSourceTextArea().value);
-    if (currentFormat !== format) {
-      if (screen.queryByRole("status")?.textContent?.match(/apply or discard the source draft/i)) {
-        return;
-      }
-      throw new Error(`Notebook source format is ${currentFormat}, expected ${format}.`);
+    if (!document.querySelector(".notebook-code-editor .cm-scroller")) {
+      throw new Error("Notebook source editor has not finished mounting yet.");
     }
   });
+  expect(screen.getByRole("button", { name: /^save yaml$/i })).toBeInTheDocument();
 }
 
 export async function expectVariableInspectorOpen(timeout = 3500): Promise<void> {
@@ -234,24 +212,3 @@ export async function clickForDeferredVariableInspect(target: Element): Promise<
   await expectVariableInspectorOpen();
 }
 
-function resolveNotebookSourceFormatFromText(text: string): "json" | "markdown" | "yaml" {
-  const normalized = text.toLowerCase();
-  if (normalized.includes("markdown")) {
-    return "markdown";
-  }
-  if (normalized.includes("yaml")) {
-    return "yaml";
-  }
-  return "json";
-}
-
-function resolveNotebookSourceFormatFromSource(text: string): "json" | "markdown" | "yaml" {
-  const trimmed = text.trimStart();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    return "json";
-  }
-  if (/^format:\s*sfcr-notebook-yaml/im.test(trimmed)) {
-    return "yaml";
-  }
-  return "markdown";
-}

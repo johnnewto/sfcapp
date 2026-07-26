@@ -39,9 +39,16 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      hjson:
+        specifier: ^3.2.2
+        version: 3.2.2
       yaml:
         specifier: ^2.8.4
         version: 2.8.4
+    devDependencies:
+      '@types/hjson':
+        specifier: ^2.4.6
+        version: 2.4.6
 
   packages/web:
     dependencies:
@@ -1000,6 +1007,9 @@ packages:
   '@types/hast@3.0.4':
     resolution: {integrity: sha512-WPs+bbQw5aCj+x6laNGWLH3wviHtoCv/P3+otBhbOhJgG8qtpdAMlTCxLtsTWA7LH1Oh/bFCHsBn0TPS5m30EQ==}
 
+  '@types/hjson@2.4.6':
+    resolution: {integrity: sha512-tEQ4hlyKfsb9WWeueUY5eRnU2eK+KdE0eofSpQ05v9Aah4VvWwIRIid/ZN1zZZ0TfeVTRDgabKKqKZXEkfD3Sw==}
+
   '@types/mdast@4.0.4':
     resolution: {integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==}
 
@@ -1350,6 +1360,10 @@ packages:
 
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
+
+  hjson@3.2.2:
+    resolution: {integrity: sha512-MkUeB0cTIlppeSsndgESkfFD21T2nXPRaBStLtf3cAYA2bVEFdXlodZB0TukwZiobPD1Ksax5DK4RTZeaXCI3Q==}
+    hasBin: true
 
   html-encoding-sniffer@4.0.0:
     resolution: {integrity: sha512-Y22oTqIU4uuPgEemfz7NDJz6OeKf12Lsu+QC+s3BVpda64lTiMYCyGwg5ki4vFxkMwQdeZDl2adZoqUgdFuTgQ==}
@@ -2743,6 +2757,8 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
 
+  '@types/hjson@2.4.6': {}
+
   '@types/mdast@4.0.4':
     dependencies:
       '@types/unist': 3.0.3
@@ -3137,6 +3153,8 @@ snapshots:
   hast-util-whitespace@3.0.0:
     dependencies:
       '@types/hast': 3.0.4
+
+  hjson@3.2.2: {}
 
   html-encoding-sniffer@4.0.0:
     dependencies:

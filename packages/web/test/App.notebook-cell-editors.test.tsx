@@ -10,7 +10,7 @@ import {
   openNotebookCommandsPanel,
   screen,
   setSuccessfulNotebookRunner,
-  setNotebookSourceFormat,
+  openNotebookSourceEditor,
   setupAppTestEnv,
   userEvent
 } from "./appTestUtils";
@@ -413,9 +413,9 @@ describe("App per-cell source editors", () => {
     fireEvent.change(firstVariableInput, { target: { value: draftValue } });
     expect(within(equationsCell).getByRole("button", { name: /^apply$/i })).toBeEnabled();
 
-    await setNotebookSourceFormat(user, "json");
+    await openNotebookSourceEditor(user);
     const draftExport = getNotebookSourceTextArea();
-    expect(draftExport.value).not.toContain(`"name": "${draftValue}"`);
+    expect(draftExport.value).not.toContain(`[${draftValue},`);
   }, 15000);
 
   it("discards linked equation drafts on cancel", async () => {
@@ -468,8 +468,8 @@ describe("App per-cell source editors", () => {
     fireEvent.change(firstVariableInput, { target: { value: draftValue } });
     await user.click(within(equationsCell).getByRole("button", { name: /^apply$/i }));
 
-    await setNotebookSourceFormat(user, "json");
-    expect(getNotebookSourceTextArea().value).toContain(`"name": "${draftValue}"`);
+    await openNotebookSourceEditor(user);
+    expect(getNotebookSourceTextArea().value).toContain(`[${draftValue},`);
   }, 15000);
 
   it("supports right-click equation grid actions while editing equations", async () => {
