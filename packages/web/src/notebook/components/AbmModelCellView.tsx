@@ -49,52 +49,52 @@ function tickEquations(tick: Record<string, unknown>): EquationRow[] {
   return [];
 }
 
-function formatTickLabel(tick: unknown, index: number): string {
+function formatTickLabel(tick: unknown): string {
   if (tick == null || typeof tick !== "object") {
-    return `${index + 1}. (invalid tick)`;
+    return "(invalid tick)";
   }
   const record = tick as Record<string, unknown>;
   if (typeof record.kind === "string") {
     switch (record.kind) {
       case "agent":
-        return `${index + 1}. for ${String(record.population)}`;
+        return `for ${String(record.population)}`;
       case "aggregate":
-        return `${index + 1}. do`;
+        return "do";
       case "hire-lottery":
-        return `${index + 1}. hire-lottery → ${String(record.into)}`;
+        return `hire-lottery → ${String(record.into)}`;
       case "shuffle":
-        return `${index + 1}. shuffle ${String(record.population)}`;
+        return `shuffle ${String(record.population)}`;
       case "ration-fcfs":
-        return `${index + 1}. ration-fcfs ${String(record.population)}.${String(record.into)}`;
+        return `ration-fcfs ${String(record.population)}.${String(record.into)}`;
       default:
-        return `${index + 1}. ${record.kind}`;
+        return String(record.kind);
     }
   }
   if ("for" in record) {
     const body = record.for;
     if (body != null && typeof body === "object" && !Array.isArray(body)) {
       const [population] = Object.entries(body as Record<string, unknown>)[0] ?? [];
-      return `${index + 1}. for ${String(population)}`;
+      return `for ${String(population)}`;
     }
-    return `${index + 1}. for ?`;
+    return "for ?";
   }
   if ("do" in record) {
-    return `${index + 1}. do`;
+    return "do";
   }
   if ("hire-lottery" in record) {
     const body = record["hire-lottery"] as { into?: unknown };
-    return `${index + 1}. hire-lottery → ${String(body?.into ?? "?")}`;
+    return `hire-lottery → ${String(body?.into ?? "?")}`;
   }
   if ("shuffle" in record) {
     const body = record.shuffle;
     const pop = typeof body === "string" ? body : (body as { population?: unknown })?.population;
-    return `${index + 1}. shuffle ${String(pop ?? "?")}`;
+    return `shuffle ${String(pop ?? "?")}`;
   }
   if ("ration-fcfs" in record) {
     const body = record["ration-fcfs"] as { population?: unknown; into?: unknown };
-    return `${index + 1}. ration-fcfs ${String(body?.population)}.${String(body?.into)}`;
+    return `ration-fcfs ${String(body?.population)}.${String(body?.into)}`;
   }
-  return `${index + 1}. (unknown tick)`;
+  return "(unknown tick)";
 }
 
 function formatAgents(agents: unknown): string {
@@ -452,7 +452,7 @@ export function AbmModelCellView({
                 : "";
             return (
               <li key={index}>
-                <div>{formatTickLabel(tick, index)}</div>
+                <div>{formatTickLabel(tick)}</div>
                 {equations.length > 0 ? (
                   <ul className="notebook-abm-model-equations">
                     {equations.map((row) => {
