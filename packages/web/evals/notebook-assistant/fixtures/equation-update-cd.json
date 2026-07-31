@@ -1,0 +1,25 @@
+{
+  "id": "equation-update-cd",
+  "label": "Equation Ask AI updates the Cd expression",
+  "mode": "ask",
+  "scope": {
+    "kind": "equation-update",
+    "cellId": "equations-newton",
+    "modelId": "equations-newton",
+    "variable": "Cd"
+  },
+  "question": "Update Cd so consumption is less sensitive to current income: use 0.8 * alpha1.",
+  "notebookPath": "../../public/notebook-examples/bmw.example.notebook.json",
+  "savedResponsePath": "responses/equation-update-cd.raw.txt",
+  "expected": {
+    "toolNames": ["createUpdateEquationPatch"],
+    "patch": true,
+    "patchSummary": { "addedCells": 0, "changedCells": 1, "removedCells": 0, "operationCount": 1 },
+    "allowedPathPrefixes": ["/cells/by-id/equations-newton/", "/cells/"],
+    "changedEquation": {
+      "name": "Cd",
+      "expression": "alpha0 + 0.8 * alpha1 * YD + alpha2 * lag(Mh)"
+    },
+    "scopeViolations": false
+  }
+}

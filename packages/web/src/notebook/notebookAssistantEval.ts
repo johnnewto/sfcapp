@@ -14,6 +14,10 @@ import {
   type NotebookAssistantMode,
   type NotebookAssistantToolRequestExtraction
 } from "./notebookAssistantFlow";
+import { processScopedNotebookAssistantResponse } from "./notebookAssistantProposalRunner";
+import {
+  type NotebookAssistantProposalScope
+} from "./notebookAssistantScope";
 import {
   previewNotebookPatch,
   validateNotebookPatch,
@@ -34,6 +38,8 @@ export interface NotebookAssistantEvalFixture {
   question: string;
   runtime?: NotebookAssistantSnapshot["runtime"];
   savedResponsePath: string;
+  /** When set, score through scoped cell AI filtering instead of global Ask/Edit mode. */
+  scope?: NotebookAssistantProposalScope;
   selectedCellId?: string | null;
   selectedPeriodIndex?: number;
   selectedVariable?: string | null;
@@ -43,11 +49,15 @@ interface NotebookAssistantEvalExpected {
   addedChart?: { id: string; variables?: string[] };
   addedEquation?: { expression?: string; name: string };
   allowedPathPrefixes?: string[];
+  blockedToolNames?: string[];
+  changedChartVariables?: { id: string; variables: string[] };
+  changedEquation?: { expression: string; name: string };
   changedExternal?: { name: string; valueText: string };
   forbiddenToolNames?: string[];
   patch?: boolean;
   patchSummary?: Partial<NotebookPatchSummary>;
   runPeriods?: { periods: number; runId: string };
+  scopeViolations?: boolean;
   toolNames?: string[];
 }
 
@@ -110,6 +120,17 @@ export function evaluateNotebookAssistantResponse(args: {
 }): NotebookAssistantEvalResult {
   const document = notebookFromJson(JSON.stringify(args.document));
   const snapshot = buildNotebookAssistantEvalSnapshot(document, args.fixture);
+
+  if (args.fixture.scope) {
+    return evaluateScopedNotebookAssistantResponse({
+      document,
+      fixture: args.fixture,
+      live: Boolean(args.live),
+      rawResponse: args.rawResponse,
+      snapshot
+    });
+  }
+
   const extraction = extractNotebookAssistantToolRequests(args.rawResponse);
   const modeFiltered = filterNotebookAssistantToolRequestsForMode(args.fixture.mode, extraction.requests);
   const toolDispatch = dispatchNotebookAssistantToolRequests(snapshot, modeFiltered.allowed);
@@ -131,6 +152,7 @@ export function evaluateNotebookAssistantResponse(args: {
     modeFiltered,
     patch,
     preview,
+    scopeViolations: [],
     toolResults,
     validation
   });
@@ -157,6 +179,73 @@ export function evaluateNotebookAssistantResponse(args: {
   };
 }
 
+function evaluateScopedNotebookAssistantResponse(args: {
+  document: NotebookDocument;
+  fixture: NotebookAssistantEvalFixture;
+  live: boolean;
+  rawResponse: string;
+  snapshot: NotebookAssistantSnapshot;
+}): NotebookAssistantEvalResult {
+  const scope = args.fixture.scope;
+  if (!scope) {
+    throw new Error("Scoped eval requires fixture.scope.");
+  }
+
+  const extraction = extractNotebookAssistantToolRequests(args.rawResponse);
+  const scoped = processScopedNotebookAssistantResponse({
+    question: args.fixture.question,
+    responseText: args.rawResponse,
+    scope,
+    snapshot: args.snapshot
+  });
+  const modeFiltered = {
+    allowed: extraction.requests.filter(
+      (request) =>
+        !scoped.blocked.some(
+          (blocked) =>
+            blocked.name === request.name &&
+            JSON.stringify(blocked.args ?? {}) === JSON.stringify(request.args ?? {})
+        )
+    ),
+    blocked: scoped.blocked
+  };
+
+  const patch = scoped.patch;
+  const validation = patch ? validateNotebookPatch(args.document, patch) : null;
+  const preview = patch ? previewNotebookPatch(args.document, patch) : null;
+  const scoring = scoreNotebookAssistantEval({
+    extraction,
+    fixture: args.fixture,
+    modeFiltered,
+    patch,
+    preview,
+    scopeViolations: scoped.scopeViolations,
+    toolResults: scoped.toolResults,
+    validation
+  });
+  const summary = buildNotebookAssistantEvalSummary({
+    extraction,
+    fixture: args.fixture,
+    live: args.live,
+    modeFiltered,
+    preview,
+    rawResponse: args.rawResponse,
+    scoring,
+    toolResults: scoped.toolResults
+  });
+
+  return {
+    extraction,
+    modeFiltered,
+    patch,
+    preview,
+    scoring,
+    summary,
+    toolResults: scoped.toolResults,
+    validation
+  };
+}
+
 function buildNotebookAssistantEvalSnapshot(
   document: NotebookDocument,
   fixture: NotebookAssistantEvalFixture
@@ -176,6 +265,7 @@ function scoreNotebookAssistantEval(args: {
   modeFiltered: { allowed: NotebookAssistantToolRequest[]; blocked: NotebookAssistantToolRequest[] };
   patch: NotebookPatch | null;
   preview: NotebookPatchResult | null;
+  scopeViolations: string[];
   toolResults: NotebookAssistantToolResult[];
   validation: NotebookPatchResult | null;
 }): { diagnostics: NotebookAssistantEvalDiagnostic[]; ok: boolean } {
@@ -183,20 +273,36 @@ function scoreNotebookAssistantEval(args: {
   const expected = args.fixture.expected ?? {};
   const requestedNames = args.extraction.requests.map((request) => request.name);
   const allowedNames = args.modeFiltered.allowed.map((request) => request.name);
+  const blockedNames = args.modeFiltered.blocked.map((request) => request.name);
   const failedToolResults = args.toolResults.filter((result): result is Extract<NotebookAssistantToolResult, { ok: false }> => !result.ok);
+  const expectsScopeBlock = expected.scopeViolations === true || (expected.blockedToolNames?.length ?? 0) > 0;
 
   if (args.extraction.error) {
     diagnostics.push({ phase: "tools", message: args.extraction.error });
   }
-  if (args.modeFiltered.blocked.length > 0) {
+  if (args.modeFiltered.blocked.length > 0 && !expectsScopeBlock && !args.fixture.scope) {
     diagnostics.push({
       phase: "mode",
       message: `Blocked tools in ${args.fixture.mode} mode: ${args.modeFiltered.blocked.map((request) => request.name).join(", ")}`
     });
   }
+  if (expected.scopeViolations === true && args.scopeViolations.length === 0 && args.modeFiltered.blocked.length === 0) {
+    diagnostics.push({ phase: "scope", message: "Expected scope violations or blocked tools, but none were reported." });
+  }
+  if (expected.scopeViolations === false && args.scopeViolations.length > 0) {
+    diagnostics.push({
+      phase: "scope",
+      message: `Unexpected scope violations: ${args.scopeViolations.join("; ")}`
+    });
+  }
   for (const toolName of expected.toolNames ?? []) {
     if (!allowedNames.includes(toolName)) {
       diagnostics.push({ phase: "tools", message: `Expected tool ${toolName} to be allowed.` });
+    }
+  }
+  for (const toolName of expected.blockedToolNames ?? []) {
+    if (!blockedNames.includes(toolName)) {
+      diagnostics.push({ phase: "scope", message: `Expected tool ${toolName} to be blocked by scope.` });
     }
   }
   for (const toolName of expected.forbiddenToolNames ?? []) {
@@ -351,6 +457,36 @@ function validateExpectedDocument(
       diagnostics.push({ phase: "expected", message: `Expected equation ${expected.addedEquation.name} to exist.` });
     } else if (expected.addedEquation.expression && equation.expression !== expected.addedEquation.expression) {
       diagnostics.push({ phase: "expected", message: `Expected equation ${expected.addedEquation.name} expression ${expected.addedEquation.expression}.` });
+    }
+  }
+  if (expected.changedChartVariables) {
+    const chart = document.cells.find(
+      (cell) => cell.type === "chart" && cell.id === expected.changedChartVariables?.id
+    );
+    if (!chart || chart.type !== "chart") {
+      diagnostics.push({
+        phase: "expected",
+        message: `Expected chart ${expected.changedChartVariables.id} to exist.`
+      });
+    } else if (!sameStrings(chart.variables ?? [], expected.changedChartVariables.variables)) {
+      diagnostics.push({
+        phase: "expected",
+        message: `Expected chart ${expected.changedChartVariables.id} variables ${expected.changedChartVariables.variables.join(", ")}.`
+      });
+    }
+  }
+  if (expected.changedEquation) {
+    const equation = findEquation(document, expected.changedEquation.name);
+    if (!equation) {
+      diagnostics.push({
+        phase: "expected",
+        message: `Expected equation ${expected.changedEquation.name} to exist.`
+      });
+    } else if (equation.expression !== expected.changedEquation.expression) {
+      diagnostics.push({
+        phase: "expected",
+        message: `Expected equation ${expected.changedEquation.name} expression ${expected.changedEquation.expression}.`
+      });
     }
   }
 

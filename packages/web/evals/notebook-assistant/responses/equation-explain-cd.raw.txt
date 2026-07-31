@@ -1,0 +1,17 @@
+Cd is household consumption demand.
+
+```json
+{
+  "notebookAssistantToolRequests": [
+    {
+      "name": "getEquation",
+      "args": {
+        "modelId": "equations-newton",
+        "variable": "Cd"
+      }
+    }
+  ]
+}
+```
+
+Cd depends on autonomous consumption `alpha0`, the propensity to consume out of disposable income `alpha1 * YD`, and wealth effects through `alpha2 * lag(Mh)`.

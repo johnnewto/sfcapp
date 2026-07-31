@@ -23,7 +23,19 @@ describe("notebook assistant eval harness", () => {
 
   it("lists the seed fixtures", async () => {
     await expect(listFixtures()).resolves.toEqual(
-      expect.arrayContaining(["ask-list-runs", "edit-change-alpha1", "edit-add-chart", "edit-extend-runs", "edit-add-equation"])
+      expect.arrayContaining([
+        "ask-list-runs",
+        "chart-update-baseline-vars",
+        "chart-update-options",
+        "chart-update-reject-other",
+        "edit-change-alpha1",
+        "edit-add-chart",
+        "edit-extend-runs",
+        "edit-add-equation",
+        "equation-explain-cd",
+        "equation-update-cd",
+        "equation-update-reject-other"
+      ])
     );
   });
 
@@ -99,5 +111,78 @@ describe("notebook assistant eval harness", () => {
       "scoring",
       "artifacts"
     ]);
+  });
+
+  it("runs a chart-update fixture and keeps the patch on the bound chart", async () => {
+    const artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), "sfcr-notebook-assistant-chart-"));
+    const result = await runNotebookAssistantEval({
+      artifactDir,
+      fixtureId: "chart-update-baseline-vars"
+    });
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.patch).not.toBeNull();
+    expect(result.patch.operations.every((operation) => operation.path.includes("baseline-chart"))).toBe(true);
+  });
+
+  it("rejects chart-update requests that target another chart", async () => {
+    const artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), "sfcr-notebook-assistant-chart-reject-"));
+    const result = await runNotebookAssistantEval({
+      artifactDir,
+      fixtureId: "chart-update-reject-other"
+    });
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.patch).toBeNull();
+    expect(result.modeFiltered.blocked.map((request) => request.name)).toEqual(["createUpdateChartVariablesPatch"]);
+  });
+
+  it("runs an equation-update fixture for the bound variable only", async () => {
+    const artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), "sfcr-notebook-assistant-eq-"));
+    const result = await runNotebookAssistantEval({
+      artifactDir,
+      fixtureId: "equation-update-cd"
+    });
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.patch).not.toBeNull();
+    expect(result.patch.operations.every((operation) => operation.path.includes("equations-newton"))).toBe(true);
+  });
+
+  it("rejects equation-update requests for a different variable", async () => {
+    const artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), "sfcr-notebook-assistant-eq-reject-"));
+    const result = await runNotebookAssistantEval({
+      artifactDir,
+      fixtureId: "equation-update-reject-other"
+    });
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.patch).toBeNull();
+    expect(result.modeFiltered.blocked.map((request) => request.name)).toEqual(["createUpdateEquationPatch"]);
+  });
+
+  it("runs a chart-options fixture for the bound chart", async () => {
+    const artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), "sfcr-notebook-assistant-chart-opts-"));
+    const result = await runNotebookAssistantEval({
+      artifactDir,
+      fixtureId: "chart-update-options"
+    });
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.patch).not.toBeNull();
+    expect(result.patch.operations).toHaveLength(2);
+    expect(result.patch.operations.every((operation) => operation.path.includes("baseline-chart"))).toBe(true);
+  });
+
+  it("runs an equation explain fixture without producing a patch", async () => {
+    const artifactDir = await fs.mkdtemp(path.join(os.tmpdir(), "sfcr-notebook-assistant-eq-explain-"));
+    const result = await runNotebookAssistantEval({
+      artifactDir,
+      fixtureId: "equation-explain-cd"
+    });
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.patch).toBeNull();
+    expect(result.summary.tools.allowed.map((tool) => tool.name)).toEqual(["getEquation"]);
   });
 });

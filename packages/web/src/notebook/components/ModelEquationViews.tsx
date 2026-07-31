@@ -30,6 +30,10 @@ import {
   useDeferredAction,
   VariableRenameDialog
 } from "./EquationRowInlineEditor";
+import { EquationRowAskAiPanel } from "./EquationRowAskAiPanel";
+import { EquationsCellAskAiPanel } from "./EquationsCellAskAiPanel";
+import type { NotebookAssistantSnapshot } from "../notebookAssistantTools";
+import type { NotebookPatch } from "../notebookPatch";
 import { buildRuntimeConfig, diagnoseBuildRuntime, validateEditorState, type EditorState, type ExternalRow } from "../../lib/editorModel";
 import { buildVariableDescriptions, type VariableDescriptions } from "../../lib/variableDescriptions";
 import { buildVariableUnitMetadata } from "../../lib/units";
@@ -39,7 +43,7 @@ import { buildEditorStateFromSections, collectModelExternals, countModelSectionI
 import { resolveImplicitMatrixAccumulationEntries, IMPLICIT_MATRIX_INTEGRATION_SECTION_ID } from "../implicitMatrixEquations";
 import { collectMatrixInitialValueOverrideIssues } from "../matrixInitialRow";
 import type { VariableInspectRequest } from "../../lib/variableInspect";
-import type { EquationsCell, ExternalsCell, ModelCell, NotebookCell, SolverCell } from "../types";
+import type { EquationsCell, ExternalsCell, ModelCell, NotebookCell, NotebookDocument, SolverCell } from "../types";
 import { NotebookLinkedEditorActions, NotebookLinkedEditorHeader } from "./NotebookCellHeader";
 import { NotebookFloatingHeaderOverlay } from "./NotebookFloatingHeaderOverlay";
 import { NotebookEquationViewTable } from "./NotebookEquationViewTable";
@@ -476,12 +480,31 @@ export function ModelCellView({
   );
 }
 
+export interface EquationsCellAiProps {
+  betaPassword: string;
+  document: NotebookDocument;
+  enabled: boolean;
+  model: string;
+  onApplyPatch(args: {
+    document: NotebookDocument;
+    patch: NotebookPatch;
+    proposalId: string;
+  }): void;
+  onUndoPatch(proposalId: string): void;
+  resultCount: number;
+  selectedPeriodIndex: number;
+  snapshot: NotebookAssistantSnapshot;
+  uiMessage?: string | null;
+  undoProposalId: string | null;
+}
+
 export function EquationsCellView({
   cell,
   cells,
   currentValues,
   laggedCurrentValues,
   laggedPeriodLabel,
+  equationAi = null,
   externals,
   initialValuesCount,
   isPinnedInPanel = false,
@@ -503,6 +526,7 @@ export function EquationsCellView({
   currentValues: Record<string, number | undefined>;
   laggedCurrentValues?: Record<string, number | undefined>;
   laggedPeriodLabel?: string;
+  equationAi?: EquationsCellAiProps | null;
   externals: ExternalsCell["externals"];
   initialValuesCount: number;
   isPinnedInPanel?: boolean;
@@ -601,6 +625,8 @@ export function EquationsCellView({
       : null;
   const [isEditingEquations, setIsEditingEquations] = useState(false);
   const [showExternalValues, setShowExternalValues] = useState(true);
+  const [askAiVariable, setAskAiVariable] = useState<string | null>(null);
+  const [isEquationsCellAskAiOpen, setIsEquationsCellAskAiOpen] = useState(false);
   const floatingEnabled = cell.collapsed !== true && !isEditingEquations && viewportRoot != null;
   const { visible: floatingHeaderVisible, anchor: floatingHeaderAnchor } =
     useNotebookFloatingHeaderRow({
@@ -706,6 +732,21 @@ export function EquationsCellView({
                       onCollapseAll={sectionCollapse.collapseAllSections}
                       onExpandAll={sectionCollapse.expandAllSections}
                     />
+                  ) : null}
+                  {equationAi?.enabled ? (
+                    <button
+                      type="button"
+                      className={`notebook-run-button notebook-equation-ask-ai-toggle${
+                        isEquationsCellAskAiOpen ? " is-active" : ""
+                      }`}
+                      aria-pressed={isEquationsCellAskAiOpen}
+                      onClick={() => {
+                        setAskAiVariable(null);
+                        setIsEquationsCellAskAiOpen((current) => !current);
+                      }}
+                    >
+                      Ask AI
+                    </button>
                   ) : null}
                   <button
                     type="button"
@@ -939,6 +980,17 @@ export function EquationsCellView({
                       })
                     )
                   }
+                  askAiActive={askAiVariable === equation.name}
+                  onAskAi={
+                    equationAi?.enabled && !isEditingEquations
+                      ? () => {
+                          setIsEquationsCellAskAiOpen(false);
+                          setAskAiVariable((current) =>
+                            current === equation.name ? null : equation.name
+                          );
+                        }
+                      : undefined
+                  }
                 />
               );
             })}
@@ -975,6 +1027,12 @@ export function EquationsCellView({
             <GridRowContextMenu
               addCommentLabel="Add section comment"
               addItemLabel="Add equation"
+              askAiLabel={
+                equationAi?.enabled &&
+                !isRowComment(cell.equations[equationRowMenu.rowContextMenu.rowIndex])
+                  ? "Ask AI"
+                  : undefined
+              }
               canMoveDown={canMoveRowDown(cell.equations, equationRowMenu.rowContextMenu.rowIndex)}
               canMoveUp={canMoveRowUp(cell.equations, equationRowMenu.rowContextMenu.rowIndex)}
               menuRef={equationRowMenu.rowContextMenuRef}
@@ -984,6 +1042,19 @@ export function EquationsCellView({
               }
               onAddComment={() =>
                 equationRowMenu.insertRowBelow(equationRowMenu.rowContextMenu!.rowIndex, newRowComment())
+              }
+              onAskAi={
+                equationAi?.enabled &&
+                !isRowComment(cell.equations[equationRowMenu.rowContextMenu.rowIndex])
+                  ? () => {
+                      const row = cell.equations[equationRowMenu.rowContextMenu!.rowIndex];
+                      if (!isRowComment(row)) {
+                        setIsEquationsCellAskAiOpen(false);
+                        setAskAiVariable(row.name);
+                      }
+                      equationRowMenu.closeRowContextMenu();
+                    }
+                  : undefined
               }
               onDelete={() => equationRowMenu.requestDelete(equationRowMenu.rowContextMenu!.rowIndex)}
               onMoveDown={() => equationRowMenu.moveRowAt(equationRowMenu.rowContextMenu!.rowIndex, 1)}
@@ -1008,6 +1079,47 @@ export function EquationsCellView({
           ) : null}
         </section>
       )}
+      {equationAi?.enabled && isEquationsCellAskAiOpen && !isEditingEquations && cell.collapsed !== true ? (
+        <EquationsCellAskAiPanel
+          betaPassword={equationAi.betaPassword}
+          cell={cell}
+          document={equationAi.document}
+          model={equationAi.model}
+          resultCount={equationAi.resultCount}
+          selectedPeriodIndex={equationAi.selectedPeriodIndex}
+          snapshot={equationAi.snapshot}
+          uiMessage={equationAi.uiMessage}
+          onClose={() => setIsEquationsCellAskAiOpen(false)}
+        />
+      ) : null}
+      {equationAi?.enabled && askAiVariable && !isEditingEquations && cell.collapsed !== true
+        ? (() => {
+            const equationRow = cell.equations.find(
+              (row) => !isRowComment(row) && row.name === askAiVariable
+            );
+            if (!equationRow || isRowComment(equationRow)) {
+              return null;
+            }
+            return (
+              <EquationRowAskAiPanel
+                betaPassword={equationAi.betaPassword}
+                cell={cell}
+                document={equationAi.document}
+                expression={equationRow.expression}
+                model={equationAi.model}
+                resultCount={equationAi.resultCount}
+                selectedPeriodIndex={equationAi.selectedPeriodIndex}
+                snapshot={equationAi.snapshot}
+                uiMessage={equationAi.uiMessage}
+                undoAvailable={equationAi.undoProposalId != null}
+                variable={askAiVariable}
+                onApplied={equationAi.onApplyPatch}
+                onClose={() => setAskAiVariable(null)}
+                onUndoApplied={equationAi.onUndoPatch}
+              />
+            );
+          })()
+        : null}
       <NotebookFloatingHeaderOverlay
         visible={floatingHeaderVisible}
         anchor={floatingHeaderAnchor}

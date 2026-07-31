@@ -1,0 +1,16 @@
+I will update the bound Cd equation only.
+
+```json
+{
+  "notebookAssistantToolRequests": [
+    {
+      "name": "createUpdateEquationPatch",
+      "args": {
+        "modelId": "equations-newton",
+        "variable": "Cd",
+        "expression": "alpha0 + 0.8 * alpha1 * YD + alpha2 * lag(Mh)"
+      }
+    }
+  ]
+}
+```

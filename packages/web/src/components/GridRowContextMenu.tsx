@@ -131,12 +131,14 @@ export function useGridRowContextMenu<T>({
 export function GridRowContextMenu({
   addCommentLabel,
   addItemLabel,
+  askAiLabel,
   canMoveDown,
   canMoveUp,
   menuRef,
   menuTypeLabel,
   onAdd,
   onAddComment,
+  onAskAi,
   onDelete,
   onMoveDown,
   onMoveUp,
@@ -144,12 +146,14 @@ export function GridRowContextMenu({
 }: {
   addCommentLabel?: string;
   addItemLabel: string;
+  askAiLabel?: string;
   canMoveDown: boolean;
   canMoveUp: boolean;
   menuRef: RefObject<HTMLDivElement | null>;
   menuTypeLabel: string;
   onAdd(): void;
   onAddComment?(): void;
+  onAskAi?(): void;
   onDelete(): void;
   onMoveDown(): void;
   onMoveUp(): void;
@@ -165,6 +169,14 @@ export function GridRowContextMenu({
       onContextMenu={(event) => event.preventDefault()}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      {askAiLabel && onAskAi ? (
+        <>
+          <button type="button" role="menuitem" onClick={onAskAi}>
+            {askAiLabel}
+          </button>
+          <div className="notebook-cell-context-menu-separator" role="separator" />
+        </>
+      ) : null}
       <button type="button" role="menuitem" onClick={onAdd}>
         {addItemLabel}
       </button>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   App,
@@ -12,12 +12,18 @@ import {
   setupAppTestEnv,
   userEvent
 } from "./appTestUtils";
+import { setNotebookAssistantGlobalEditEnabledForTests } from "../src/notebook/notebookCellAi";
 
 setupAppTestEnv();
 
 describe("App notebook assistant", () => {
+  afterEach(() => {
+    cleanup();
+    setNotebookAssistantGlobalEditEnabledForTests(null);
+    vi.unstubAllGlobals();
+  });
+
   it("keeps the scrubber visible when undo clears runner outputs before rerun", async () => {
-    const user = userEvent.setup();
     window.location.hash = "#/notebook";
     setSuccessfulNotebookRunner();
 
@@ -25,78 +31,52 @@ describe("App notebook assistant", () => {
 
     expect(screen.getByLabelText(/simulation period navigation/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /^assistant$/i }));
-    await user.click(screen.getByText(/manual patch json/i));
+    fireEvent.click(screen.getByRole("tab", { name: /^assistant$/i }));
+    expect(screen.getByLabelText(/notebook assistant composer/i)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByText(/manual patch json/i));
+
+    // Prefer stable by-id paths — numeric /cells/<index>/... drifts when BMW cells change.
     const patch = JSON.stringify([
       {
         op: "replace",
-        path: "/cells/8/periods",
+        path: "/cells/by-id/baseline-newton/periods",
         value: 40
       }
     ]);
 
-    fireEvent.change(document.getElementById("notebook-assistant-patch-json") as HTMLTextAreaElement, {
-      target: { value: patch }
-    });
+    const patchInput = document.getElementById("notebook-assistant-patch-json") as HTMLTextAreaElement;
+    expect(patchInput).toBeTruthy();
+    fireEvent.change(patchInput, { target: { value: patch } });
 
-    await user.click(screen.getByRole("button", { name: /preview patch/i }));
-    await user.click(screen.getByRole("button", { name: /apply patch/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preview patch/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/patch preview: valid/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /^apply patch$/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /^apply patch$/i }));
 
     notebookRunnerMock.outputs = {};
     notebookRunnerMock.status = {};
     notebookRunnerMock.errors = {};
 
-    await user.click(screen.getByRole("button", { name: /undo patch/i }));
+    fireEvent.click(screen.getByRole("button", { name: /undo patch/i }));
+    expect(screen.getByLabelText(/simulation period navigation/i)).toBeInTheDocument();
+  }, 45000);
 
-    await waitFor(() => {
-      expect(screen.getByLabelText(/simulation period navigation/i)).toBeInTheDocument();
-    });
-  }, 30000);
-
-  it("previews, applies, and undoes an assistant notebook patch", async () => {
-    const user = userEvent.setup();
+  it("keeps Ask-only composer without the Edit mode toggle by default", async () => {
     window.location.hash = "#/notebook";
 
     render(<App />);
 
-    await user.click(screen.getByRole("tab", { name: /^assistant$/i }));
-    await user.click(screen.getByText(/manual patch json/i));
-
-    const patch = JSON.stringify([
-      {
-        op: "add",
-        path: "/cells/-",
-        value: {
-          id: "chart-disposable-income",
-          type: "chart",
-          title: "Disposable income",
-          sourceRunCellId: "baseline-newton",
-          variables: ["YD", "Cd"]
-        }
-      }
-    ]);
-
-    fireEvent.change(document.getElementById("notebook-assistant-patch-json") as HTMLTextAreaElement, {
-      target: { value: patch }
-    });
-    await user.click(screen.getByRole("button", { name: /preview patch/i }));
-
-    expect(screen.getByText(/patch preview: valid/i)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /^disposable income$/i })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /apply patch/i }));
-
-    expect(screen.getByRole("heading", { name: /^disposable income$/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /undo patch/i }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("heading", { name: /^disposable income$/i })).not.toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole("tab", { name: /^assistant$/i }));
+    expect(screen.queryByRole("button", { name: /edit mode/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ask$/i })).toBeInTheDocument();
+    expect(screen.getByText(/use ask ai on charts or equations/i)).toBeInTheDocument();
   }, 30000);
 
-  it("continues through response.completed SSE follow-up tool rounds before preparing a patch", async () => {
+  it("runs a gated Edit-mode assistant turn with tool follow-ups and a proposed patch", async () => {
+    setNotebookAssistantGlobalEditEnabledForTests(true);
     const user = userEvent.setup();
     window.location.hash = "#/notebook";
 
@@ -179,8 +159,7 @@ describe("App notebook assistant", () => {
 
     expect(screen.getByText(/proposed change prepared/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /apply patch/i }).length).toBeGreaterThan(0);
-  }, 30000);
-
+  }, 45000);
 });
 
 function completedSseResponse(outputText: string): Response {

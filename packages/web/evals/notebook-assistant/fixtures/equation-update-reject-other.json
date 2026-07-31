@@ -1,0 +1,19 @@
+{
+  "id": "equation-update-reject-other",
+  "label": "Equation Ask AI rejects a different variable",
+  "mode": "ask",
+  "scope": {
+    "kind": "equation-update",
+    "cellId": "equations-newton",
+    "modelId": "equations-newton",
+    "variable": "Cd"
+  },
+  "question": "Change Y instead.",
+  "notebookPath": "../../public/notebook-examples/bmw.example.notebook.json",
+  "savedResponsePath": "responses/equation-update-reject-other.raw.txt",
+  "expected": {
+    "blockedToolNames": ["createUpdateEquationPatch"],
+    "patch": false,
+    "scopeViolations": true
+  }
+}

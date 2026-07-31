@@ -1,0 +1,16 @@
+I will update the bound chart options only.
+
+```json
+{
+  "notebookAssistantToolRequests": [
+    {
+      "name": "createUpdateChartOptionsPatch",
+      "args": {
+        "chartId": "baseline-chart",
+        "axisMode": "separate",
+        "niceScale": false
+      }
+    }
+  ]
+}
+```

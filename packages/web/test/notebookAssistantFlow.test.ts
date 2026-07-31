@@ -8,6 +8,7 @@ import {
   extractNotebookPatchProposal,
   extractTextChartVariablesToolRequest,
   filterNotebookAssistantToolRequestsForMode,
+  getNotebookAssistantModeContract,
   getPatchFromNotebookAssistantToolResults,
   preferMatrixLookupForMatrixEditQuestion,
   summarizeNotebookAssistantToolResults
@@ -355,6 +356,12 @@ describe("notebook assistant flow", () => {
       allowed: requests,
       blocked: []
     });
+  });
+
+  it("describes Ask mode as read-only and points users to cell Ask AI", () => {
+    expect(getNotebookAssistantModeContract("ask")).toContain("Ask AI on that cell or row");
+    expect(getNotebookAssistantModeContract("ask")).not.toContain("Switch to Edit");
+    expect(getNotebookAssistantModeContract("edit")).toContain("helper-generated validated patch");
   });
 
   it("keeps getMatrix requests when args are omitted", () => {

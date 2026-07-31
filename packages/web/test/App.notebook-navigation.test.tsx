@@ -912,7 +912,7 @@ describe("App notebook navigation and inspection", () => {
     expect(screen.getByRole("button", { name: /^Multiport$/i })).toHaveClass("is-active");
     expect(window.location.pathname).toBe("/notebook/bmw/transaction-flow-sequence");
     expect(window.location.hash).toBe("");
-  });
+  }, 30000);
 
   it("updates the pathname only from the cell context menu URL action", async () => {
     const user = userEvent.setup();

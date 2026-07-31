@@ -19,30 +19,31 @@ Related design note: [Notebook Assistant Context Optimization](notebook-assistan
 
 ## Browser Assistant Turn
 
-The browser Assistant panel owns the live user-facing round trip. It is a bounded multi-step flow:
+The browser Assistant panel owns the live user-facing round trip for **Ask**. It is a bounded multi-step flow:
 
-1. Build notebook context from the current notebook document, assistant mode, selected variable, selected period, runtime status/results, UI hints, available tool names, and tool syntax.
+1. Build notebook context from the current notebook document, Ask mode, selected variable, selected period, runtime status/results, UI hints, available tool names, and tool syntax.
 2. Send the first request to `/v1/notebook-assistant/ask` with recent chat messages, model, beta password if needed, context, and user question.
 3. Stream the first assistant response into the current assistant message.
 4. Parse `notebookAssistantToolRequests` with `extractNotebookAssistantToolRequests`.
-5. Filter requests with `filterNotebookAssistantToolRequestsForMode`.
+5. Filter requests with `filterNotebookAssistantToolRequestsForMode` (Ask = read tools only).
 6. Dispatch allowed tools locally with `dispatchNotebookAssistantToolRequests`.
-7. If helper tools produce a patch, attach the previewable patch immediately to the assistant message.
-8. If Edit mode helper tools all succeed and produce a patch, synthesize the final patch-ready answer locally and skip the follow-up model request.
-9. Otherwise, build a compact follow-up question with summarized tool results using `buildNotebookAssistantToolFollowupQuestion`.
-10. Send a second request to `/v1/notebook-assistant/ask` with the tool results follow-up.
-11. Stream the final assistant response into the same assistant message.
-12. Check the final response for direct patch proposals or text-derived chart update proposals.
+7. Build a compact follow-up question with summarized tool results using `buildNotebookAssistantToolFollowupQuestion` when needed.
+8. Send a second request to `/v1/notebook-assistant/ask` with the tool results follow-up.
+9. Stream the final assistant response into the same assistant message.
 
-This is a bounded one-tool-round loop. Many successful Edit helper patches complete with one model request; other tool paths may still use a compact second request. It is not an unbounded agent loop that repeatedly calls tools until convergence.
+Cell Ask AI uses `runScopedNotebookAssistantProposal` / `processScopedNotebookAssistantResponse` with scopes such as `chart-update` and `equation-update`, then validates patches with `validateNotebookPatchAgainstScope`.
+
+Legacy global Edit (gated by `VITE_NOTEBOOK_ASSISTANT_EDIT=1`) retains the older patch-helper loop, local patch answers, and direct patch fallbacks.
+
+This is a bounded one-tool-round loop. It is not an unbounded agent loop that repeatedly calls tools until convergence.
 
 ## Mode Contract
 
-Ask mode can inspect notebook state and request read-only tools. It must not create, validate, preview, explain, or return notebook patches. If a user asks for a notebook change in Ask mode, the assistant should direct them to Edit mode.
+The global Assistant is Ask-only: inspect notebook state and request read-only tools. It must not create, validate, preview, explain, or return notebook patches. If a user asks for a notebook change in Ask mode, the assistant should direct them to Ask AI on a chart or equation.
 
-Edit mode prepares changes for user review. It should use read tools when needed to resolve run ids, chart ids, model ids, variables, or runtime data. For supported changes, it should request helper patch tools rather than hand-writing raw patch JSON.
+Cell Ask AI prepares scoped proposals for user review. Chart AI may only update the bound chart; equation AI may only update the bound equation. The browser enforces scope after the model responds by filtering tools and validating patch paths.
 
-The browser enforces the mode boundary after the model responds by filtering requested tools. Ask mode blocks patch tools even if the model requests them.
+Legacy Edit mode (flag-gated) prepares changes for user review with the full helper surface. The browser still filters tools by mode.
 
 ## Patch Handling
 

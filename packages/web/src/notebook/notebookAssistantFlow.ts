@@ -319,7 +319,7 @@ export function getPatchFromNotebookAssistantToolResults(
 export function getNotebookAssistantModeContract(mode: NotebookAssistantMode): string {
   return mode === "edit"
     ? "Use read tools when needed, then prefer helper-generated validated patch proposals for notebook edits. Never apply changes directly."
-    : "Answer questions and inspect notebook state with read tools only. Do not create or return notebook patch proposals in Ask mode.";
+    : "Answer questions and inspect notebook state with read tools only. Do not create or return notebook patch proposals. For chart or equation changes, use Ask AI on that cell or row.";
 }
 
 export function resolveNotebookAssistantMode(value: string | null): NotebookAssistantMode {

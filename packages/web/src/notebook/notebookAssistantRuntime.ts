@@ -19,13 +19,21 @@ import {
   type NotebookAssistantMode
 } from "./notebookAssistantFlow";
 import {
+  getNotebookAssistantScopeContract,
+  getNotebookAssistantScopeToolNames,
+  resolveNotebookAssistantScopeTarget,
+  summarizeNotebookAssistantScopeToolSyntax,
+  buildEquationsModelContextPayload,
+  type NotebookAssistantProposalScope
+} from "./notebookAssistantScope";
+import {
   summarizeNotebookAssistantTools,
   summarizeNotebookAssistantToolSyntax,
   summarizeNotebookEquationExpressionSyntax,
   type NotebookAssistantToolResult
 } from "./notebookAssistantTools";
 import { summarizeCellTypes } from "./notebookSourceWorkflow";
-import type { NotebookDocument } from "./types";
+import type { EquationsCell, NotebookDocument } from "./types";
 
 export const NOTEBOOK_ASSISTANT_API_URL = resolveNotebookAssistantApiUrl();
 export const NOTEBOOK_ASSISTANT_DEFAULT_MODEL = "gpt-5.4-mini";
@@ -239,6 +247,106 @@ export function buildNotebookAssistantContext(args: {
       args.uiMessage ? `Current UI message: ${args.uiMessage}` : null,
       "Notebook JSON:",
       notebookJson
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join("\n")
+  );
+}
+
+export function buildScopedNotebookAssistantContext(args: {
+  document: NotebookDocument;
+  resultCount: number;
+  scope: NotebookAssistantProposalScope;
+  selectedPeriodIndex: number;
+  uiMessage?: string | null;
+}): string {
+  if (args.scope.kind === "global-ask") {
+    return buildNotebookAssistantContext({
+      assistantMode: "ask",
+      document: args.document,
+      inspectorContext: null,
+      resultCount: args.resultCount,
+      selectedPeriodIndex: args.selectedPeriodIndex,
+      uiMessage: args.uiMessage ?? null
+    });
+  }
+
+  const target = resolveNotebookAssistantScopeTarget(args.document, args.scope);
+  if (!target.ok) {
+    return truncateNotebookAssistantContext(
+      [
+        `Assistant scope: ${args.scope.kind}`,
+        `Assistant scope contract: ${getNotebookAssistantScopeContract(args.scope)}`,
+        `Scope target error: ${target.message}`
+      ].join("\n")
+    );
+  }
+
+  const scopedPayload =
+    args.scope.kind === "chart-update" && "chart" in target
+      ? compactObject({
+          v: 1,
+          fmt: "sfcr-assistant-cell-scope",
+          scope: args.scope.kind,
+          nb: [args.document.id, args.document.title],
+          chart: compactObject({
+            id: target.chart.id,
+            title: target.chart.title,
+            sourceRunCellId: target.chart.sourceRunCellId,
+            variables: target.chart.variables,
+            axisMode: target.chart.axisMode,
+            compareMode: target.chart.compareMode,
+            niceScale: target.chart.niceScale,
+            referenceTrace: target.chart.referenceTrace,
+            showScenarioShocks: target.chart.showScenarioShocks,
+            timeRangeInclusive: target.chart.timeRangeInclusive,
+            yAxisTickCount: target.chart.yAxisTickCount
+          }),
+          resultCount: args.resultCount,
+          sel: [args.selectedPeriodIndex],
+          ui: args.uiMessage ?? null,
+          tools: listScopedToolNames(args.scope)
+        })
+      : args.scope.kind === "equation-update" && "equationsCell" in target && "equationName" in target
+        ? compactObject({
+            v: 1,
+            fmt: "sfcr-assistant-cell-scope",
+            scope: args.scope.kind,
+            nb: [args.document.id, args.document.title],
+            model: buildEquationsModelContextPayload(args.document, target.equationsCell, {
+              variable: target.equationName,
+              expression: target.expression,
+              description: findEquationDescription(target.equationsCell, target.equationName)
+            }),
+            resultCount: args.resultCount,
+            sel: [args.selectedPeriodIndex],
+            ui: args.uiMessage ?? null,
+            tools: listScopedToolNames(args.scope)
+          })
+        : args.scope.kind === "equations-cell-ask" && "equationsCell" in target
+          ? compactObject({
+              v: 1,
+              fmt: "sfcr-assistant-cell-scope",
+              scope: args.scope.kind,
+              nb: [args.document.id, args.document.title],
+              model: buildEquationsModelContextPayload(args.document, target.equationsCell),
+              resultCount: args.resultCount,
+              sel: [args.selectedPeriodIndex],
+              ui: args.uiMessage ?? null,
+              tools: listScopedToolNames(args.scope)
+            })
+        : null;
+
+  return truncateNotebookAssistantContext(
+    [
+      `Assistant scope: ${args.scope.kind}`,
+      `Assistant scope contract: ${getNotebookAssistantScopeContract(args.scope)}`,
+      `Tool syntax:\n${summarizeNotebookAssistantScopeToolSyntax(args.scope)}`,
+      args.scope.kind === "equation-update" || args.scope.kind === "equations-cell-ask"
+        ? `Equation syntax:\n${summarizeNotebookEquationExpressionSyntax()}`
+        : null,
+      "Scoped notebook JSON:",
+      JSON.stringify(scopedPayload)
     ]
       .filter((line): line is string => Boolean(line))
       .join("\n")
@@ -804,4 +912,20 @@ function truncateNotebookAssistantContext(context: string): string {
   }
 
   return `${context.slice(0, maxLength)}\n\n[Context truncated for size.]`;
+}
+
+function listScopedToolNames(scope: NotebookAssistantProposalScope): string[] {
+  return [...getNotebookAssistantScopeToolNames(scope)];
+}
+
+function findEquationDescription(equationsCell: EquationsCell, variable: string): string | undefined {
+  for (const row of equationsCell.equations) {
+    if (isRowComment(row)) {
+      continue;
+    }
+    if (row.name === variable) {
+      return row.desc;
+    }
+  }
+  return undefined;
 }

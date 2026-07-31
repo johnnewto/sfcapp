@@ -1,0 +1,14 @@
+{
+  "id": "chart-update-reject-other",
+  "label": "Chart Ask AI rejects a different chart id",
+  "mode": "ask",
+  "scope": { "kind": "chart-update", "cellId": "baseline-chart" },
+  "question": "Update scenario-1-chart to show only Y.",
+  "notebookPath": "../../public/notebook-examples/bmw.example.notebook.json",
+  "savedResponsePath": "responses/chart-update-reject-other.raw.txt",
+  "expected": {
+    "blockedToolNames": ["createUpdateChartVariablesPatch"],
+    "patch": false,
+    "scopeViolations": true
+  }
+}

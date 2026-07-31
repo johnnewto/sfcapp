@@ -71,6 +71,7 @@ import {
   type NotebookPatchResult
 } from "./notebookPatch";
 import { NotebookCellView, type NotebookCellViewProps } from "./NotebookCellView";
+import { isNotebookAssistantGlobalEditEnabled, isNotebookCellAiEnabled } from "./notebookCellAi";
 import { NotebookCommandActions } from "./components/NotebookCommandActions";
 import { NotebookCommandsPanel } from "./components/NotebookCommandsPanel";
 import { NotebookCommandsToggle } from "./components/NotebookCommandsToggle";
@@ -901,13 +902,18 @@ export function NotebookApp() {
       NOTEBOOK_ASSISTANT_DEFAULT_MODEL
     );
   });
+  const globalAssistantEditEnabled = isNotebookAssistantGlobalEditEnabled();
   const [assistantMode, setAssistantMode] = useState<NotebookAssistantMode>(() => {
+    if (!isNotebookAssistantGlobalEditEnabled()) {
+      return "ask";
+    }
     if (typeof window === "undefined") {
       return "ask";
     }
 
     return resolveNotebookAssistantMode(window.localStorage.getItem(NOTEBOOK_ASSISTANT_MODE_STORAGE_KEY));
   });
+  const [cellAiUndoProposalId, setCellAiUndoProposalId] = useState<string | null>(null);
   const [inspectorContext, setInspectorContext] = useState<VariableInspectRequest | null>(null);
   const [variableUsagesOpen, setVariableUsagesOpen] = useState(false);
   const [matrixGraphCharts, setMatrixGraphCharts] = useState<MatrixGraphChartEntry[]>([]);
@@ -3194,6 +3200,9 @@ export function NotebookApp() {
   }
 
   function handleAssistantModeChange(nextMode: NotebookAssistantMode): void {
+    if (!globalAssistantEditEnabled && nextMode === "edit") {
+      return;
+    }
     setAssistantMode(nextMode);
     window.localStorage.setItem(NOTEBOOK_ASSISTANT_MODE_STORAGE_KEY, nextMode);
   }
@@ -3203,7 +3212,9 @@ export function NotebookApp() {
     question?: string;
   } = {}): Promise<void> {
     const question = (args.question ?? assistantPromptText).trim();
-    const activeAssistantMode = args.mode ?? assistantMode;
+    const requestedMode = args.mode ?? assistantMode;
+    const activeAssistantMode =
+      globalAssistantEditEnabled && requestedMode === "edit" ? "edit" : "ask";
     if (!question || isAssistantAsking || !NOTEBOOK_ASSISTANT_API_URL) {
       return;
     }
@@ -3463,7 +3474,7 @@ export function NotebookApp() {
             message.id === assistantMessageId
               ? {
                   ...message,
-                  text: "Ask mode can inspect notebook state with read tools, but it will not create patch proposals. Switch to Edit mode to prepare notebook changes for preview."
+                  text: "Ask mode can inspect notebook state with read tools, but it will not create patch proposals. Use Ask AI on a chart or equation to prepare a scoped change for review."
                 }
               : message
           )
@@ -3662,7 +3673,7 @@ export function NotebookApp() {
               message.id === assistantMessageId
                 ? {
                     ...message,
-                    text: "Ask mode can inspect notebook state with read tools, but it will not create patch proposals. Switch to Edit mode to prepare notebook changes for preview."
+                    text: "Ask mode can inspect notebook state with read tools, but it will not create patch proposals. Use Ask AI on a chart or equation to prepare a scoped change for review."
                   }
                 : message
             )
@@ -3910,6 +3921,58 @@ export function NotebookApp() {
     }
   }
 
+  const handleApplyCellAiPatch = useCallback(
+    (args: {
+      document: NotebookDocument;
+      patch: NotebookPatch;
+      proposalId: string;
+    }) => {
+      commitNotebookDocument("assistant patch", args.document, {
+        messageId: args.proposalId
+      });
+      setSelectedPeriodIndex(0);
+      setAutoRunRevision((current) => current + 1);
+      setCellAiUndoProposalId(args.proposalId);
+      setUiMessage("Applied cell AI patch.");
+    },
+    [commitNotebookDocument]
+  );
+
+  const handleUndoCellAiPatch = useCallback(
+    (proposalId: string) => {
+      setNotebookJournal((current) => {
+        const previousEntry = current.past.at(-1);
+        if (
+          !previousEntry ||
+          previousEntry.label !== "assistant patch" ||
+          previousEntry.messageId !== proposalId
+        ) {
+          setUiMessage("No matching cell AI patch is available to undo.");
+          return current;
+        }
+
+        setCellAiUndoProposalId(null);
+        setSelectedPeriodIndex(0);
+        setAutoRunRevision((revision) => revision + 1);
+        setUiMessage(`Undid ${previousEntry.label}.`);
+
+        return {
+          future: [
+            {
+              document: current.present,
+              label: previousEntry.label,
+              messageId: previousEntry.messageId
+            },
+            ...current.future
+          ],
+          past: current.past.slice(0, -1),
+          present: previousEntry.document
+        };
+      });
+    },
+    []
+  );
+
   function buildNotebookAssistantSnapshot(): NotebookAssistantSnapshot {
     return {
       document: notebookDocument,
@@ -4031,11 +4094,46 @@ export function NotebookApp() {
   }, []);
 
   const buildNotebookCellViewProps = useCallback(
-    (cell: (typeof notebookDocument.cells)[number], overrides: Partial<NotebookCellViewProps> = {}) =>
-      ({
+    (cell: (typeof notebookDocument.cells)[number], overrides: Partial<NotebookCellViewProps> = {}) => {
+      const cellAiEnabled = isNotebookCellAiEnabled();
+      const resultCount = Object.values(runner.outputs).filter((output) => output?.type === "result").length;
+      const undoProposalId =
+        nextUndoEntry?.label === "assistant patch" &&
+        nextUndoEntry.messageId === cellAiUndoProposalId
+          ? cellAiUndoProposalId
+          : null;
+      const cellAiProps = cellAiEnabled
+        ? {
+            betaPassword: assistantBetaPassword,
+            document: notebookDocument,
+            enabled: true,
+            model: assistantModel,
+            onApplyPatch: handleApplyCellAiPatch,
+            onUndoPatch: handleUndoCellAiPatch,
+            resultCount,
+            selectedPeriodIndex,
+            snapshot: {
+              document: notebookDocument,
+              runtime: {
+                errors: runner.errors,
+                outputs: runner.outputs,
+                status: runner.status
+              },
+              selectedCellId: cell.id,
+              selectedPeriodIndex,
+              selectedVariable: inspectorContext?.selectedVariable
+            },
+            uiMessage,
+            undoProposalId
+          }
+        : null;
+
+      return {
         activeEditorCellId,
         cell,
         cells: notebookDocument.cells,
+        chartAi: cellAiProps,
+        equationAi: cellAiProps,
         notebookScopeId,
         getModelCurrentValues: (ref) => getCurrentValueMapForModelRef(ref, deferredPeriodIndex),
         getModelLaggedCurrentValues: (ref) => getLaggedValueMapForModelRef(ref, deferredPeriodIndex),
@@ -4072,11 +4170,17 @@ export function NotebookApp() {
         onRunTourRequest: handleRunTourRequest,
         showRunTourButton: cell.id === firstMarkdownCellId,
         ...overrides
-      }) satisfies NotebookCellViewProps,
+      } satisfies NotebookCellViewProps;
+    },
     [
       activeEditorCellId,
+      assistantBetaPassword,
+      assistantModel,
+      cellAiUndoProposalId,
       deleteCell,
       firstMarkdownCellId,
+      handleApplyCellAiPatch,
+      handleUndoCellAiPatch,
       handleRunTourRequest,
       getCurrentValueMapForModelRef,
       getLaggedValueMapForModelRef,
@@ -4095,15 +4199,19 @@ export function NotebookApp() {
       mainColumnElement,
       maxResultPeriodIndex,
       moveCell,
-      notebookDocument.cells,
+      nextUndoEntry?.label,
+      nextUndoEntry?.messageId,
+      notebookDocument,
       notebookDocument.metadata.timeAxis?.startYear,
       notebookScopeId,
       replaceCells,
       runner,
       selectNotebookCell,
       selectedCellId,
+      selectedPeriodIndex,
       deferredPeriodIndex,
       setNotebookCellUrl,
+      uiMessage,
       updateCell,
       updateModelCell
     ]
@@ -4799,9 +4907,9 @@ export function NotebookApp() {
                 <div>
                   <h2>Assistant</h2>
                   <p className="panel-subtitle">
-                    {assistantMode === "edit"
+                    {globalAssistantEditEnabled && assistantMode === "edit"
                       ? "Prepare validated notebook changes for review."
-                      : "Ask questions and inspect notebook state."}
+                      : "Ask questions and inspect notebook state. Use Ask AI on charts or equations for scoped edits."}
                   </p>
                 </div>
               </div>
@@ -4845,7 +4953,9 @@ export function NotebookApp() {
                       Runs fixed prompts through the same live assistant request and tool loop as the composer.
                     </span>
                     <div className="button-row">
-                      {NOTEBOOK_ASSISTANT_LOCAL_LIVE_TESTS.map((test) => (
+                      {NOTEBOOK_ASSISTANT_LOCAL_LIVE_TESTS.filter(
+                        (test) => globalAssistantEditEnabled || test.mode === "ask"
+                      ).map((test) => (
                         <button
                           key={`${test.mode}-${test.label}`}
                           type="button"
@@ -5034,27 +5144,31 @@ export function NotebookApp() {
                     <label className="field-label" htmlFor="notebook-assistant-question">
                       Question
                     </label>
-                    <div className="notebook-assistant-mode-switch notebook-assistant-mode-switch-compact" aria-label="Assistant mode">
-                      <button
-                        type="button"
-                        aria-label="Ask mode"
-                        className={assistantMode === "ask" ? "is-active" : ""}
-                        onClick={() => handleAssistantModeChange("ask")}
-                      >
-                        Ask
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Edit mode"
-                        className={assistantMode === "edit" ? "is-active" : ""}
-                        onClick={() => handleAssistantModeChange("edit")}
-                      >
-                        Edit
-                      </button>
-                    </div>
+                    {globalAssistantEditEnabled ? (
+                      <div className="notebook-assistant-mode-switch notebook-assistant-mode-switch-compact" aria-label="Assistant mode">
+                        <button
+                          type="button"
+                          aria-label="Ask mode"
+                          className={assistantMode === "ask" ? "is-active" : ""}
+                          onClick={() => handleAssistantModeChange("ask")}
+                        >
+                          Ask
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Edit mode"
+                          className={assistantMode === "edit" ? "is-active" : ""}
+                          onClick={() => handleAssistantModeChange("edit")}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="status-hint">
-                    {getNotebookAssistantModeContract(assistantMode)}
+                    {getNotebookAssistantModeContract(
+                      globalAssistantEditEnabled && assistantMode === "edit" ? "edit" : "ask"
+                    )}
                   </div>
                   <textarea
                     id="notebook-assistant-question"
@@ -5062,7 +5176,7 @@ export function NotebookApp() {
                     value={assistantPromptText}
                     onChange={(event) => setAssistantPromptText(event.target.value)}
                     placeholder={
-                      assistantMode === "edit"
+                      globalAssistantEditEnabled && assistantMode === "edit"
                         ? "Describe the notebook change to prepare as a validated patch."
                         : "Ask about this notebook, a variable, a matrix, an error, or a result."
                     }
@@ -5073,7 +5187,11 @@ export function NotebookApp() {
                     type="submit"
                     disabled={!assistantPromptText.trim() || isAssistantAsking || !NOTEBOOK_ASSISTANT_API_URL}
                   >
-                    {isAssistantAsking ? "Working..." : assistantMode === "edit" ? "Prepare edit" : "Ask"}
+                    {isAssistantAsking
+                      ? "Working..."
+                      : globalAssistantEditEnabled && assistantMode === "edit"
+                        ? "Prepare edit"
+                        : "Ask"}
                   </button>
                 </div>
               </form>

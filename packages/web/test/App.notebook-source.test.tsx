@@ -110,7 +110,8 @@ describe("App notebook source and import workflows", () => {
     await openNotebookSourceEditor(user);
     const textarea = getNotebookSourceTextArea();
 
-    setNotebookSourceValue(textarea.value.replace("formatVersion: 1", "formatVersion: 2"));
+    // Keep a valid YAML envelope so the failure lands in schema validation (not header parse).
+    setNotebookSourceValue(textarea.value.replace("  - markdown:\n", "  - not-a-real-cell:\n"));
 
     await waitFor(() => {
       expect(screen.getByRole("region", { name: /notebook source validation/i })).toHaveTextContent(
@@ -129,8 +130,9 @@ describe("App notebook source and import workflows", () => {
     await openNotebookSourceEditor(user);
     const textarea = getNotebookSourceTextArea();
 
-    // Compact equation rows are [name, expression, ...]; blank the first expression.
-    setNotebookSourceValue(textarea.value.replace(/\[Cs, Cd,/, "[Cs, ,"));
+    // Compact equation rows are [name, expression, ...]. Use a quoted empty expression so YAML
+    // still parses and model validation can report the missing expression.
+    setNotebookSourceValue(textarea.value.replace(/\[Cs, Cd,/, '[Cs, "",'));
 
     await waitFor(() => {
       expect(screen.getByRole("region", { name: /notebook source validation/i })).toHaveTextContent(

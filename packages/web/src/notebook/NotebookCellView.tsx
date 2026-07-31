@@ -87,6 +87,7 @@ import {
   getNextChartCompareMode,
   resolveChartCompareMode
 } from "./chartCompareMode";
+import { ChartCellAskAiPanel } from "./components/ChartCellAskAiPanel";
 import { ChartCellView, RunCellView } from "./components/RunChartViews";
 import type { MatrixGraphSliceHighlight } from "./graphDocumentHighlight";
 import { MatrixCellView } from "./components/MatrixCellView";
@@ -111,11 +112,14 @@ import type {
   ModelCell,
   NotebookCellInsertType,
   NotebookCell,
+  NotebookDocument,
   RunCell,
   SequenceCell,
   SolverCell,
   TableCell
 } from "./types";
+import type { NotebookAssistantSnapshot } from "./notebookAssistantTools";
+import type { NotebookPatch } from "./notebookPatch";
 import { useNotebookRunner } from "./useNotebookRunner";
 import { useViewportObserver } from "../hooks/useViewportObserver";
 
@@ -200,10 +204,32 @@ interface MatrixSequenceViewState {
 
 type NotebookCellPresentation = "canvas" | "pinned-panel";
 
+export interface NotebookChartCellAiProps {
+  betaPassword: string;
+  document: NotebookDocument;
+  enabled: boolean;
+  model: string;
+  onApplyPatch(args: {
+    document: NotebookDocument;
+    patch: NotebookPatch;
+    proposalId: string;
+  }): void;
+  onUndoPatch(proposalId: string): void;
+  resultCount: number;
+  selectedPeriodIndex: number;
+  snapshot: NotebookAssistantSnapshot;
+  uiMessage?: string | null;
+  undoProposalId: string | null;
+}
+
+export type NotebookEquationCellAiProps = NotebookChartCellAiProps;
+
 export interface NotebookCellViewProps {
   activeEditorCellId: string | null;
   cell: NotebookCell;
   cells: NotebookCell[];
+  chartAi?: NotebookChartCellAiProps | null;
+  equationAi?: NotebookEquationCellAiProps | null;
   notebookScopeId: string;
   getModelCurrentValues(ref: {
     modelId?: string;
@@ -259,6 +285,8 @@ function NotebookCellViewComponent({
   activeEditorCellId,
   cell,
   cells,
+  chartAi = null,
+  equationAi = null,
   notebookScopeId,
   getModelCurrentValues,
   getModelLaggedCurrentValues,
@@ -302,6 +330,7 @@ function NotebookCellViewComponent({
       : null;
   const laggedPeriodLabel = selectedPeriodIndex > 0 ? `period ${selectedPeriodIndex}` : undefined;
   const [isEditingSource, setIsEditingSource] = useState(false);
+  const [isChartAskAiOpen, setIsChartAskAiOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState(() => cell.title);
   const [sourceDraft, setSourceDraft] = useState(() => serializeCellBody(cell));
   const [moreDraft, setMoreDraft] = useState(() => cell.more ?? "");
@@ -976,6 +1005,19 @@ function NotebookCellViewComponent({
                     ) : null}
                     {cell.type === "chart" && !isEditingSource ? (
                       <>
+                        {chartAi?.enabled ? (
+                          <button
+                            type="button"
+                            className={`notebook-run-button notebook-chart-ask-ai-toggle${
+                              isChartAskAiOpen ? " is-active" : ""
+                            }`}
+                            aria-expanded={isChartAskAiOpen}
+                            aria-controls={`chart-ask-ai-${cell.id}`}
+                            onClick={() => setIsChartAskAiOpen((current) => !current)}
+                          >
+                            Ask AI
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className={`notebook-run-button notebook-chart-compare-toggle${
@@ -1285,6 +1327,7 @@ function NotebookCellViewComponent({
             currentValues={getModelCurrentValues({ modelId: cell.modelId })}
             laggedCurrentValues={getModelLaggedCurrentValues({ modelId: cell.modelId })}
             laggedPeriodLabel={laggedPeriodLabel}
+            equationAi={equationAi}
             externals={findExternalsCell(cells, cell.modelId)?.externals ?? []}
             initialValuesCount={
               findInitialValuesCell(cells, cell.modelId)?.initialValues.length ?? 0
@@ -1493,43 +1536,63 @@ function NotebookCellViewComponent({
         {shouldRenderViewportDeferredBody(cell, isCollapsed, isEditingSource, shouldMountViewportDeferredBody) ? (
           <div className="notebook-cell-deferred-body" ref={deferredBodyRef}>
             {cell.type === "chart" ? (
-              <ChartCellView
-                cell={cell}
-                cells={cells}
-                currentValues={chartInspectionContext?.currentValues ?? {}}
-                editor={chartInspectionContext?.editor ?? null}
-                onAddVariable={(variableName) =>
-                  onCellChange(cell.id, (current) =>
-                    current.type === "chart" ? appendChartVariable(current, variableName) : current
-                  )
-                }
-                onMoveVariable={(variableName, direction) =>
-                  onCellChange(cell.id, (current) =>
-                    current.type === "chart"
-                      ? moveChartSeriesByDisplayName(current, variableName, direction)
-                      : current
-                  )
-                }
-                onRemoveVariable={(variableName) =>
-                  onCellChange(cell.id, (current) =>
-                    current.type === "chart"
-                      ? removeChartSeriesByDisplayName(current, variableName)
-                      : current
-                  )
-                }
-                onTimeRangeInclusiveChange={(range) =>
-                  onCellChange(cell.id, (current) =>
-                    current.type === "chart" ? setChartTimeRangeInclusive(current, range) : current
-                  )
-                }
-                onVariableInspectRequest={onVariableInspectRequest}
-                originYear={timeAxisStartYear}
-                runner={runner}
-                selectedPeriodIndex={selectedPeriodIndex}
-                highlightedVariable={highlightedVariable}
-                variableDescriptions={variableDescriptions}
-                variableUnitMetadata={variableUnitMetadata}
-              />
+              <>
+                <ChartCellView
+                  cell={cell}
+                  cells={cells}
+                  currentValues={chartInspectionContext?.currentValues ?? {}}
+                  editor={chartInspectionContext?.editor ?? null}
+                  onAddVariable={(variableName) =>
+                    onCellChange(cell.id, (current) =>
+                      current.type === "chart" ? appendChartVariable(current, variableName) : current
+                    )
+                  }
+                  onMoveVariable={(variableName, direction) =>
+                    onCellChange(cell.id, (current) =>
+                      current.type === "chart"
+                        ? moveChartSeriesByDisplayName(current, variableName, direction)
+                        : current
+                    )
+                  }
+                  onRemoveVariable={(variableName) =>
+                    onCellChange(cell.id, (current) =>
+                      current.type === "chart"
+                        ? removeChartSeriesByDisplayName(current, variableName)
+                        : current
+                    )
+                  }
+                  onTimeRangeInclusiveChange={(range) =>
+                    onCellChange(cell.id, (current) =>
+                      current.type === "chart" ? setChartTimeRangeInclusive(current, range) : current
+                    )
+                  }
+                  onVariableInspectRequest={onVariableInspectRequest}
+                  originYear={timeAxisStartYear}
+                  runner={runner}
+                  selectedPeriodIndex={selectedPeriodIndex}
+                  highlightedVariable={highlightedVariable}
+                  variableDescriptions={variableDescriptions}
+                  variableUnitMetadata={variableUnitMetadata}
+                />
+                {chartAi?.enabled && isChartAskAiOpen ? (
+                  <div id={`chart-ask-ai-${cell.id}`}>
+                    <ChartCellAskAiPanel
+                      betaPassword={chartAi.betaPassword}
+                      cell={cell}
+                      document={chartAi.document}
+                      model={chartAi.model}
+                      resultCount={chartAi.resultCount}
+                      selectedPeriodIndex={chartAi.selectedPeriodIndex}
+                      snapshot={chartAi.snapshot}
+                      uiMessage={chartAi.uiMessage}
+                      undoAvailable={chartAi.undoProposalId != null}
+                      onApplied={chartAi.onApplyPatch}
+                      onClose={() => setIsChartAskAiOpen(false)}
+                      onUndoApplied={chartAi.onUndoPatch}
+                    />
+                  </div>
+                ) : null}
+              </>
             ) : null}
             {cell.type === "chart-grid" ? (
               <div

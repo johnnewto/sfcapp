@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 
+/**
+ * Per-cell source/editor flows. Cell Ask AI Apply/Discard/Undo lives in
+ * `App.notebook-cell-ai.test.tsx` (phase 5 verification gate).
+ */
+
 import { render, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

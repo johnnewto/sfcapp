@@ -1,0 +1,20 @@
+{
+  "id": "equation-explain-cd",
+  "label": "Equation Ask AI explains Cd without proposing a patch",
+  "mode": "ask",
+  "scope": {
+    "kind": "equation-update",
+    "cellId": "equations-newton",
+    "modelId": "equations-newton",
+    "variable": "Cd"
+  },
+  "question": "Explain what drives Cd.",
+  "notebookPath": "../../public/notebook-examples/bmw.example.notebook.json",
+  "savedResponsePath": "responses/equation-explain-cd.raw.txt",
+  "expected": {
+    "toolNames": ["getEquation"],
+    "patch": false,
+    "forbiddenToolNames": ["createUpdateEquationPatch", "createAddEquationPatch"],
+    "scopeViolations": false
+  }
+}

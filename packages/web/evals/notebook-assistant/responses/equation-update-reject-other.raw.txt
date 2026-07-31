@@ -1,0 +1,14 @@
+```json
+{
+  "notebookAssistantToolRequests": [
+    {
+      "name": "createUpdateEquationPatch",
+      "args": {
+        "modelId": "equations-newton",
+        "variable": "Y",
+        "expression": "Cs + Is + G"
+      }
+    }
+  ]
+}
+```

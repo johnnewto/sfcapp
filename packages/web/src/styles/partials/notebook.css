@@ -1191,6 +1191,74 @@
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
   min-height: 8rem;
 }
+.notebook-chart-ask-ai {
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+}
+.notebook-chart-ask-ai-header {
+  align-items: start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+.notebook-chart-ask-ai-header .status-hint {
+  margin: 0.2rem 0 0;
+}
+.notebook-chart-ask-ai-form {
+  display: grid;
+  gap: 0.55rem;
+}
+.notebook-chart-ask-ai-answer {
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  padding-top: 0.55rem;
+}
+.notebook-equation-ask-ai {
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+}
+.notebook-equation-ask-ai-header {
+  align-items: start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+.notebook-equation-ask-ai-header .status-hint {
+  margin: 0.2rem 0 0;
+}
+.notebook-equation-ask-ai-current code {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.86em;
+}
+.notebook-equation-ask-ai-form {
+  display: grid;
+  gap: 0.55rem;
+}
+.notebook-equation-ask-ai-answer {
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  padding-top: 0.55rem;
+}
+.notebook-model-view-kind-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  justify-content: space-between;
+  width: 100%;
+}
+.notebook-equation-ask-ai-toggle {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.4rem;
+}
 .notebook-assistant-thread {
   overflow: visible;
   padding-right: 0;

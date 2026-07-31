@@ -344,6 +344,8 @@ export function NotebookEquationReadRow({
   onRowMouseEnter,
   onRowMouseLeave,
   onSelectVariableInExpression,
+  onAskAi,
+  askAiActive = false,
   initialValueText = null,
   isEditingInitialValue = false,
   draftInitialValueText = "",
@@ -384,6 +386,8 @@ export function NotebookEquationReadRow({
   onRowMouseEnter(): void;
   onRowMouseLeave(): void;
   onSelectVariableInExpression?(variableName: string): void;
+  onAskAi?(): void;
+  askAiActive?: boolean;
   initialValueText?: string | null;
   isEditingInitialValue?: boolean;
   draftInitialValueText?: string;
@@ -599,7 +603,23 @@ export function NotebookEquationReadRow({
         )}
       </span>
       <span className="notebook-model-view-kind" role="cell">
-        {formatRoleLabel(equation)}
+        <span className="notebook-model-view-kind-content">
+          <span className="notebook-model-view-kind-label">{formatRoleLabel(equation)}</span>
+          {onAskAi ? (
+            <button
+              type="button"
+              className={`notebook-run-button notebook-equation-ask-ai-toggle${askAiActive ? " is-active" : ""}`}
+              aria-pressed={askAiActive}
+              onClick={(event) => {
+                event.stopPropagation();
+                clearDeferredAction();
+                onAskAi();
+              }}
+            >
+              Ask AI
+            </button>
+          ) : null}
+        </span>
       </span>
     </div>
   );

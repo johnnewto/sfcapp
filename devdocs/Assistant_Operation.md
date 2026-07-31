@@ -14,14 +14,17 @@ The assistant can inspect notebook state and propose edits, but it does not dire
 
 ## User-Facing Modes
 
-The Assistant panel exposes two modes:
+The sidebar Assistant panel is **Ask-only**: question-answering and read-only notebook inspection (Mode 1 and Mode 2 below). It must not create patch proposals. If the user asks for a notebook change in the global panel, the assistant should direct them to **Ask AI** on the relevant chart cell or equation row.
 
-- `Ask`: question-answering and read-only notebook inspection.
-- `Edit`: validated notebook change proposals for user review.
+Scoped edits (Mode 3) use cell Ask AI:
 
-`Ask` covers Mode 1 and Mode 2 below. It can answer directly or use read-only browser tools, but it should not create patch proposals. If the user asks for a notebook change while in `Ask`, the assistant should tell them to switch to `Edit`.
+- Chart toolbar **Ask AI** — update that chart's variables or options only.
+- Equation row **Ask AI** — explain or update that existing equation only.
+- Equations cell header **Ask AI** — read-only explanation of the equations cell.
 
-`Edit` covers Mode 3 and can use Mode 4 as a fallback for unsupported edits. It may use read tools to gather ids and variable names, then should use helper-generated validated patch proposals for supported edits. Assistant-generated patches appear inline with the assistant reply as patch cards. The notebook still does not change until the user applies a patch.
+Proposals still appear for review; the notebook does not change until the user applies a patch. The Manual Patch JSON panel remains an advanced utility.
+
+Legacy global **Edit** mode is gated behind `VITE_NOTEBOOK_ASSISTANT_EDIT=1` for internal/dev use only.
 
 ## Example Prompts
 
@@ -55,39 +58,31 @@ Inspect the transaction-flow matrix and explain which rows involve household dep
 Use the notebook tools to compare current values for Y, YD, Cd, and Mh in the baseline run at the selected period.
 ```
 
-### Edit Mode Prompts
+### Cell Ask AI Prompts
 
-Edit mode is for preparing validated patch proposals. The notebook should not change until the user previews and applies the patch.
+Use these on a chart or equation Ask AI panel (not the global sidebar Ask composer). The notebook should not change until the user reviews and applies the proposal.
 
 ```text
-Use the notebook helper tools to create a validated chart patch for the BMW baseline run with variables YD and Cd.
+Update this chart to show Y, YD, and Mh.
 ```
 
 ```text
-Create a validated patch to add a chart titled Disposable income for run baseline-newton with variables YD and Cd.
+Explain what drives Cd in this equation.
 ```
 
 ```text
-Use the helper tools to update the existing baseline chart so it shows Y, YD, and Mh. Prepare the patch for preview.
+Make Cd less sensitive to current income by scaling alpha1 by 0.8.
 ```
 
 ```text
-Use the helper tools to change alpha1 in model equations-newton to 0.65 and prepare a validated patch.
-```
-
-```text
-Use the helper tools to change WageShare unit metadata to percent with displayUnit % and prepare a validated patch.
-```
-
-```text
-Before creating a chart patch, list the available runs, then use the correct run id to create a validated patch for YD and Cd.
+(Equations cell header) Explain the household block and how investment depends on the capital stock.
 ```
 
 ### Prompting Notes
 
-- In Ask mode, use words like `inspect`, `explain`, `show`, `list`, and `compare`.
-- In Edit mode, use phrases like `create a validated patch`, `prepare the patch for preview`, or `use the helper tools`.
-- If a prompt asks for a notebook change while in Ask mode, the expected behavior is to switch to Edit mode before preparing a patch.
+- In the global Ask panel, use words like `inspect`, `explain`, `show`, `list`, and `compare`.
+- For notebook changes, open Ask AI on the chart or equation you want to change.
+- If a prompt asks for a notebook change in the global Ask panel, the expected behavior is to point the user at cell Ask AI.
 
 ## Main Components
 
@@ -188,7 +183,7 @@ Preferred helper request:
 
 The browser validates the run and variables, creates a notebook patch, previews it, and shows an inline patch card on the assistant reply. The notebook remains unchanged until the user clicks `Apply` on the patch card.
 
-User-facing mode: `Edit`.
+User-facing path: cell Ask AI for chart/equation updates; legacy global Edit only when `VITE_NOTEBOOK_ASSISTANT_EDIT=1`.
 
 Current helper patch tools:
 
@@ -257,9 +252,9 @@ Example:
 
 The browser detects direct patch JSON, applies the helper-only policy for supported edits, translates supported raw patches through helper tools when possible, shows allowed or helper-generated patches inline with the assistant reply, and runs preview validation. This path is flexible, but helper-generated patches are required for common edits because the browser can validate context-aware details before producing the patch.
 
-The browser also has compatibility fallbacks for malformed semantic wrappers such as `notebookPatchProposal` with a `chart-variables-update` entry, top-level semantic objects such as `patchKind: "updateChartVariables"` or `patchKind: "updateVariableUnitMeta"`, and plain-text chart variable proposals that include an explicit variable list. When enough information is present, it converts those responses into the matching helper request. If the model directly asks to validate or preview a raw patch in Edit mode, the browser can also surface that validated patch as an inline review/apply card. The prompt still instructs the model to use `notebookAssistantToolRequests` directly.
+The browser also has compatibility fallbacks for malformed semantic wrappers such as `notebookPatchProposal` with a `chart-variables-update` entry, top-level semantic objects such as `patchKind: "updateChartVariables"` or `patchKind: "updateVariableUnitMeta"`, and plain-text chart variable proposals that include an explicit variable list. When enough information is present, it converts those responses into the matching helper request. If the model directly asks to validate or preview a raw patch in legacy Edit mode, the browser can also surface that validated patch as an inline review/apply card. The prompt still instructs the model to use `notebookAssistantToolRequests` directly.
 
-User-facing mode: `Edit`.
+User-facing path: Manual Patch JSON panel, or legacy global Edit when gated on. Preferred product path for supported chart/equation edits is cell Ask AI.
 
 ## Mode 5: Manual Patch Mode
 

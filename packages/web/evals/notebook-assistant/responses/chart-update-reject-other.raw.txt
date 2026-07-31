@@ -1,0 +1,13 @@
+```json
+{
+  "notebookAssistantToolRequests": [
+    {
+      "name": "createUpdateChartVariablesPatch",
+      "args": {
+        "chartId": "scenario-1-chart",
+        "variables": ["Y"]
+      }
+    }
+  ]
+}
+```

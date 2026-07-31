@@ -1,0 +1,16 @@
+{
+  "id": "chart-update-options",
+  "label": "Chart Ask AI updates baseline chart options",
+  "mode": "ask",
+  "scope": { "kind": "chart-update", "cellId": "baseline-chart" },
+  "question": "Use separate axes and turn niceScale off for this chart.",
+  "notebookPath": "../../public/notebook-examples/bmw.example.notebook.json",
+  "savedResponsePath": "responses/chart-update-options.raw.txt",
+  "expected": {
+    "toolNames": ["createUpdateChartOptionsPatch"],
+    "patch": true,
+    "patchSummary": { "addedCells": 0, "changedCells": 1, "removedCells": 0, "operationCount": 2 },
+    "allowedPathPrefixes": ["/cells/by-id/baseline-chart/", "/cells/"],
+    "scopeViolations": false
+  }
+}

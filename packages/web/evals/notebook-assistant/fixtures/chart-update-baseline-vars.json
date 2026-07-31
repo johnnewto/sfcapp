@@ -1,0 +1,17 @@
+{
+  "id": "chart-update-baseline-vars",
+  "label": "Chart Ask AI updates baseline chart variables",
+  "mode": "ask",
+  "scope": { "kind": "chart-update", "cellId": "baseline-chart" },
+  "question": "Update this chart to show Y, YD, and Mh.",
+  "notebookPath": "../../public/notebook-examples/bmw.example.notebook.json",
+  "savedResponsePath": "responses/chart-update-baseline-vars.raw.txt",
+  "expected": {
+    "toolNames": ["createUpdateChartVariablesPatch"],
+    "patch": true,
+    "patchSummary": { "addedCells": 0, "changedCells": 1, "removedCells": 0, "operationCount": 1 },
+    "allowedPathPrefixes": ["/cells/by-id/baseline-chart/", "/cells/"],
+    "changedChartVariables": { "id": "baseline-chart", "variables": ["Y", "YD", "Mh"] },
+    "scopeViolations": false
+  }
+}

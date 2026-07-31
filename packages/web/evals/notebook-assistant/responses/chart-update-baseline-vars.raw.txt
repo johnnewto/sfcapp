@@ -1,0 +1,15 @@
+I will update the bound baseline chart variables.
+
+```json
+{
+  "notebookAssistantToolRequests": [
+    {
+      "name": "createUpdateChartVariablesPatch",
+      "args": {
+        "chartId": "baseline-chart",
+        "variables": ["Y", "YD", "Mh"]
+      }
+    }
+  ]
+}
+```

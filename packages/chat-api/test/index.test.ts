@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import worker from "../src/index.ts";
+import { getBundledNotebookAssistantPrompt } from "../src/notebookAssistantPrompt.ts";
 
 const env = {
   ALLOWED_ORIGINS: "https://johnnewto.github.io",
@@ -8,6 +9,17 @@ const env = {
   OPENAI_API_KEY: "test-key",
   OPENAI_MODEL_ALLOWLIST: "gpt-5.5"
 };
+
+describe("notebook assistant system prompt", () => {
+  it("keeps the global assistant Ask-only and points edits to cell Ask AI", () => {
+    const prompt = getBundledNotebookAssistantPrompt();
+    expect(prompt).toContain("Ask-only");
+    expect(prompt).toContain("Ask AI on the relevant chart cell or equation row");
+    expect(prompt).toContain("chart-update");
+    expect(prompt).toContain("equation-update");
+    expect(prompt).not.toMatch(/Switch to Edit mode to prepare a patch/);
+  });
+});
 
 describe("chat API notebook share shortening", () => {
   it("rejects shorten requests without SHARE_LINKS", async () => {
