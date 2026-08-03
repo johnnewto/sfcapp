@@ -80,6 +80,22 @@ cells:
         - **MC count**: set on the run cell as `abm.monteCarlo`.
 
         Stock-flow check: `|M_h - M_s|` must stay within `tolerance` every period.
+
+        **Period ticks.** One period unfolds as the ordered tick list below: firms plan
+        investment from the accelerator, households plan consumption, hiring via a job
+        lottery sets output, investment is served first then households
+        first-come-first-served, residual wages are paid, and banks create deposits to
+        fund net investment.
+
+        1. Depreciation `DA = delta * K`. Planned investment
+           `Ipl = max(0, gamma * (kappa * Ylag - K) + DA)`.
+        2. Each household plans `cd = max(alpha0/N + alpha1 * yd + alpha2 * m, 0)`.
+        3. Total demand `D = sum(cd) + Ipl`. Labour needed `Ln = D / pr`.
+        4. Hiring lottery sets `Nemp` and output `Y = Nemp * pr`.
+        5. Realised investment `I = min(Ipl, Y)`; remaining goods are rationed FCFS.
+        6. Wage bill `WB = Y - rl * L - DA` is split equally among the employed.
+        7. Deposits update as `m = m + yd - c`. Capital and loans rise by net investment
+           `I - DA`; banks create matching deposits.
       populations:
         - name: households
           size: 200
@@ -143,27 +159,6 @@ cells:
             - [M_h, "sum(households.m)", "Deposits held by households"]
             - [UR, "(households.size - Nemp) / households.size", "Unemployment rate, emergent (MC mean)"]
       check: { left: M_h, right: M_s, tolerance: "1e-9" }
-  - markdown:
-      id: ticks
-      title: Period ticks
-      source: >
-        One period unfolds as the ordered tick list in the ABM-BMW specification above:
-        firms plan investment from the accelerator, households plan consumption, hiring
-        via a job lottery sets output, investment is served first then households
-        first-come-first-served, residual wages are paid, and banks create deposits to
-        fund net investment.
-      more: |
-        Conventions: upper-case = MACRO total; lower-case = one household (MICRO).
-
-        1. Depreciation `DA = delta * K`. Planned investment
-           `Ipl = max(0, gamma * (kappa * Ylag - K) + DA)`.
-        2. Each household plans `cd = max(alpha0/N + alpha1 * yd + alpha2 * m, 0)`.
-        3. Total demand `D = sum(cd) + Ipl`. Labour needed `Ln = D / pr`.
-        4. Hiring lottery sets `Nemp` and output `Y = Nemp * pr`.
-        5. Realised investment `I = min(Ipl, Y)`; remaining goods are rationed FCFS.
-        6. Wage bill `WB = Y - rl * L - DA` is split equally among the employed.
-        7. Deposits update as `m = m + yd - c`. Capital and loans rise by net investment
-           `I - DA`; banks create matching deposits.
   - matrix:
       id: balance-sheet
       accountingKind: balance-sheet

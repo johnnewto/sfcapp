@@ -8,7 +8,7 @@ import {
 } from "./templates";
 import { hasNotebookShareInLocation } from "./notebookShareLink";
 import type { NotebookCell } from "./types";
-import { buildAbmVariableDescriptions } from "./abmInspect";
+import { buildAbmVariableDescriptions, buildEditorStateFromAbmModelCell } from "./abmInspect";
 
 const APP_BASE_URL = import.meta.env.BASE_URL;
 
@@ -63,7 +63,15 @@ export function buildNotebookVariableUnitMetadata(cells: NotebookCell[]): Variab
           ? buildVariableUnitMetadata({ equations: cell.equations })
           : cell.type === "externals"
             ? buildVariableUnitMetadata({ externals: cell.externals })
-            : null;
+            : cell.type === "abm-model"
+              ? (() => {
+                  const editor = buildEditorStateFromAbmModelCell(cell);
+                  return buildVariableUnitMetadata({
+                    equations: editor.equations,
+                    externals: editor.externals
+                  });
+                })()
+              : null;
 
     for (const [name, unitMeta] of nextMetadata ?? []) {
       if (!metadata.has(name)) {

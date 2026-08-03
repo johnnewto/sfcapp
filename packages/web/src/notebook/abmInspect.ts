@@ -230,6 +230,12 @@ export function buildAbmVariableDescriptions(cell: AbmModelCell): VariableDescri
       descriptions.set(row.name.trim(), desc);
     }
   }
+  for (const row of editor.externals) {
+    const desc = row.desc?.trim();
+    if (row.name.trim() && desc && !descriptions.has(row.name.trim())) {
+      descriptions.set(row.name.trim(), desc);
+    }
+  }
   const spec = resolveAbmSpecFromCell(cell);
   for (const [name, description] of Object.entries((spec.record ?? {}).descriptions ?? {})) {
     const trimmed = description.trim();

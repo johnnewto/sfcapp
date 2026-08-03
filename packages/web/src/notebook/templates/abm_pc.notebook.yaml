@@ -77,6 +77,25 @@ cells:
         - **MC count**: set on the run cell as `abm.monteCarlo` (not on the model).
 
         Stock-flow check: `|H_h - H_s|` must stay within `tolerance` every period.
+
+        **Period ticks.** One period unfolds as the ordered tick list below: plan
+        consumption, hire via a job lottery, shuffle the queue, serve government then
+        households first-come-first-served, pay wages and interest taxes, update wealth,
+        and allocate the portfolio between bills and cash. The policy rate rises from
+        `2.5%` to `3.5%` at period `60`.
+
+        1. Each household plans `cd = min(max(alpha1 * yd + alpha2 * v, 0), v)` using its
+           own `alpha1` and last period's disposable income and wealth.
+        2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.
+        3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.
+        4. One random shuffle orders both jobs and the shop queue.
+        5. Government is served first; remaining output is rationed FCFS to households.
+        6. Hired households earn wage `w = pr`. Interest `lag(r) * lag(b)` is taxed with
+           labour income at rate `theta`. Wealth updates as `v = v - c + yd`.
+        7. Portfolio: `b = v * (lambda0 + lambda1 * r) - lambda2 * yd` (clamped to `[0, v]`);
+           cash is the residual `h = v - b`.
+        8. Government issues bills to cover its deficit; the central bank absorbs unwanted
+           bills and issues cash one-for-one with the change in its bill holdings.
       populations:
         - name: households
           size: 200
@@ -147,30 +166,6 @@ cells:
             - [H_s, "lag(H_s) + B_cb - lag(B_cb)", "Cash supplied by central bank"]
             - [UR, "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
       check: { left: H_h, right: H_s, tolerance: "1e-9" }
-  - markdown:
-      id: ticks
-      title: Period ticks
-      source: >
-        One period unfolds as the ordered tick list in the ABM-PC specification above:
-        plan consumption, hire via a job lottery, shuffle the queue, serve government then
-        households first-come-first-served, pay wages and interest taxes, update wealth,
-        and allocate the portfolio between bills and cash. The policy rate rises from
-        `2.5%` to `3.5%` at period `60`.
-      more: |
-        Conventions: upper-case = MACRO total; lower-case = one household (MICRO).
-
-        1. Each household plans `cd = min(max(alpha1 * yd + alpha2 * v, 0), v)` using its
-           own `alpha1` and last period's disposable income and wealth.
-        2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.
-        3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.
-        4. One random shuffle orders both jobs and the shop queue.
-        5. Government is served first; remaining output is rationed FCFS to households.
-        6. Hired households earn wage `w = pr`. Interest `lag(r) * lag(b)` is taxed with
-           labour income at rate `theta`. Wealth updates as `v = v - c + yd`.
-        7. Portfolio: `b = v * (lambda0 + lambda1 * r) - lambda2 * yd` (clamped to `[0, v]`);
-           cash is the residual `h = v - b`.
-        8. Government issues bills to cover its deficit; the central bank absorbs unwanted
-           bills and issues cash one-for-one with the change in its bill holdings.
   - matrix:
       id: balance-sheet
       accountingKind: balance-sheet

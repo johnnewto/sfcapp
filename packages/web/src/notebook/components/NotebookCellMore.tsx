@@ -8,6 +8,7 @@ export function NotebookCellMore({
   currentValues,
   highlightedVariable,
   onSelectVariable,
+  parameterNames,
   text,
   variableDescriptions,
   variableUnitMetadata
@@ -15,6 +16,7 @@ export function NotebookCellMore({
   currentValues?: Record<string, number | undefined>;
   highlightedVariable?: string | null;
   onSelectVariable?(variableName: string): void;
+  parameterNames?: Set<string>;
   text: string;
   variableDescriptions?: VariableDescriptions;
   variableUnitMetadata?: VariableUnitMetadata;
@@ -35,6 +37,7 @@ export function NotebookCellMore({
             currentValues={currentValues}
             highlightedVariable={highlightedVariable}
             onSelectVariable={onSelectVariable}
+            parameterNames={parameterNames}
             text={text}
             variableDescriptions={variableDescriptions}
             variableUnitMetadata={variableUnitMetadata}

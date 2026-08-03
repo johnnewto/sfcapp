@@ -14,6 +14,7 @@ export function PublicationMarkdown({
       currentValues={interaction.currentValues}
       highlightedVariable={interaction.highlightedVariable}
       onSelectVariable={interaction.onSelectVariable}
+      parameterNames={interaction.parameterNames}
       text={source}
       variableDescriptions={interaction.variableDescriptions}
       variableUnitMetadata={interaction.variableUnitMetadata}

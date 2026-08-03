@@ -31,7 +31,11 @@ import {
 import { useNotebookRunner } from "../notebook/useNotebookRunner";
 import { PeriodScrubber } from "../components/PeriodScrubber";
 import { type MatrixEntryDisplayMode } from "../notebook/matrixEntryDisplay";
-import { buildPublicationViewModel, buildPublicationContentsEntries } from "./buildPublicationViewModel";
+import {
+  buildPublicationViewModel,
+  buildPublicationContentsEntries,
+  PUBLICATION_APPENDIX_ANCHOR_ID
+} from "./buildPublicationViewModel";
 import { PublicationCellView } from "./PublicationCellView";
 import { PublicationContents } from "./PublicationContents";
 import { PublicationActionLinks } from "./PublicationActionLinks";
@@ -637,8 +641,9 @@ export function PublicationNotebookApp({ route }: { route: PublicationRouteLocat
   }, [interactiveNotebookHref, isEmbed]);
 
   const contentsEntries = useMemo(
-    () => buildPublicationContentsEntries(viewModel.bodySections),
-    [viewModel.bodySections]
+    () =>
+      buildPublicationContentsEntries(viewModel.bodySections, viewModel.appendixSections),
+    [viewModel.appendixSections, viewModel.bodySections]
   );
   const showCatalog = route.mode === "publish";
   const showContents = !isEmbed && (contentsEntries.length > 1 || showCatalog);
@@ -711,7 +716,10 @@ export function PublicationNotebookApp({ route }: { route: PublicationRouteLocat
       ))}
 
       {!isEmbed && viewModel.appendixSections.length > 0 ? (
-        <section className="publication-appendix publication-page-break-before">
+        <section
+          id={PUBLICATION_APPENDIX_ANCHOR_ID}
+          className="publication-appendix publication-page-break-before"
+        >
           <h2 className="publication-appendix-title">Appendix</h2>
           {viewModel.appendixSections.map((section) => (
             <PublicationCellView

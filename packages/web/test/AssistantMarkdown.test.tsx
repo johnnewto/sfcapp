@@ -95,6 +95,24 @@ describe("AssistantMarkdown", () => {
     expect(screen.getByText("0", { selector: ".assistant-variable-button sub" })).toBeInTheDocument();
   });
 
+  it("colors externals with formula-parameter like equation formulas", () => {
+    const { container } = render(
+      <AssistantMarkdown
+        text="Tune `alpha1` and watch `Y`."
+        parameterNames={new Set(["alpha1"])}
+        variableDescriptions={
+          new Map([
+            ["alpha1", "Propensity to consume"],
+            ["Y", "Output"]
+          ])
+        }
+      />
+    );
+
+    expect(container.querySelector(".assistant-variable-code.formula-parameter")).not.toBeNull();
+    expect(container.querySelector(".assistant-variable-code.formula-uppercase")).not.toBeNull();
+  });
+
   it("keeps ordinary code blocks as code blocks", () => {
     const { container } = render(<AssistantMarkdown text={"```json\n{ \"x\": 1 }\n```"} />);
 

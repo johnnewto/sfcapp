@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { highlightFormula } from "../components/EquationGridEditor";
 import type { TraceTokenRole } from "../components/EquationTrace";
 import { VariableLabel } from "../components/VariableLabel";
+import { formulaVariableTokenClassName } from "../lib/formulaTokenClass";
 import { documentHighlightClassName } from "../lib/variableHighlight";
 import type { PublicationVariableInteraction } from "./publicationInspect";
 
@@ -39,8 +40,10 @@ export function PublicationVariableName({
     return null;
   }
 
+  const tokenClassName = formulaVariableTokenClassName(normalizedName, interaction.parameterNames);
   const label = (
     <VariableLabel
+      className={tokenClassName}
       currentValues={interaction.currentValues}
       name={normalizedName}
       variableDescriptions={interaction.variableDescriptions}
@@ -48,8 +51,13 @@ export function PublicationVariableName({
     />
   );
 
-  const traceClassName = traceRole ? `formula-token trace-token-${traceRole}` : "";
-  const baseClassName = ["result-variable-button", "publication-variable-button", traceClassName]
+  const traceClassName = traceRole ? `trace-token-${traceRole}` : "";
+  const baseClassName = [
+    "result-variable-button",
+    "publication-variable-button",
+    tokenClassName,
+    traceClassName
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -57,7 +65,7 @@ export function PublicationVariableName({
     if (!traceClassName) {
       return label;
     }
-    return <span className={traceClassName}>{label}</span>;
+    return <span className={[tokenClassName, traceClassName].filter(Boolean).join(" ")}>{label}</span>;
   }
 
   return (

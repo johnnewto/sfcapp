@@ -6,6 +6,7 @@ import type { PublicationRenderMode } from "./publicationRouteHelpers";
 type PublicationSectionKind =
   | "prose"
   | "equations"
+  | "abm-model"
   | "matrix"
   | "chart"
   | "table"
@@ -13,6 +14,9 @@ type PublicationSectionKind =
   | "sankey"
   | "run"
   | "appendix";
+
+/** Anchor id for the publication Appendix heading (contents + in-page scroll). */
+export const PUBLICATION_APPENDIX_ANCHOR_ID = "appendix";
 
 export interface PublicationSection {
   kind: PublicationSectionKind;
@@ -37,15 +41,34 @@ export interface PublicationContentsEntry {
 }
 
 export function buildPublicationContentsEntries(
-  sections: PublicationSection[]
+  bodySections: PublicationSection[],
+  appendixSections: PublicationSection[] = []
 ): PublicationContentsEntry[] {
-  return sections
+  const entries = bodySections
     .map((section) => ({
       anchorId: section.anchorId,
       title: section.cell.title.trim(),
       level: resolveContentsOutlineLevel(section.cell)
     }))
     .filter((entry) => entry.title.length > 0);
+
+  const appendixEntries = appendixSections
+    .map((section) => ({
+      anchorId: section.anchorId,
+      title: section.cell.title.trim(),
+      level: 1 as const
+    }))
+    .filter((entry) => entry.title.length > 0);
+
+  if (appendixEntries.length === 0) {
+    return entries;
+  }
+
+  return [
+    ...entries,
+    { anchorId: PUBLICATION_APPENDIX_ANCHOR_ID, title: "Appendix", level: 0 },
+    ...appendixEntries
+  ];
 }
 
 function classifyCellPlacement(cell: NotebookCell): "body" | "appendix" | "skip" {
@@ -53,6 +76,7 @@ function classifyCellPlacement(cell: NotebookCell): "body" | "appendix" | "skip"
     case "markdown":
     case "equations":
     case "model":
+    case "abm-model":
     case "matrix":
     case "chart":
     case "chart-grid":
@@ -63,7 +87,6 @@ function classifyCellPlacement(cell: NotebookCell): "body" | "appendix" | "skip"
     case "observed":
     case "initial-values":
     case "solver":
-    case "abm-model":
       return "appendix";
     case "sequence":
       // Only matrix-sourced sequences render as multiport transaction-flow figures.
@@ -82,6 +105,8 @@ function resolveSectionKind(cell: NotebookCell): PublicationSectionKind {
     case "equations":
     case "model":
       return "equations";
+    case "abm-model":
+      return "abm-model";
     case "matrix":
       return "matrix";
     case "chart":

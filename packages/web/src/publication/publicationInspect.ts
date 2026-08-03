@@ -18,6 +18,7 @@ import {
   findEquationsCell,
   findExternalsCell
 } from "../notebook/modelSections";
+import { buildAbmVariableDescriptions, buildEditorStateFromAbmModelCell } from "../notebook/abmInspect";
 import { resolveNearestNotebookContextCell } from "../notebook/notebookContext";
 import { resolveSequenceMatrixRunCellId } from "../notebook/sequenceMatrixInspect";
 import type { NotebookCell, NotebookDocument, RunCell } from "../notebook/types";
@@ -58,6 +59,29 @@ export function resolvePublicationInspectContext(args: {
     return contextCell
       ? resolvePublicationInspectContext({ cell: contextCell, document, getResult, selectedPeriodIndex })
       : null;
+  }
+
+  if (cell.type === "abm-model") {
+    const modelSource = { sourceModelId: cell.modelId };
+    const sourceRunCellId = findRunCellForInspectorModelSource(document.cells, modelSource)?.id ?? null;
+    const editor = buildEditorStateFromAbmModelCell(cell);
+    return {
+      currentValues: buildInspectorCurrentValues({
+        document,
+        getResult,
+        modelSource,
+        selectedPeriodIndex,
+        sourceRunCellId
+      }),
+      editor,
+      modelSource,
+      sourceRunCellId,
+      variableDescriptions: buildAbmVariableDescriptions(cell),
+      variableUnitMetadata: buildVariableUnitMetadata({
+        equations: editor.equations,
+        externals: editor.externals
+      })
+    };
   }
 
   if (cell.type === "model") {

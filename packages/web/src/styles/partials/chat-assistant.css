@@ -94,14 +94,14 @@
   white-space: normal;
 }
 .assistant-variable-code .variable-label-inline {
-  color: #2563eb;
+  color: inherit;
   font-family: inherit;
   gap: 0.2rem;
 }
 .assistant-markdown .assistant-variable-code {
   background: transparent;
   border-radius: 0;
-  color: #2563eb;
+  color: inherit;
   padding: 0;
 }
 .assistant-markdown .assistant-variable-button {
@@ -114,11 +114,11 @@
 }
 .assistant-markdown .assistant-variable-code .variable-label-inline {
   text-decoration: underline;
-  text-decoration-color: rgba(37, 99, 235, 0.28);
+  text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
   text-underline-offset: 0.08em;
 }
 .assistant-markdown .assistant-variable-button:hover .variable-label-inline {
-  text-decoration-color: rgba(37, 99, 235, 0.42);
+  text-decoration-color: color-mix(in srgb, currentColor 48%, transparent);
 }
 .assistant-markdown table {
   border-collapse: collapse;

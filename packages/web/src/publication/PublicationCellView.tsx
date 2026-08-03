@@ -1,6 +1,7 @@
 import type { SimulationResult } from "@sfcr/core";
 
-import type { NotebookCell } from "../notebook/types";
+import type { AbmModelCell, NotebookCell } from "../notebook/types";
+import { AbmModelCellView } from "../notebook/components/AbmModelCellView";
 import type { PublicationSection } from "./buildPublicationViewModel";
 import { PublicationAppendixSection } from "./components/PublicationAppendix";
 import { PublicationCaption } from "./components/PublicationCaption";
@@ -68,6 +69,30 @@ export function PublicationCellView({
       <section id={section.anchorId} className="publication-section publication-section-equations">
         {showHeading ? <h2 className="publication-section-heading">{cell.title}</h2> : null}
         <PublicationEquations cell={cell} interaction={interaction} />
+        {cell.description?.trim() || cell.note?.trim() ? (
+          <PublicationCaption description={cell.description} note={cell.note} title={cell.title} />
+        ) : null}
+        {moreNode}
+      </section>
+    );
+  }
+
+  if (section.kind === "abm-model" && cell.type === "abm-model") {
+    return (
+      <section id={section.anchorId} className="publication-section publication-section-abm-model">
+        {showHeading ? <h2 className="publication-section-heading">{cell.title}</h2> : null}
+        <AbmModelCellView
+          cell={cell as AbmModelCell}
+          currentValues={interaction.currentValues}
+          highlightedVariable={interaction.highlightedVariable}
+          onVariableInspectRequest={
+            interaction.onSelectVariable
+              ? ({ selectedVariable }) => interaction.onSelectVariable?.(selectedVariable)
+              : undefined
+          }
+          variableDescriptions={interaction.variableDescriptions}
+          variableUnitMetadata={interaction.variableUnitMetadata}
+        />
         {cell.description?.trim() || cell.note?.trim() ? (
           <PublicationCaption description={cell.description} note={cell.note} title={cell.title} />
         ) : null}

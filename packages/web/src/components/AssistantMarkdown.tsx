@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 
+import { formulaVariableTokenClassName } from "../lib/formulaTokenClass";
 import type { VariableDescriptions } from "../lib/variableDescriptions";
 import type { VariableUnitMetadata } from "../lib/unitMeta";
 import { documentHighlightClassName } from "../lib/variableHighlight";
@@ -16,6 +17,7 @@ interface AssistantMarkdownProps {
   highlightedVariable?: string | null;
   inline?: boolean;
   onSelectVariable?(variableName: string): void;
+  parameterNames?: Set<string>;
   text: string;
   variableDescriptions?: VariableDescriptions;
   variableUnitMetadata?: VariableUnitMetadata;
@@ -27,11 +29,13 @@ export function AssistantMarkdown({
   highlightedVariable = null,
   inline = false,
   onSelectVariable,
+  parameterNames,
   text,
   variableDescriptions,
   variableUnitMetadata
 }: AssistantMarkdownProps) {
   const annotatedText = annotateAssistantVariableMentions(text, variableDescriptions);
+  const parameterNameSet = parameterNames ?? new Set<string>();
   const Wrapper = inline ? "span" : "div";
   const inlineComponents = inline
     ? {
@@ -73,7 +77,8 @@ export function AssistantMarkdown({
                     variableDescriptions,
                     variableUnitMetadata,
                     currentValues,
-                    highlightedVariable
+                    highlightedVariable,
+                    parameterNameSet
                   )}
                 </code>
               );
@@ -86,7 +91,8 @@ export function AssistantMarkdown({
                 variableDescriptions,
                 variableUnitMetadata,
                 currentValues,
-                highlightedVariable
+                highlightedVariable,
+                parameterNameSet
               );
             }
             return <code className={className}>{children}</code>;
@@ -111,17 +117,14 @@ function shouldRenderAssistantEquationCode(value: string): boolean {
   );
 }
 
-function renderAssistantEquationText(value: string): ReactNode[] {
-  return renderAssistantEquationTextWithOptions(value);
-}
-
 function renderAssistantEquationTextWithOptions(
   value: string,
   onSelectVariable?: (variableName: string) => void,
   variableDescriptions?: VariableDescriptions,
   variableUnitMetadata?: VariableUnitMetadata,
   currentValues?: Record<string, number | undefined>,
-  highlightedVariable?: string | null
+  highlightedVariable?: string | null,
+  parameterNames: Set<string> = new Set()
 ): ReactNode[] {
   return value.split(/(`[^`\n]+`)/g).map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
@@ -135,7 +138,8 @@ function renderAssistantEquationTextWithOptions(
           currentValues,
           `variable-${index}`,
           false,
-          highlightedVariable
+          highlightedVariable,
+          parameterNames
         );
       }
     }
@@ -150,7 +154,8 @@ function renderAssistantVariableCode(
   variableDescriptions?: VariableDescriptions,
   variableUnitMetadata?: VariableUnitMetadata,
   currentValues?: Record<string, number | undefined>,
-  highlightedVariable?: string | null
+  highlightedVariable?: string | null,
+  parameterNames: Set<string> = new Set()
 ): ReactNode {
   return renderAssistantVariableInline(
     variableName,
@@ -160,7 +165,8 @@ function renderAssistantVariableCode(
     currentValues,
     `code-${variableName}`,
     true,
-    highlightedVariable
+    highlightedVariable,
+    parameterNames
   );
 }
 
@@ -172,10 +178,13 @@ function renderAssistantVariableInline(
   currentValues: Record<string, number | undefined> | undefined,
   key: string,
   wrapInCode = false,
-  highlightedVariable: string | null = null
+  highlightedVariable: string | null = null,
+  parameterNames: Set<string> = new Set()
 ): ReactNode {
+  const tokenClassName = formulaVariableTokenClassName(variableName, parameterNames);
   const label = (
     <VariableLabel
+      className={tokenClassName}
       currentValues={currentValues}
       name={variableName}
       variableDescriptions={variableDescriptions}
@@ -187,7 +196,7 @@ function renderAssistantVariableInline(
     const codeClassName = documentHighlightClassName(
       variableName,
       highlightedVariable,
-      "assistant-variable-code"
+      ["assistant-variable-code", tokenClassName].join(" ")
     );
     return wrapInCode ? (
       <code key={key} className={codeClassName}>
@@ -196,6 +205,7 @@ function renderAssistantVariableInline(
     ) : (
       <VariableLabel
         key={key}
+        className={tokenClassName}
         currentValues={currentValues}
         name={variableName}
         variableDescriptions={variableDescriptions}
@@ -204,13 +214,21 @@ function renderAssistantVariableInline(
     );
   }
 
-  const content = wrapInCode ? <code className="assistant-variable-code">{label}</code> : label;
+  const content = wrapInCode ? (
+    <code className={["assistant-variable-code", tokenClassName].join(" ")}>{label}</code>
+  ) : (
+    label
+  );
 
   return (
     <button
       key={key}
       type="button"
-      className={documentHighlightClassName(variableName, highlightedVariable, "assistant-variable-button")}
+      className={documentHighlightClassName(
+        variableName,
+        highlightedVariable,
+        ["assistant-variable-button", tokenClassName].join(" ")
+      )}
       aria-label={`Inspect variable ${variableName}`}
       onClick={() => onSelectVariable(variableName)}
     >

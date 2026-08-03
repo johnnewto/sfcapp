@@ -94,6 +94,25 @@ cells:
         - **MC count**: set on the run cell as `abm.monteCarlo` (not on the model).
 
         Stock-flow check: `|H_d - H_s|` must stay within `tolerance` every period.
+
+        **Period ticks.** One period unfolds as the ordered tick list below: plan
+        consumption, hire via a job lottery, shuffle the queue, serve government then
+        households first-come-first-served, pay wages and taxes, and update money
+        holdings. Government spending rises from `20` to `30` at period `60`.
+
+        1. Each household plans `cd = min(alpha1 * yd + alpha2 * h, h)` using its own
+           `alpha1` and last period's disposable income and cash.
+        2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.
+        3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.
+        4. One random shuffle orders both jobs and the shop queue (`households.rank`).
+        5. Households with `households.rank <= N` are employed (`e = 1`).
+        6. Government is served first from produced goods `N * pr`; remaining output is
+           rationed FCFS to households.
+        7. Hired households earn wage `w = pr` (zero profit). Taxes `theta * y` are paid;
+           money updates as `h = h + y - c - tax`. Money supply grows by `YG - TAX`.
+
+        Setting `s = 0` with homogeneous `alpha1` recovers the textbook SIM money stock
+        `H = (1 - theta) * (G / theta) * (1 - alpha1) / alpha2` in the limit.
       populations:
         # Number of households (if > output -> unemployment)
         - name: households
@@ -157,33 +176,6 @@ cells:
             - [UR, "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
       # SFC check: record the worst gap between H_d and H_s
       check: { left: H_d, right: H_s, tolerance: "1e-9" }
-  # Period ticks narrative (matches R ## TICK 1..6 blocks)
-  - markdown:
-      id: ticks
-      title: Period ticks
-      source: >
-        One period unfolds as the ordered tick list in the ABM-SIM specification above:
-        plan consumption, hire via a job lottery, shuffle the queue, serve government then
-        households first-come-first-served, pay wages and taxes, and update money holdings.
-        Government spending rises from `20` to `30` at period `60`.
-      more: |
-        Conventions: upper-case = MACRO total; lower-case = one household (MICRO).
-        Recorded MACRO series are Monte Carlo means; MICRO probes (`c_h1`, `h_hLast`, …)
-        come from MC run 1 only — see the ABM-SIM specification cell.
-
-        1. Each household plans `cd = min(alpha1 * yd + alpha2 * h, h)` using its own
-           `alpha1` and last period's disposable income and cash.
-        2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.
-        3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.
-        4. One random shuffle orders both jobs and the shop queue (`households.rank`).
-        5. Households with `households.rank <= N` are employed (`e = 1`).
-        6. Government is served first from produced goods `N * pr`; remaining output is
-           rationed FCFS to households.
-        7. Hired households earn wage `w = pr` (zero profit). Taxes `theta * y` are paid;
-           money updates as `h = h + y - c - tax`. Money supply grows by `YG - TAX`.
-
-        Setting `s = 0` with homogeneous `alpha1` recovers the textbook SIM money stock
-        `H = (1 - theta) * (G / theta) * (1 - alpha1) / alpha2` in the limit.
   - matrix:
       id: balance-sheet
       accountingKind: balance-sheet

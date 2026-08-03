@@ -22,7 +22,7 @@ describe("PublicationContents", () => {
       templateId: "bmw",
       mode: "publish"
     });
-    const entries = buildPublicationContentsEntries(viewModel.bodySections);
+    const entries = buildPublicationContentsEntries(viewModel.bodySections, viewModel.appendixSections);
     const overviewEntry = entries.find((entry) => entry.anchorId === "intro");
     expect(overviewEntry).toBeDefined();
 

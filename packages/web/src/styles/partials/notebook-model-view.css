@@ -721,9 +721,6 @@
   text-decoration: underline;
   text-decoration-color: rgba(37, 99, 235, 0.32);
 }
-.notebook-abm-model-view .formula-token.formula-parameter {
-  color: #ea580c;
-}
 .notebook-abm-model-series-grid {
   display: grid;
   gap: 0.2rem 0.35rem;

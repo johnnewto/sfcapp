@@ -1,4 +1,4 @@
-import { parseLenientJsonValue } from "@sfcr/notebook-core";
+import { externalRowsOnly, parseLenientJsonValue } from "@sfcr/notebook-core";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -491,6 +491,14 @@ function NotebookCellViewComponent({
         selectedPeriodIndex
       }),
     [cell, cells, getModelCurrentValues, runner, selectedPeriodIndex]
+  );
+  const noteParameterNames = useMemo(
+    () => parameterNamesFromEditor(noteInspectionContext?.editor),
+    [noteInspectionContext]
+  );
+  const markdownParameterNames = useMemo(
+    () => parameterNamesFromEditor(markdownInspectionContext?.editor),
+    [markdownInspectionContext]
   );
   const chartAxisGroupSuggestion = useMemo(() => {
     if (cell.type !== "chart") {
@@ -1098,6 +1106,7 @@ function NotebookCellViewComponent({
                             selectedVariable
                           })
                   }
+                  parameterNames={noteParameterNames}
                   text={cellDescription}
                   variableDescriptions={variableDescriptions}
                   variableUnitMetadata={variableUnitMetadata}
@@ -1315,6 +1324,7 @@ function NotebookCellViewComponent({
                       selectedVariable
                     })
             }
+            parameterNames={markdownParameterNames}
             text={cell.source}
             variableDescriptions={variableDescriptions}
             variableUnitMetadata={variableUnitMetadata}
@@ -1763,6 +1773,7 @@ function NotebookCellViewComponent({
                         selectedVariable
                       })
               }
+              parameterNames={noteParameterNames}
               text={cellNote}
               variableDescriptions={variableDescriptions}
               variableUnitMetadata={variableUnitMetadata}
@@ -1782,6 +1793,7 @@ function NotebookCellViewComponent({
                       selectedVariable
                     })
             }
+            parameterNames={noteParameterNames}
             text={cellMore}
             variableDescriptions={variableDescriptions}
             variableUnitMetadata={variableUnitMetadata}
@@ -2124,6 +2136,18 @@ function getNotebookCellDescription(cell: NotebookCell): string {
   }
 
   return "";
+}
+
+function parameterNamesFromEditor(editor: EditorState | null | undefined): Set<string> {
+  if (!editor) {
+    return new Set();
+  }
+
+  return new Set(
+    externalRowsOnly(editor.externals)
+      .map((external) => external.name.trim())
+      .filter(Boolean)
+  );
 }
 
 function getViewportDeferredPlaceholderHeight(cell: NotebookCell): number {
