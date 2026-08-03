@@ -42,6 +42,20 @@ describe("sourceEditing matrix help", () => {
     expect(getNotebookHelpTopicIdForCell(matrixCell())).toBe("matrix");
   });
 
+  it("routes abm-model cells to the ABM help topic", () => {
+    expect(
+      getNotebookHelpTopicIdForCell({
+        id: "abm-1",
+        type: "abm-model",
+        title: "ABM",
+        modelId: "abm-sim",
+        populations: [],
+        ticks: [],
+        record: { series: ["Y"] }
+      })
+    ).toBe("abm-model");
+  });
+
   it("documents accountingKind in matrix syntax help", () => {
     const help = buildSourceHelpText(matrixCell());
     expect(help).toContain("accountingKind");

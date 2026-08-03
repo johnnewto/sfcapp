@@ -27,6 +27,7 @@ The notebook is browser-first: cells are editable, runnable, and inspectable wit
 | Chart | Visual time-series inspection |
 | Table | Numeric result inspection |
 | Model | A combined model cell containing equations, externals, initial values, and solver settings |
+| ABM Model | Agent-based specification with populations, ticks, and Monte Carlo recording |
 
 ## Typical Workflow
 

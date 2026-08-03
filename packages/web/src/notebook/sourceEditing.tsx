@@ -4,6 +4,7 @@ import { isRowComment, parseLenientJsonValue } from "@sfcr/notebook-core";
 
 import { stringifyJsonWithCompactLeaves } from "../lib/jsonFormat";
 import { normalizeUnitMetaAliases } from "../lib/unitMeta";
+import abmModelHelp from "./help/abm-model.md?raw";
 import accountTransactionsMatrixHelp from "./help/account-transactions-matrix.md?raw";
 import balanceSheetMatrixHelp from "./help/balance-sheet-matrix.md?raw";
 import chartHelp from "./help/chart.md?raw";
@@ -41,6 +42,7 @@ export type NotebookHelpTopicId =
   | "introduction"
   | "markdown"
   | "model"
+  | "abm-model"
   | "equations"
   | "solver"
   | "externals"
@@ -109,6 +111,12 @@ export const NOTEBOOK_HELP_TOPICS: NotebookHelpTopic[] = [
     title: "Model",
     description: "Combined model cells with equations, externals, initial values, and solver settings.",
     text: modelHelp
+  },
+  {
+    id: "abm-model",
+    title: "ABM Model",
+    description: "Agent-based models, Monte Carlo means, and p10–p90 summary bands.",
+    text: abmModelHelp
   },
   {
     id: "equations",
@@ -770,7 +778,7 @@ export function getNotebookHelpTopicIdForCell(cell: NotebookCell): NotebookHelpT
   }
 
   if (cell.type === "abm-model") {
-    return "model";
+    return "abm-model";
   }
 
   return cell.type;

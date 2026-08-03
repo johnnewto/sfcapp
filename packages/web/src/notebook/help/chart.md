@@ -181,6 +181,21 @@ A good scenario chart often includes:
 
 Keep charts focused. Several small charts are usually easier to read than one crowded chart.
 
+## Monte Carlo Bands (ABM)
+
+For agent-based Monte Carlo runs, companion series `{name}_p10` and `{name}_p90` summarize the spread of outcomes across MC runs. Set `showMcBands: true` on a chart cell to draw those percentile bands around the mean series:
+
+```json
+{
+  "type": "chart",
+  "sourceRunCellId": "baseline-run",
+  "variables": ["Y", "C"],
+  "showMcBands": true
+}
+```
+
+See **ABM Model** for how `Y`, `Y_p10`, and `Y_p90` relate. Bands only appear when the matching companions exist on the run result.
+
 ## Compare Mode (Vs Baseline)
 
 Scenario charts can plot levels or ratios/deviations from the linked baseline path. Set `compareMode` on the chart cell, or use the **Compare** toggle in the cell header.

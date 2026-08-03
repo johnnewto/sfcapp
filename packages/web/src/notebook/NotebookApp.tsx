@@ -2341,7 +2341,7 @@ export function NotebookApp() {
             : args.cellType === "sankey"
               ? "sequence"
               : args.cellType === "abm-model"
-                ? "model"
+                ? "abm-model"
                 : (args.cellType as NotebookHelpTopicId)
     );
     setIsHelpContentsVisible(false);

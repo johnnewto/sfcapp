@@ -113,6 +113,30 @@ A run points to a model through `sourceModelId` or `sourceModelCellId`.
 
 Use `sourceModelId` for notebooks built from separate equations, externals, solver, and initial-values cells. Use `sourceModelCellId` when the notebook has a combined model cell.
 
+## ABM Runs
+
+Agent-based notebooks use run cells with `engine: "abm"`. Point `sourceModelId` at an `abm-model` cell's `modelId`, and put Monte Carlo / parameter overrides under `abm`:
+
+```json
+{
+  "id": "baseline-run",
+  "type": "run",
+  "mode": "baseline",
+  "engine": "abm",
+  "sourceModelId": "abm-sim",
+  "periods": 100,
+  "resultKey": "abm_sim_baseline",
+  "abm": {
+    "households": 200,
+    "monteCarlo": 20
+  }
+}
+```
+
+Macro series are Monte Carlo means. Companion `_p10` / `_p90` series summarize the spread across MC runs. See **ABM Model** and chart `showMcBands`.
+
+ABM runs currently support baseline mode only.
+
 ## Periods
 
 `periods` is the number of periods to simulate. Choose enough periods to see the model's adjustment path.
