@@ -310,7 +310,7 @@ cells:
       /- \[G, "if \(t >= shockPeriod\) \{ g1 \} else \{ g0 \}", "Government spending \(shock from period 60\)"\]/
     );
     expect(yaml).toMatch(
-      /- \[cd, "min\(alpha1 \* lag\(yd\) \+ alpha2 \* lag\(h\), lag\(h\)\)", "Planned consumption \(own alpha1\)"\]/
+      /- \[cd, "min\(alpha1 \* yd \+ alpha2 \* h, h\)", "Planned consumption \(own alpha1\)"\]/
     );
     expect(yaml).toMatch(/- \[Y, "pr \* N", "Output \/ income \(MC mean\)"\]/);
     expect(yaml).toMatch(/- do:/);

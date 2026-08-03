@@ -458,6 +458,16 @@
           ]
         },
         "params": { "type": "object" },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "aggregates": {
+              "type": "object",
+              "additionalProperties": { "type": "number" }
+            }
+          }
+        },
         "check": { "type": "object" },
         "baselineRunCellId": { "type": "string" },
         "baselineStartPeriod": { "type": "integer" },

@@ -266,12 +266,13 @@ describe("core worker handler", () => {
             g1: 30,
             shockPeriod: 60
           },
+          state: { aggregates: { H_s: 0 } },
           ticks: [
             { kind: "aggregate", equations: [["G", "if (t >= shockPeriod) { g1 } else { g0 }"]] },
             {
               kind: "agent",
               population: "households",
-              equations: [["cd", "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))"]]
+              equations: [["cd", "min(alpha1 * yd + alpha2 * h, h)"]]
             },
             {
               kind: "aggregate",
@@ -311,7 +312,7 @@ describe("core worker handler", () => {
               equations: [
                 ["y", "w * e"],
                 ["yd", "y * (1 - theta)"],
-                ["h", "lag(h) + y - c - theta * y"]
+                ["h", "h + y - c - theta * y"]
               ]
             },
             {
@@ -321,7 +322,7 @@ describe("core worker handler", () => {
                 ["YD", "sum(households.yd)"],
                 ["TAX", "theta * w * N"],
                 ["H_d", "sum(households.h)"],
-                ["H_s", "lag(H_s) + YG - TAX"],
+                ["H_s", "H_s + YG - TAX"],
                 ["UR", "(households.size - N) / households.size"]
               ]
             }

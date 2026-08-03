@@ -209,7 +209,11 @@ export function buildEditorStateFromAbmModelCell(
   return {
     equations,
     externals,
-    initialValues: [],
+    initialValues: Object.entries(spec.state?.aggregates ?? {}).map(([name, value], index) => ({
+      id: `abm-init-${index}-${name}`,
+      name,
+      valueText: String(value)
+    })),
     options: {
       ...ABM_INSPECT_OPTIONS,
       periods: periods ?? ABM_INSPECT_OPTIONS.periods
@@ -231,6 +235,9 @@ export function buildAbmVariableDescriptions(cell: AbmModelCell): VariableDescri
     }
   }
   for (const row of editor.externals) {
+    if (!("name" in row)) {
+      continue;
+    }
     const desc = row.desc?.trim();
     if (row.name.trim() && desc && !descriptions.has(row.name.trim())) {
       descriptions.set(row.name.trim(), desc);

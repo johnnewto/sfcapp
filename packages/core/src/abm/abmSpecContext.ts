@@ -99,10 +99,11 @@ export function createRuntimeState(
       options?.populationParams?.[pop.name]
     );
   }
+  const opening = { ...(spec.state?.aggregates ?? {}) };
   return {
     populations,
-    aggregates: {},
-    prevAggregates: {},
+    aggregates: { ...opening },
+    prevAggregates: { ...opening },
     params,
     periodOneBased: 1,
     agentIndex: -1,

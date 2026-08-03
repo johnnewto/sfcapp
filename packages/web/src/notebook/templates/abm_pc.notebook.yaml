@@ -90,7 +90,7 @@ cells:
         3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.
         4. One random shuffle orders both jobs and the shop queue.
         5. Government is served first; remaining output is rationed FCFS to households.
-        6. Hired households earn wage `w = pr`. Interest `lag(r) * lag(b)` is taxed with
+        6. Hired households earn wage `w = pr`. Interest `lag(r) * b` is taxed with
            labour income at rate `theta`. Wealth updates as `v = v - c + yd`.
         7. Portfolio: `b = v * (lambda0 + lambda1 * r) - lambda2 * yd` (clamped to `[0, v]`);
            cash is the residual `h = v - b`.
@@ -116,6 +116,12 @@ cells:
         r0: 0.025 # Baseline policy rate
         r1: 0.035 # Policy rate after shock
         shockPeriod: 60 # Rate rises from 2.5% to 3.5% at period 60
+      state:
+        aggregates:
+          r: 0.025 # Opening policy rate (R: r[1]; period-1 interest uses this)
+          B_s: 0 # Opening bills supplied by government
+          B_cb: 0 # Opening bills held by central bank
+          H_s: 0 # Opening cash supplied by central bank
       ticks:
         # --- TICK 1: households decide how much to spend ---
         - do:
@@ -123,7 +129,7 @@ cells:
             - [G, "g0", "Government spending (goods)"]
         - for:
             households:
-              - [cd, "min(max(alpha1 * lag(yd) + alpha2 * lag(v), 0), lag(v))", "Planned consumption (own alpha1)"]
+              - [cd, "min(max(alpha1 * yd + alpha2 * v, 0), v)", "Planned consumption (own alpha1)"]
         - do:
             - [AD, "sum(households.cd) + G", "Total demand for goods"]
             - [Nd, "AD / pr", "Labour needed (1/pr workers per good)"]
@@ -148,8 +154,8 @@ cells:
         - for:
             households:
               - [y, "w * e", "Wage income if hired (w = pr, zero profit)"]
-              - [yd, "(y + lag(r) * lag(b)) * (1 - theta)", "Disposable income net of tax on labour and interest"]
-              - [v, "lag(v) - c + yd", "Household wealth = old wealth - spending + saving"]
+              - [yd, "(y + lag(r) * b) * (1 - theta)", "Disposable income net of tax on labour and interest"]
+              - [v, "v - c + yd", "Household wealth = old wealth - spending + saving"]
               # --- TICK 6: portfolio choice ---
               - [b, "min(max(v * (lambda0 + lambda1 * r) - lambda2 * yd, 0), v)", "Bills held (portfolio)"]
               - [h, "v - b", "Cash held (residual)"]
@@ -161,9 +167,9 @@ cells:
             - [B_h, "sum(households.b)", "Bills demanded by households"]
             - [H_h, "sum(households.h)", "Cash held by households"]
             - [TAX, "theta / (1 - theta) * YD", "Tax revenue (labour + interest)"]
-            - [B_s, "lag(B_s) + YG + lag(r) * lag(B_s) - TAX - lag(r) * lag(B_cb)", "Bills supplied by government"]
+            - [B_s, "B_s + YG + lag(r) * B_s - TAX - lag(r) * B_cb", "Bills supplied by government"]
             - [B_cb, "B_s - B_h", "Bills held by central bank"]
-            - [H_s, "lag(H_s) + B_cb - lag(B_cb)", "Cash supplied by central bank"]
+            - [H_s, "H_s + B_cb - lag(B_cb)", "Cash supplied by central bank"]
             - [UR, "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
       check: { left: H_h, right: H_s, tolerance: "1e-9" }
   - matrix:

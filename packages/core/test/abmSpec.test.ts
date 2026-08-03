@@ -245,4 +245,60 @@ describe("runAbmSpec", () => {
     expect(result.series.h_hLast).toHaveLength(4);
     expect(result.series.h_h5).toBeUndefined();
   });
+
+  it("seeds declared aggregate state for bare and lag reads", () => {
+    const spec = normalizeAbmSpec({
+      populations: [{ name: "households", size: 2, state: ["h"] }],
+      state: { aggregates: { K: 50, DA: 0, openK: 0 } },
+      ticks: [
+        { do: [["DA", "0.1 * K"]] },
+        { do: [["openK", "lag(K)"]] },
+        { do: [["K", "K + 10 - DA"]] }
+      ]
+    });
+    const result = runAbmSpec(spec, { periods: 2, monteCarlo: 1, bandKind: "none" });
+    // Period 1: opening K=50 → DA=5, openK=lag(K)=50, ending K=55
+    expect(result.series.DA![0]).toBeCloseTo(5, 10);
+    expect(result.series.openK![0]).toBeCloseTo(50, 10);
+    expect(result.series.K![0]).toBeCloseTo(55, 10);
+    // Period 2: opening K=55 → DA=5.5, openK=55, ending K=59.5
+    expect(result.series.DA![1]).toBeCloseTo(5.5, 10);
+    expect(result.series.openK![1]).toBeCloseTo(55, 10);
+    expect(result.series.K![1]).toBeCloseTo(59.5, 10);
+  });
+
+  it("rejects unknown or colliding aggregate state names", () => {
+    expect(() =>
+      validateAbmSpec(
+        normalizeAbmSpec({
+          populations: [{ name: "households", size: 1, state: ["h"] }],
+          params: { K: 1 },
+          state: { aggregates: { K: 0 } },
+          ticks: [{ do: [["K", "K + 1"]] }]
+        })
+      )
+    ).toThrow(/collides with a scalar param/);
+
+    expect(() =>
+      validateAbmSpec(
+        normalizeAbmSpec({
+          populations: [{ name: "households", size: 1, state: ["h"] }],
+          state: { aggregates: { MISSING: 0 } },
+          ticks: [{ do: [["Y", "1"]] }]
+        })
+      )
+    ).toThrow(/never assigned/);
+  });
+
+  it("still throws for undeclared bare aggregates before assignment", () => {
+    expect(() =>
+      runAbmSpec(
+        normalizeAbmSpec({
+          populations: [{ name: "households", size: 1, state: ["h"] }],
+          ticks: [{ do: [["DA", "0.1 * K"]] }, { do: [["K", "1"]] }]
+        }),
+        { periods: 1, monteCarlo: 1, bandKind: "none" }
+      )
+    ).toThrow(/ABM unknown variable "K"/);
+  });
 });

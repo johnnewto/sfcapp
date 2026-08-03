@@ -4,6 +4,7 @@ import type {
   AbmPopulationSpec,
   AbmRecordSpec,
   AbmSpec,
+  AbmStateSpec,
   AbmTickSpec,
   AbmEquationRow
 } from "./abmSpecTypes";
@@ -394,8 +395,33 @@ export function normalizeAbmSpec(raw: unknown): AbmSpec {
     ...(typeof raw.modelId === "string" ? { modelId: raw.modelId } : {}),
     populations,
     ...(isRecord(raw.params) ? { params: raw.params as Record<string, number> } : {}),
+    ...(normalizeAbmState(raw.state) != null ? { state: normalizeAbmState(raw.state)! } : {}),
     ticks,
     record,
     ...(isRecord(raw.check) ? { check: raw.check as unknown as AbmSpec["check"] } : {})
   };
+}
+
+/** Normalize optional `state.aggregates` opening values. */
+export function normalizeAbmState(raw: unknown): AbmStateSpec | undefined {
+  if (raw == null) {
+    return undefined;
+  }
+  if (!isRecord(raw)) {
+    throw new Error("ABM state must be an object.");
+  }
+  if (raw.aggregates == null) {
+    return {};
+  }
+  if (!isRecord(raw.aggregates)) {
+    throw new Error("ABM state.aggregates must be an object of numeric values.");
+  }
+  const aggregates: Record<string, number> = {};
+  for (const [name, value] of Object.entries(raw.aggregates)) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`ABM state.aggregates "${name}" must be a finite number.`);
+    }
+    aggregates[name] = value;
+  }
+  return { aggregates };
 }

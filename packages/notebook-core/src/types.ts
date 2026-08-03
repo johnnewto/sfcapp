@@ -218,6 +218,11 @@ export interface AbmModelCell extends NotebookCellBase {
   populations: AbmSpec["populations"] | unknown;
   /** Scalar params shared by agents and aggregates. */
   params?: AbmSpec["params"] | Record<string, number>;
+  /**
+   * Optional opening aggregate state (`state.aggregates`). Population agent
+   * state remains zero-initialized from `populations[].state`.
+   */
+  state?: AbmSpec["state"] | Record<string, unknown>;
   /** Ordered ticks (typed `{ kind }` or YAML one-key wrappers). */
   ticks: AbmSpec["ticks"] | unknown;
   /** Optional recording overrides; omit to store all macros + first/last micro. */

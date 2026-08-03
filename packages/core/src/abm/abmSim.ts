@@ -79,6 +79,11 @@ export const ABM_SIM_SPEC: AbmSpec = {
     g1: ABM_SIM_DEFAULTS.g1,
     shockPeriod: ABM_SIM_DEFAULTS.shockPeriod
   },
+  state: {
+    aggregates: {
+      H_s: 0
+    }
+  },
   ticks: [
     {
       kind: "aggregate",
@@ -87,7 +92,7 @@ export const ABM_SIM_SPEC: AbmSpec = {
     {
       kind: "agent",
       population: "households",
-      equations: [["cd", "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))"]]
+      equations: [["cd", "min(alpha1 * yd + alpha2 * h, h)"]]
     },
     {
       kind: "aggregate",
@@ -132,7 +137,7 @@ export const ABM_SIM_SPEC: AbmSpec = {
       equations: [
         ["y", "w * e"],
         ["yd", "y * (1 - theta)"],
-        ["h", "lag(h) + y - c - theta * y"]
+        ["h", "h + y - c - theta * y"]
       ]
     },
     {
@@ -142,7 +147,7 @@ export const ABM_SIM_SPEC: AbmSpec = {
         ["YD", "sum(households.yd)"],
         ["TAX", "theta * w * N"],
         ["H_d", "sum(households.h)"],
-        ["H_s", "lag(H_s) + YG - TAX"],
+        ["H_s", "H_s + YG - TAX"],
         ["UR", "(households.size - N) / households.size"]
       ]
     }

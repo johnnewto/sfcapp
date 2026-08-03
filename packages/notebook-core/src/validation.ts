@@ -333,6 +333,30 @@ function validateAbmModelCell(cell: AbmModelCell, issues: NotebookValidationIssu
   if (!Array.isArray(cell.ticks) || cell.ticks.length < 1) {
     issues.push(createNotebookIssue(`ABM model cell '${cell.id}' needs ticks.`));
   }
+  if (cell.state != null) {
+    if (typeof cell.state !== "object" || Array.isArray(cell.state)) {
+      issues.push(createNotebookIssue(`ABM model cell '${cell.id}' state must be an object.`));
+    } else {
+      const aggregates = (cell.state as { aggregates?: unknown }).aggregates;
+      if (aggregates != null) {
+        if (typeof aggregates !== "object" || Array.isArray(aggregates)) {
+          issues.push(
+            createNotebookIssue(`ABM model cell '${cell.id}' state.aggregates must be an object.`)
+          );
+        } else {
+          for (const [name, value] of Object.entries(aggregates as Record<string, unknown>)) {
+            if (typeof value !== "number" || !Number.isFinite(value)) {
+              issues.push(
+                createNotebookIssue(
+                  `ABM model cell '${cell.id}' state.aggregates '${name}' must be a finite number.`
+                )
+              );
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 function validateSequenceCellReferences(

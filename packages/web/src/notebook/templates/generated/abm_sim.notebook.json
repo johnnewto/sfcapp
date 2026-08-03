@@ -15,6 +15,7 @@
         { "name": "households", "size": 200, "state": ["h", "yd", "cd", "c", "y", "e"], "params": { "alpha1": { "draw": "uniform", "lo": 0.2, "hi": 1 } } }
       ],
       "params": { "alpha2": 0.4, "theta": 0.2, "pr": 1.1, "w": 1.1, "s": 0.2, "g0": 20, "g1": 30, "shockPeriod": 60 },
+      "state": { "aggregates": { "H_s": 0 } },
       "ticks": [
         {
           "do": [
@@ -24,7 +25,7 @@
         {
           "for": {
             "households": [
-              ["cd", "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))", "Planned consumption (own alpha1)"]
+              ["cd", "min(alpha1 * yd + alpha2 * h, h)", "Planned consumption (own alpha1)"]
             ]
           }
         },
@@ -56,7 +57,7 @@
             "households": [
               ["y", "w * e", "Wage income if hired (w = pr, zero profit)"],
               ["yd", "y * (1 - theta)", "Disposable income net of taxes"],
-              ["h", "lag(h) + y - c - theta * y", "Household money holdings (micro, MC run 1)"]
+              ["h", "h + y - c - theta * y", "Household money holdings (micro, MC run 1)"]
             ]
           }
         },
@@ -66,7 +67,7 @@
             ["YD", "sum(households.yd)", "Disposable income (MC mean)"],
             ["TAX", "theta * w * N", "Tax revenue"],
             ["H_d", "sum(households.h)", "Total household money (MC mean)"],
-            ["H_s", "lag(H_s) + YG - TAX", "Government money supply (MC mean)"],
+            ["H_s", "H_s + YG - TAX", "Government money supply (MC mean)"],
             ["UR", "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
           ]
         }

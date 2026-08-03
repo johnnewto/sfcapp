@@ -131,13 +131,16 @@ cells:
         g0: 20 # Government spending baseline
         g1: 30 # Government spending after shock
         shockPeriod: 60 # Shock to government spending in period 60
+      state:
+        aggregates:
+          H_s: 0 # Opening government money supply (R: H_s = 0)
       ticks:
         # --- TICK 1: households decide how much to spend ---
         - do:
             - [G, "if (t >= shockPeriod) { g1 } else { g0 }", "Government spending (shock from period 60)"]
         - for:
             households:
-              - [cd, "min(alpha1 * lag(yd) + alpha2 * lag(h), lag(h))", "Planned consumption (own alpha1)"]
+              - [cd, "min(alpha1 * yd + alpha2 * h, h)", "Planned consumption (own alpha1)"]
         - do:
             - [AD, "sum(households.cd) + G", "Total demand for goods"]
             - [Nd, "AD / pr", "Labour needed (1/pr workers per good)"]
@@ -165,14 +168,14 @@ cells:
             households:
               - [y, "w * e", "Wage income if hired (w = pr, zero profit)"]
               - [yd, "y * (1 - theta)", "Disposable income net of taxes"]
-              - [h, "lag(h) + y - c - theta * y", "Household money holdings (micro, MC run 1)"]
+              - [h, "h + y - c - theta * y", "Household money holdings (micro, MC run 1)"]
         # --- TICK 6: write down totals, store values and check consistency ---
         - do:
             - [C, "sum(households.c)", "Consumption (MC mean)"]
             - [YD, "sum(households.yd)", "Disposable income (MC mean)"]
             - [TAX, "theta * w * N", "Tax revenue"]
             - [H_d, "sum(households.h)", "Total household money (MC mean)"]
-            - [H_s, "lag(H_s) + YG - TAX", "Government money supply (MC mean)"]
+            - [H_s, "H_s + YG - TAX", "Government money supply (MC mean)"]
             - [UR, "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
       # SFC check: record the worst gap between H_d and H_s
       check: { left: H_d, right: H_s, tolerance: "1e-9" }

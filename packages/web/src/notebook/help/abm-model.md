@@ -81,8 +81,32 @@ Typical fields:
 | `modelId` | Id referenced by run cells via `sourceModelId` |
 | `populations` | Agent groups (size expression, state, params) |
 | `params` | Model-level parameters |
+| `state.aggregates` | Optional opening values for aggregate macros (stocks). Seeded into both current and previous-period buffers at each Monte Carlo start |
 | `ticks` | Ordered period steps (`do`, `for`, `hire-lottery`, `shuffle`, `ration-fcfs`) |
 | `record` | Macro `series`, optional `bands`, optional micro histories |
 | `check` | Optional stock-flow equality check each period |
+
+## Opening Aggregates And Timing
+
+Population agent state (`populations[].state`) is zero-initialized and persists across periods: a bare agent variable read before that agent equation writes it is last period’s value.
+
+Declared `state.aggregates` do the same for macros. Example:
+
+```yaml
+state:
+  aggregates:
+    K: 0
+    H_s: 0
+ticks:
+  - do:
+      - [DA, "delta * K"]          # opening / carried K
+      - [K, "K + I - DA"]          # then overwrite K
+```
+
+- Bare `K` before assignment → carried opening stock (R-style mutable loop variable).
+- `lag(K)` → immutable period-opening snapshot (unchanged even after `K` is written later in the same period).
+- Undeclared bare aggregates still throw `ABM unknown variable` until a tick assigns them.
+
+Use `lag(name)` when you need the previous-period value after overwriting the same name in the current period (for example `H_s + B_cb - lag(B_cb)`). Explicit aliases such as `r_lag` are optional documentation; prefer `lag(r)`.
 
 Run cells with `engine: "abm"` execute this specification under Monte Carlo aggregation. See **Run And Scenarios** for baseline run fields, and **Chart** for plotting options.

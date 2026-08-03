@@ -10,11 +10,12 @@
       "title": "ABM-PC specification",
       "modelId": "abm-pc",
       "description": "Declarative agent-based PC: heterogeneous households, job lottery, FCFS goods market, bill/cash portfolio. Tick order matches Leeds ABM_PC.R. Upper-case names are MACRO totals (Monte Carlo means); lower-case / `*_h*` names are MICRO histories from MC run 1 only.\n",
-      "more": "**Macro vs micro (Leeds convention).** The R script comments\n`upper-case = MACRO total; lower-case = MICRO (one household)`.\n\n- **Macro**: every aggregate tick variable is stored automatically as a Monte\n  Carlo mean (banded p10–p90).\n- **Micro**: first and last household, all state variables, from **MC run 1\n  only** (not averaged) — `c_h1`, `v_hLast`, ….\n- **MC count**: set on the run cell as `abm.monteCarlo` (not on the model).\n\nStock-flow check: `|H_h - H_s|` must stay within `tolerance` every period.\n\n**Period ticks.** One period unfolds as the ordered tick list below: plan\nconsumption, hire via a job lottery, shuffle the queue, serve government then\nhouseholds first-come-first-served, pay wages and interest taxes, update wealth,\nand allocate the portfolio between bills and cash. The policy rate rises from\n`2.5%` to `3.5%` at period `60`.\n\n1. Each household plans `cd = min(max(alpha1 * yd + alpha2 * v, 0), v)` using its\n   own `alpha1` and last period's disposable income and wealth.\n2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.\n3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.\n4. One random shuffle orders both jobs and the shop queue.\n5. Government is served first; remaining output is rationed FCFS to households.\n6. Hired households earn wage `w = pr`. Interest `lag(r) * lag(b)` is taxed with\n   labour income at rate `theta`. Wealth updates as `v = v - c + yd`.\n7. Portfolio: `b = v * (lambda0 + lambda1 * r) - lambda2 * yd` (clamped to `[0, v]`);\n   cash is the residual `h = v - b`.\n8. Government issues bills to cover its deficit; the central bank absorbs unwanted\n   bills and issues cash one-for-one with the change in its bill holdings.\n",
+      "more": "**Macro vs micro (Leeds convention).** The R script comments\n`upper-case = MACRO total; lower-case = MICRO (one household)`.\n\n- **Macro**: every aggregate tick variable is stored automatically as a Monte\n  Carlo mean (banded p10–p90).\n- **Micro**: first and last household, all state variables, from **MC run 1\n  only** (not averaged) — `c_h1`, `v_hLast`, ….\n- **MC count**: set on the run cell as `abm.monteCarlo` (not on the model).\n\nStock-flow check: `|H_h - H_s|` must stay within `tolerance` every period.\n\n**Period ticks.** One period unfolds as the ordered tick list below: plan\nconsumption, hire via a job lottery, shuffle the queue, serve government then\nhouseholds first-come-first-served, pay wages and interest taxes, update wealth,\nand allocate the portfolio between bills and cash. The policy rate rises from\n`2.5%` to `3.5%` at period `60`.\n\n1. Each household plans `cd = min(max(alpha1 * yd + alpha2 * v, 0), v)` using its\n   own `alpha1` and last period's disposable income and wealth.\n2. Aggregate demand is `AD = sum(cd) + G`. Labour needed is `Nd = AD / pr`.\n3. Hiring: `N = min(floor(Nd * random.uniform(1-s, 1+s, 1)), floor(Nd), households.size)`.\n4. One random shuffle orders both jobs and the shop queue.\n5. Government is served first; remaining output is rationed FCFS to households.\n6. Hired households earn wage `w = pr`. Interest `lag(r) * b` is taxed with\n   labour income at rate `theta`. Wealth updates as `v = v - c + yd`.\n7. Portfolio: `b = v * (lambda0 + lambda1 * r) - lambda2 * yd` (clamped to `[0, v]`);\n   cash is the residual `h = v - b`.\n8. Government issues bills to cover its deficit; the central bank absorbs unwanted\n   bills and issues cash one-for-one with the change in its bill holdings.\n",
       "populations": [
         { "name": "households", "size": 200, "state": ["v", "b", "h", "yd", "cd", "c", "y", "e"], "params": { "alpha1": { "draw": "uniform", "lo": 0.6, "hi": 0.6 } } }
       ],
       "params": { "alpha2": 0.4, "theta": 0.2, "pr": 1.1, "w": 1.1, "s": 0.2, "g0": 20, "lambda0": 0.635, "lambda1": 5, "lambda2": 0.01, "r0": 0.025, "r1": 0.035, "shockPeriod": 60 },
+      "state": { "aggregates": { "r": 0.025, "B_s": 0, "B_cb": 0, "H_s": 0 } },
       "ticks": [
         {
           "do": [
@@ -25,7 +26,7 @@
         {
           "for": {
             "households": [
-              ["cd", "min(max(alpha1 * lag(yd) + alpha2 * lag(v), 0), lag(v))", "Planned consumption (own alpha1)"]
+              ["cd", "min(max(alpha1 * yd + alpha2 * v, 0), v)", "Planned consumption (own alpha1)"]
             ]
           }
         },
@@ -56,8 +57,8 @@
           "for": {
             "households": [
               ["y", "w * e", "Wage income if hired (w = pr, zero profit)"],
-              ["yd", "(y + lag(r) * lag(b)) * (1 - theta)", "Disposable income net of tax on labour and interest"],
-              ["v", "lag(v) - c + yd", "Household wealth = old wealth - spending + saving"],
+              ["yd", "(y + lag(r) * b) * (1 - theta)", "Disposable income net of tax on labour and interest"],
+              ["v", "v - c + yd", "Household wealth = old wealth - spending + saving"],
               ["b", "min(max(v * (lambda0 + lambda1 * r) - lambda2 * yd, 0), v)", "Bills held (portfolio)"],
               ["h", "v - b", "Cash held (residual)"]
             ]
@@ -71,9 +72,9 @@
             ["B_h", "sum(households.b)", "Bills demanded by households"],
             ["H_h", "sum(households.h)", "Cash held by households"],
             ["TAX", "theta / (1 - theta) * YD", "Tax revenue (labour + interest)"],
-            ["B_s", "lag(B_s) + YG + lag(r) * lag(B_s) - TAX - lag(r) * lag(B_cb)", "Bills supplied by government"],
+            ["B_s", "B_s + YG + lag(r) * B_s - TAX - lag(r) * B_cb", "Bills supplied by government"],
             ["B_cb", "B_s - B_h", "Bills held by central bank"],
-            ["H_s", "lag(H_s) + B_cb - lag(B_cb)", "Cash supplied by central bank"],
+            ["H_s", "H_s + B_cb - lag(B_cb)", "Cash supplied by central bank"],
             ["UR", "(households.size - N) / households.size", "Unemployment rate, emergent (MC mean)"]
           ]
         }

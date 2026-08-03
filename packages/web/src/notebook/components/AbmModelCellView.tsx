@@ -286,6 +286,23 @@ export function AbmModelCellView({
   const populations = Array.isArray(cell.populations) ? cell.populations : [];
   const params =
     cell.params && typeof cell.params === "object" ? (cell.params as Record<string, unknown>) : {};
+  const openingAggregates = (() => {
+    const state = cell.state;
+    if (state == null || typeof state !== "object" || Array.isArray(state)) {
+      return {} as Record<string, number>;
+    }
+    const aggregates = (state as { aggregates?: unknown }).aggregates;
+    if (aggregates == null || typeof aggregates !== "object" || Array.isArray(aggregates)) {
+      return {} as Record<string, number>;
+    }
+    const out: Record<string, number> = {};
+    for (const [name, value] of Object.entries(aggregates as Record<string, unknown>)) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        out[name] = value;
+      }
+    }
+    return out;
+  })();
   const ticks = Array.isArray(cell.ticks) ? cell.ticks : [];
   const normalizedRecord = (() => {
     try {
@@ -426,6 +443,28 @@ export function AbmModelCellView({
           <h4>Params</h4>
           <ul className="notebook-abm-model-params">
             {Object.entries(params).map(([name, value]) => {
+              const desc = mergedDescriptions.get(name);
+              return (
+                <li key={name}>
+                  <InspectableName {...nameProps} name={name} /> = {String(value)}
+                  {desc ? <> — {desc}</> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {Object.keys(openingAggregates).length > 0 ? (
+        <section className="notebook-abm-model-section">
+          <h4>Opening aggregates</h4>
+          <p className="notebook-abm-model-hint">
+            Declared stocks start each Monte Carlo run at these values. Bare reads before a
+            same-period assignment use the carried value; <code>lag(name)</code> always uses
+            the period-opening snapshot.
+          </p>
+          <ul className="notebook-abm-model-params">
+            {Object.entries(openingAggregates).map(([name, value]) => {
               const desc = mergedDescriptions.get(name);
               return (
                 <li key={name}>

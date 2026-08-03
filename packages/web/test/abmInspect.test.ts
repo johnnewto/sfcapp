@@ -29,6 +29,9 @@ describe("ABM variable inspect", () => {
       /propensity to consume out of income/i
     );
     expect(editor.equations.find((row) => row.name === "Y")?.desc).toMatch(/Output/i);
+    expect(editor.initialValues.some((row) => row.name === "H_s" && row.valueText === "0")).toBe(
+      true
+    );
   });
 
   it("resolves ABM models through buildEditorStateForNotebookModel", () => {

@@ -56,8 +56,11 @@ describe("ABM-PC notebook template", () => {
     expect(result.series.H_h).toHaveLength(100);
     expect(result.series.r).toHaveLength(100);
 
-    // Rate shock at period 60: r jumps from 0.025 to 0.035
+    // Rate shock at period 60: r jumps from 0.025 to 0.035.
+    // Interest uses lag(r), so period 60 still pays the pre-shock rate.
     expect(result.series.r![50]!).toBeCloseTo(0.025, 8);
+    expect(result.series.r![58]!).toBeCloseTo(0.025, 8);
+    expect(result.series.r![59]!).toBeCloseTo(0.035, 8);
     expect(result.series.r![70]!).toBeCloseTo(0.035, 8);
 
     let maxGap = 0;

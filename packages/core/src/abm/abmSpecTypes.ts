@@ -154,12 +154,27 @@ export interface AbmCheckSpec {
   tolerance: number | string;
 }
 
+/**
+ * Declared opening values for aggregate macros. Seeded into both current and
+ * previous-period buffers at MC-run start so bare reads before a same-period
+ * assignment behave like R mutable loop variables, while `lag(name)` remains
+ * the immutable period-opening snapshot.
+ */
+export interface AbmStateSpec {
+  aggregates?: Record<string, number>;
+}
+
 export interface AbmSpec {
   /** Optional display / registry id. */
   modelId?: string;
   populations: AbmPopulationSpec[];
   /** Scalar params shared by all agents and aggregates. */
   params?: Record<string, number>;
+  /**
+   * Optional opening aggregate state (e.g. stocks). Population agent state is
+   * still zero-initialized from `populations[].state`.
+   */
+  state?: AbmStateSpec;
   ticks: AbmTickSpec[];
   /** Optional; defaults to all macros + first/last micro per population. */
   record?: AbmRecordSpec;

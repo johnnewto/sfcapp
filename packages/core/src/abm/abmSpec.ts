@@ -279,6 +279,25 @@ export function validateAbmSpec(spec: AbmSpec, overrides?: AbmSpecOverrides): vo
   if (spec.check) {
     resolveTolerance(spec.check.tolerance);
   }
+
+  const opening = spec.state?.aggregates ?? {};
+  const paramNames = new Set(Object.keys(spec.params ?? {}));
+  for (const [name, value] of Object.entries(opening)) {
+    if (!name.trim()) {
+      throw new Error("ABM state.aggregates entries need a non-empty name.");
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`ABM state.aggregates "${name}" must be a finite number.`);
+    }
+    if (paramNames.has(name)) {
+      throw new Error(`ABM state.aggregates "${name}" collides with a scalar param.`);
+    }
+    if (!aggregates.has(name)) {
+      throw new Error(
+        `ABM state.aggregates "${name}" is never assigned by an aggregate (or hire-lottery) tick.`
+      );
+    }
+  }
 }
 
 function compileSpec(spec: AbmSpec, overrides?: AbmSpecOverrides): CompiledSpec {

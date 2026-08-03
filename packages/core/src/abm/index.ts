@@ -34,7 +34,14 @@ export {
   abmMicroSeriesName,
   expandAbmMicroAgents
 } from "./abmSpec";
-export { normalizeAbmSpec, normalizeAbmTick, normalizeAbmRecord, aggregateAssignedNames, defaultAbmRecord } from "./normalizeAbmSpec";
+export {
+  normalizeAbmSpec,
+  normalizeAbmTick,
+  normalizeAbmRecord,
+  normalizeAbmState,
+  aggregateAssignedNames,
+  defaultAbmRecord
+} from "./normalizeAbmSpec";
 export type {
   AbmSpec,
   AbmSpecOverrides,
@@ -53,6 +60,7 @@ export type {
   AbmRecordDirective,
   AbmMicroRecord,
   AbmMicroAgentRef,
-  AbmCheckSpec
+  AbmCheckSpec,
+  AbmStateSpec
 } from "./abmSpecTypes";
 export { ABM_MICRO_DEFAULT_MAX_AGENTS } from "./abmSpecTypes";

@@ -88,7 +88,7 @@ cells:
         fund net investment.
 
         1. Depreciation `DA = delta * K`. Planned investment
-           `Ipl = max(0, gamma * (kappa * Ylag - K) + DA)`.
+           `Ipl = max(0, gamma * (kappa * lag(Y) - K) + DA)`.
         2. Each household plans `cd = max(alpha0/N + alpha1 * yd + alpha2 * m, 0)`.
         3. Total demand `D = sum(cd) + Ipl`. Labour needed `Ln = D / pr`.
         4. Hiring lottery sets `Nemp` and output `Y = Nemp * pr`.
@@ -113,15 +113,21 @@ cells:
         rl: 0.04 # Loan rate (= deposit rate)
         rm: 0.04 # Deposit rate (= loan rate)
         s: 0.1 # Hiring-lottery spread (0 = no friction)
+      state:
+        aggregates:
+          K: 0 # Opening capital stock
+          L: 0 # Opening bank loans
+          M_s: 0 # Opening deposit supply
+          M_h: 0 # Opening household deposits (aggregate)
       ticks:
         # --- FIRMS (aggregate): investment from the accelerator ---
         - do:
-            - [DA, "delta * lag(K)", "Depreciation"]
-            - [Ipl, "max(0, gamma * (kappa * lag(Y) - lag(K)) + DA)", "Planned gross investment"]
+            - [DA, "delta * K", "Depreciation"]
+            - [Ipl, "max(0, gamma * (kappa * lag(Y) - K) + DA)", "Planned gross investment"]
         # --- HOUSEHOLDS plan consumption ---
         - for:
             households:
-              - [cd, "max(alpha0 / households.size + alpha1 * lag(yd) + alpha2 * lag(m), 0)", "Planned consumption (own alpha1)"]
+              - [cd, "max(alpha0 / households.size + alpha1 * yd + alpha2 * m, 0)", "Planned consumption (own alpha1)"]
         - do:
             - [D, "sum(households.cd) + Ipl", "Total demand for goods"]
             - [Ln, "D / pr", "Labour needed"]
@@ -142,20 +148,20 @@ cells:
             into: c # Household consumption (micro, MC run 1)
         # --- WAGES (residual) + interest, then deposits ---
         - do:
-            - [WB, "Y - rl * lag(L) - DA", "Wage bill = residual after interest and depreciation"]
+            - [WB, "Y - rl * L - DA", "Wage bill = residual after interest and depreciation"]
             - [wagePerWorker, "if (Nemp >= 1) { WB / Nemp } else { 0 }", "Wage per employed worker"]
         - for:
             households:
               - [wage, "wagePerWorker * e", "Wage if employed"]
-              - [yd, "wage + rm * lag(m)", "Disposable income = wage + deposit interest"]
-              - [m, "lag(m) + yd - c", "Deposit accumulation"]
+              - [yd, "wage + rm * m", "Disposable income = wage + deposit interest"]
+              - [m, "m + yd - c", "Deposit accumulation"]
         # --- FIRMS borrow, BANK creates deposits ---
         - do:
             - [C, "sum(households.c)", "Consumption (MC mean)"]
-            - [INT, "rm * lag(M_h)", "Deposit interest paid to households"]
-            - [K, "lag(K) + I - DA", "Capital stock"]
-            - [L, "lag(L) + I - DA", "Bank loans"]
-            - [M_s, "lag(M_s) + I - DA", "Deposit supply from new loans"]
+            - [INT, "rm * M_h", "Deposit interest paid to households"]
+            - [K, "K + I - DA", "Capital stock"]
+            - [L, "L + I - DA", "Bank loans"]
+            - [M_s, "M_s + I - DA", "Deposit supply from new loans"]
             - [M_h, "sum(households.m)", "Deposits held by households"]
             - [UR, "(households.size - Nemp) / households.size", "Unemployment rate, emergent (MC mean)"]
       check: { left: M_h, right: M_s, tolerance: "1e-9" }
