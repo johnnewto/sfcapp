@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -17,13 +17,22 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-function EquationGridResizeFixture({ isEmbedded = false }: { isEmbedded?: boolean } = {}) {
-  const columnResize = useEquationGridColumnResize({ isEmbedded });
+function EquationGridResizeFixture({
+  isEmbedded = false,
+  syncGroup,
+  label = "Equations"
+}: {
+  isEmbedded?: boolean;
+  syncGroup?: string;
+  label?: string;
+} = {}) {
+  const columnResize = useEquationGridColumnResize({ isEmbedded, syncGroup });
 
   return (
     <div
       ref={columnResize.shellRef}
       className={`equation-grid-shell${columnResize.shellClassName ? ` ${columnResize.shellClassName}` : ""}`.trim()}
+      data-testid={label}
       style={{ width: 960 }}
     >
       <div className="equation-grid-header" role="row">
@@ -129,5 +138,25 @@ describe("useEquationGridColumnResize", () => {
 
     expect(shell.style.getPropertyValue("--eq-col-variable-width")).toBe("148px");
     expect(separator).toHaveAttribute("aria-valuenow", "148");
+  });
+
+  it("syncs live widths across instances in the same sync group", () => {
+    render(
+      <>
+        <EquationGridResizeFixture isEmbedded syncGroup="abm-equations" label="grid-a" />
+        <EquationGridResizeFixture isEmbedded syncGroup="abm-equations" label="grid-b" />
+      </>
+    );
+
+    const shellA = screen.getByTestId("grid-a");
+    const shellB = screen.getByTestId("grid-b");
+    const separatorA = within(shellA).getByRole("separator", { name: /resize variable column/i });
+
+    fireEvent.mouseDown(separatorA, { button: 0, clientX: 300 });
+    fireEvent.mouseMove(document, { clientX: 360 });
+    fireEvent.mouseUp(document);
+
+    expect(shellA.style.getPropertyValue("--eq-col-variable-width")).toBe("220px");
+    expect(shellB.style.getPropertyValue("--eq-col-variable-width")).toBe("220px");
   });
 });

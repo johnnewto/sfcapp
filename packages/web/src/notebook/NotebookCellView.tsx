@@ -30,6 +30,7 @@ import { MatrixUnitMetaDialog } from "./components/MatrixUnitMetaDialog";
 import { NotebookCellMore } from "./components/NotebookCellMore";
 import { MatrixEquationProposalDialog } from "./components/MatrixEquationProposalDialog";
 import { MatrixSourceEditor } from "./MatrixSourceEditor";
+import { AbmSourceEditor } from "./AbmSourceEditor";
 import { NotebookHighlightedSourceEditor } from "./NotebookHighlightedSourceEditor";
 import {
   applyMatrixEquationUpdates,
@@ -60,6 +61,7 @@ import {
   parseCellSource,
   readCellSourceTitle,
   serializeCellBody,
+  validateAbmModelCellSemantics,
   writeCellSourceTitle
 } from "./sourceEditing";
 import {
@@ -142,6 +144,15 @@ const CELL_INSERT_TYPES: NotebookCellInsertType[] = [
   "sequence",
   "sankey"
 ];
+
+type SourceLayoutMode = "pretty" | "compact" | "grid" | "run" | "abm";
+
+function defaultSourceLayoutMode(cellType: NotebookCell["type"]): SourceLayoutMode {
+  if (cellType === "matrix") return "grid";
+  if (cellType === "run") return "run";
+  if (cellType === "abm-model") return "abm";
+  return "compact";
+}
 
 function formatCellInsertType(type: NotebookCellInsertType): string {
   switch (type) {
@@ -334,9 +345,9 @@ function NotebookCellViewComponent({
   const [titleDraft, setTitleDraft] = useState(() => cell.title);
   const [sourceDraft, setSourceDraft] = useState(() => serializeCellBody(cell));
   const [moreDraft, setMoreDraft] = useState(() => cell.more ?? "");
-  const [sourceLayoutMode, setSourceLayoutMode] = useState<
-    "pretty" | "compact" | "grid" | "run"
-  >(cell.type === "matrix" ? "grid" : cell.type === "run" ? "run" : "compact");
+  const [sourceLayoutMode, setSourceLayoutMode] = useState<SourceLayoutMode>(() =>
+    defaultSourceLayoutMode(cell.type)
+  );
   const [openSourceMenu, setOpenSourceMenu] = useState<"insert" | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [sourceValidationError, setSourceValidationError] = useState<string | null>(null);
@@ -572,7 +583,7 @@ function NotebookCellViewComponent({
     setTitleDraft(cell.title);
     setSourceDraft(serializeCellBody(cell));
     setMoreDraft(cell.more ?? "");
-    setSourceLayoutMode(cell.type === "matrix" ? "grid" : cell.type === "run" ? "run" : "compact");
+    setSourceLayoutMode(defaultSourceLayoutMode(cell.type));
     setOpenSourceMenu(null);
     setSourceError(null);
     setSourceValidationError(null);
@@ -612,6 +623,10 @@ function NotebookCellViewComponent({
         setSourceValidationError(
           formatMatrixCellUnitValidationMessage(nextCell, variableUnitMetadata)
         );
+        return;
+      }
+      if (nextCell.type === "abm-model") {
+        setSourceValidationError(validateAbmModelCellSemantics(nextCell));
         return;
       }
 
@@ -758,7 +773,7 @@ function NotebookCellViewComponent({
     setTitleDraft(cell.title);
     setSourceDraft(serializeCellBody(cell));
     setMoreDraft(cell.more ?? "");
-    setSourceLayoutMode(cell.type === "matrix" ? "grid" : cell.type === "run" ? "run" : "compact");
+    setSourceLayoutMode(defaultSourceLayoutMode(cell.type));
     setOpenSourceMenu(null);
     setSourceError(null);
     setSourceValidationError(null);
@@ -797,18 +812,18 @@ function NotebookCellViewComponent({
     }
   }
 
-  function handleSourceLayoutModeChange(nextMode: "pretty" | "compact" | "grid" | "run"): void {
+  function handleSourceLayoutModeChange(nextMode: SourceLayoutMode): void {
     if (cell.type === "markdown") {
       setSourceLayoutMode(nextMode);
       return;
     }
 
-    if (nextMode === "grid" || nextMode === "run") {
+    if (nextMode === "grid" || nextMode === "run" || nextMode === "abm") {
       try {
         const parsed = parseLenientJsonValue(sourceDraft) as NotebookCell;
         setSourceDraft(formatCellBody(parsed, "compact"));
       } catch {
-        // Keep the current draft; the structured matrix editor only renders from valid cell state.
+        // Keep the current draft; structured editors render a repair prompt for invalid cell JSON.
       }
 
       setSourceLayoutMode(nextMode);
@@ -1211,6 +1226,17 @@ function NotebookCellViewComponent({
                       <span>Run</span>
                     </label>
                   ) : null}
+                  {cell.type === "abm-model" ? (
+                    <label className="notebook-source-layout-option">
+                      <input
+                        type="radio"
+                        name={`source-layout-${cell.id}`}
+                        checked={sourceLayoutMode === "abm"}
+                        onChange={() => handleSourceLayoutModeChange("abm")}
+                      />
+                      <span>Visual</span>
+                    </label>
+                  ) : null}
                   <label className="notebook-source-layout-option">
                     <input
                       type="radio"
@@ -1218,7 +1244,7 @@ function NotebookCellViewComponent({
                       checked={sourceLayoutMode === "pretty"}
                       onChange={() => handleSourceLayoutModeChange("pretty")}
                     />
-                    <span>Pretty</span>
+                    <span>{cell.type === "abm-model" ? "JSON" : "Pretty"}</span>
                   </label>
                   <label className="notebook-source-layout-option">
                     <input
@@ -1227,7 +1253,7 @@ function NotebookCellViewComponent({
                       checked={sourceLayoutMode === "compact"}
                       onChange={() => handleSourceLayoutModeChange("compact")}
                     />
-                    <span>Compact</span>
+                    <span>{cell.type === "abm-model" ? "Compact JSON" : "Compact"}</span>
                   </label>
                 </fieldset>
               ) : null}
@@ -1257,6 +1283,25 @@ function NotebookCellViewComponent({
               />
             ) : cell.type === "matrix" && sourceLayoutMode === "grid" ? (
               <MatrixSourceEditor value={sourceDraft} onChange={handleSourceDraftChange} />
+            ) : cell.type === "abm-model" && sourceLayoutMode === "abm" ? (
+              <AbmSourceEditor
+                value={sourceDraft}
+                onChange={handleSourceDraftChange}
+                currentValues={abmInspectionContext?.currentValues ?? {}}
+                parameterNames={parameterNamesFromEditor(abmInspectionContext?.editor)}
+                variableDescriptions={variableDescriptions}
+                variableUnitMetadata={variableUnitMetadata}
+                documentHighlightedVariable={highlightedVariable}
+                onSelectVariable={
+                  abmInspectionContext == null
+                    ? undefined
+                    : (selectedVariable) =>
+                        onVariableInspectRequest({
+                          ...abmInspectionContext,
+                          selectedVariable
+                        })
+                }
+              />
             ) : (
               <NotebookHighlightedSourceEditor
                 active={isEditingSource}

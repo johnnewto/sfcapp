@@ -261,11 +261,16 @@
   background: transparent;
   color: var(--color-text-strong);
   inset: 0;
-  pointer-events: auto;
+  pointer-events: none;
   position: absolute;
+  z-index: 1;
 }
 .highlighted-formula-preview.is-placeholder {
   color: #94a3b8;
+}
+.highlighted-formula-preview .formula-token.is-clickable {
+  pointer-events: auto;
+  position: relative;
 }
 .highlighted-formula-control {
   appearance: none;
@@ -275,12 +280,14 @@
   overflow: hidden;
   position: relative;
   resize: none;
+  z-index: 0;
 }
 .highlighted-formula-control:focus {
   outline: none;
 }
 .highlighted-formula-input:focus-within .highlighted-formula-preview {
   opacity: 0;
+  pointer-events: none;
 }
 .highlighted-formula-input:focus-within .highlighted-formula-control {
   color: var(--color-text-strong);
@@ -307,6 +314,9 @@
 }
 .formula-token.is-clickable {
   cursor: pointer;
+  /* Expand the hit target beyond glyph ink so hover/click is reliable. */
+  margin: -0.2em -0.08em;
+  padding: 0.2em 0.08em;
 }
 .formula-token.is-clickable:hover {
   text-decoration: underline;

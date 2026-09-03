@@ -7,6 +7,7 @@ import {
   parseCellSource,
   readCellSourceTitle,
   serializeCellBody,
+  validateAbmModelCellSemantics,
   writeCellSourceTitle
 } from "../src/notebook/sourceEditing";
 import type { ChartCell, MatrixCell } from "../src/notebook/types";
@@ -54,6 +55,61 @@ describe("sourceEditing matrix help", () => {
         record: { series: ["Y"] }
       })
     ).toBe("abm-model");
+  });
+
+  it("accepts ABM source without recording overrides", () => {
+    const cell = {
+      id: "abm-1",
+      type: "abm-model" as const,
+      title: "ABM",
+      modelId: "abm-sim",
+      populations: [{ name: "households", size: 2, state: ["income"] }],
+      ticks: [{ for: { households: [["income", "1"]] } }]
+    };
+
+    const next = parseCellSource(cell, serializeCellBody(cell));
+    expect(next.type).toBe("abm-model");
+    expect(next.record).toBeUndefined();
+    expect(next.ticks).toEqual(cell.ticks);
+  });
+
+  it("documents Visual editing and optional recording overrides", () => {
+    const help = buildSourceHelpText({
+      id: "abm-1",
+      type: "abm-model",
+      title: "ABM",
+      modelId: "abm-sim",
+      populations: [],
+      ticks: []
+    });
+
+    expect(help).toContain("Use Visual for normal editing");
+    expect(help).toContain("When record is omitted");
+    expect(help).not.toMatch(/Required fields:[\s\S]*- record/);
+  });
+
+  it("reports ABM semantic errors before apply", () => {
+    const error = validateAbmModelCellSemantics({
+      id: "abm-1",
+      type: "abm-model",
+      title: "ABM",
+      modelId: "abm-sim",
+      populations: [{ name: "households", size: 2, state: ["demand", "served"] }],
+      ticks: [
+        { do: [["Y", "1"]] },
+        {
+          "ration-fcfs": {
+            population: "households",
+            demand: "demand",
+            supply: "Y",
+            into: "served"
+          }
+        }
+      ],
+      record: { series: ["Y"] }
+    });
+
+    expect(error).toMatch(/shuffle/i);
   });
 
   it("documents accountingKind in matrix syntax help", () => {

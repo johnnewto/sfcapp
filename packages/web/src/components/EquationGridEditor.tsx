@@ -837,26 +837,23 @@ export function highlightFormula(
           onSelectVariable(normalizedToken);
         }
       : undefined;
+    const selectVariableOnMouseDown =
+      !variableSelectOnClick && isInspectableVariable
+        ? (event: MouseEvent<HTMLElement>) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelectVariable?.(normalizedToken);
+          }
+        : undefined;
     parts.push(
       <InstantTooltip
         key={`${token}-${index}`}
         className={tokenClassName}
         onClick={selectVariableOnClick}
+        onMouseDown={selectVariableOnMouseDown}
         tooltip={tokenDescription}
       >
-        <span
-          className={tokenClassName}
-          {...(!variableSelectOnClick && isInspectableVariable
-            ? {
-                onMouseDown: (event: MouseEvent<HTMLSpanElement>) => {
-                  event.preventDefault();
-                  onSelectVariable?.(normalizedToken);
-                }
-              }
-            : {})}
-        >
-          {renderedTokenNode}
-        </span>
+        <span className={tokenClassName}>{renderedTokenNode}</span>
       </InstantTooltip>
     );
     lastIndex = index + token.length;

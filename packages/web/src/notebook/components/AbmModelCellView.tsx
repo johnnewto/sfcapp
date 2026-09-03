@@ -1,5 +1,6 @@
 import { abmMicroSeriesName, expandAbmMicroAgents, normalizeAbmSpec } from "@sfcr/core";
 import { abmSpecFromCell } from "@sfcr/notebook-core";
+import type { ReactNode } from "react";
 
 import { highlightFormula } from "../../components/EquationGridEditor";
 import { VariableLabel } from "../../components/VariableLabel";
@@ -9,9 +10,21 @@ import type { VariableDescriptions } from "../../lib/variableDescriptions";
 import type { VariableInspectRequest } from "../../lib/variableInspect";
 import type { VariableUnitMetadata } from "../../lib/unitMeta";
 import type { AbmModelCell } from "../types";
+import { abmTickKindLabel, type AbmTickKind } from "../abmTickLabels";
 import { formatNotebookCurrentValue } from "./NotebookCurrentValue";
 
 type EquationRow = [string, string] | [string, string, string];
+
+type InspectableNameProps = {
+  currentValues?: Record<string, number | undefined>;
+  forceTokenClass?: string;
+  highlightedVariable?: string | null;
+  name: string;
+  onInspect?: (variableName: string) => void;
+  parameterNames: Set<string>;
+  variableDescriptions: VariableDescriptions;
+  variableUnitMetadata: VariableUnitMetadata;
+};
 
 function asEquationRows(value: unknown): EquationRow[] {
   if (!Array.isArray(value)) {
@@ -49,53 +62,144 @@ function tickEquations(tick: Record<string, unknown>): EquationRow[] {
   return [];
 }
 
-function formatTickLabel(tick: unknown): string {
+function renderTickLabel(tick: unknown, nameProps: InspectableNameProps): ReactNode {
   if (tick == null || typeof tick !== "object") {
     return "(invalid tick)";
   }
   const record = tick as Record<string, unknown>;
+
+  const populationName = (value: unknown): string => String(value ?? "?").trim() || "?";
+  const populationToken = (name: string) => (
+    <InspectableName {...nameProps} forceTokenClass="formula-lowercase" name={name} />
+  );
+  const operation = (kind: AbmTickKind) => (
+    <span className="abm-source-tick-operation-label">{abmTickKindLabel(kind)}</span>
+  );
+
   if (typeof record.kind === "string") {
     switch (record.kind) {
       case "agent":
-        return `for ${String(record.population)}`;
+        return (
+          <>
+            {operation("for")} {populationToken(populationName(record.population))}
+          </>
+        );
       case "aggregate":
-        return "do";
+        return operation("do");
       case "hire-lottery":
-        return `hire-lottery → ${String(record.into)}`;
+        return (
+          <>
+            {operation("hire-lottery")} →{" "}
+            <InspectableName {...nameProps} name={String(record.into ?? "?")} />
+          </>
+        );
       case "shuffle":
-        return `shuffle ${String(record.population)}`;
+        return (
+          <>
+            {operation("shuffle")} {populationToken(populationName(record.population))}
+          </>
+        );
       case "ration-fcfs":
-        return `ration-fcfs ${String(record.population)}.${String(record.into)}`;
+        return (
+          <>
+            {operation("ration-fcfs")} {populationToken(populationName(record.population))}.
+            <InspectableName {...nameProps} name={String(record.into ?? "?")} />
+          </>
+        );
       default:
-        return String(record.kind);
+        return <span className="abm-source-tick-operation-label">{String(record.kind)}</span>;
     }
   }
   if ("for" in record) {
     const body = record.for;
     if (body != null && typeof body === "object" && !Array.isArray(body)) {
       const [population] = Object.entries(body as Record<string, unknown>)[0] ?? [];
-      return `for ${String(population)}`;
+      return (
+        <>
+          {operation("for")} {populationToken(populationName(population))}
+        </>
+      );
     }
-    return "for ?";
+    return (
+      <>
+        {operation("for")} ?
+      </>
+    );
   }
   if ("do" in record) {
-    return "do";
+    return operation("do");
   }
   if ("hire-lottery" in record) {
     const body = record["hire-lottery"] as { into?: unknown };
-    return `hire-lottery → ${String(body?.into ?? "?")}`;
+    return (
+      <>
+        {operation("hire-lottery")} →{" "}
+        <InspectableName {...nameProps} name={String(body?.into ?? "?")} />
+      </>
+    );
   }
   if ("shuffle" in record) {
     const body = record.shuffle;
     const pop = typeof body === "string" ? body : (body as { population?: unknown })?.population;
-    return `shuffle ${String(pop ?? "?")}`;
+    return (
+      <>
+        {operation("shuffle")} {populationToken(populationName(pop))}
+      </>
+    );
   }
   if ("ration-fcfs" in record) {
     const body = record["ration-fcfs"] as { population?: unknown; into?: unknown };
-    return `ration-fcfs ${String(body?.population)}.${String(body?.into)}`;
+    return (
+      <>
+        {operation("ration-fcfs")} {populationToken(populationName(body?.population))}.
+        <InspectableName {...nameProps} name={String(body?.into ?? "?")} />
+      </>
+    );
   }
   return "(unknown tick)";
 }
+
+function rationFcfsFields(tick: unknown): {
+  demand: string;
+  into: string;
+  population: string;
+  supply: string;
+} | null {
+  if (tick == null || typeof tick !== "object") {
+    return null;
+  }
+  const record = tick as Record<string, unknown>;
+  const body =
+    record.kind === "ration-fcfs"
+      ? record
+      : "ration-fcfs" in record && record["ration-fcfs"] != null && typeof record["ration-fcfs"] === "object"
+        ? (record["ration-fcfs"] as Record<string, unknown>)
+        : null;
+  if (!body) {
+    return null;
+  }
+  const into = String(body.into ?? "").trim();
+  if (!into) {
+    return null;
+  }
+  return {
+    demand: String(body.demand ?? "").trim(),
+    into,
+    population: String(body.population ?? "").trim(),
+    supply: String(body.supply ?? "").trim()
+  };
+}
+
+function isShuffleTick(tick: unknown): boolean {
+  if (tick == null || typeof tick !== "object") {
+    return false;
+  }
+  const record = tick as Record<string, unknown>;
+  return record.kind === "shuffle" || "shuffle" in record;
+}
+
+const SHUFFLE_TICK_DESCRIPTION =
+  "Build a new queue of agent IDs using Fisher–Yates shuffle.";
 
 function formatAgents(agents: unknown): string {
   if (agents === "all") {
@@ -225,25 +329,18 @@ function SeriesRow({
 
 function InspectableName({
   currentValues,
+  forceTokenClass,
   highlightedVariable,
   name,
   onInspect,
   parameterNames,
   variableDescriptions,
   variableUnitMetadata
-}: {
-  currentValues?: Record<string, number | undefined>;
-  highlightedVariable?: string | null;
-  name: string;
-  onInspect?: (variableName: string) => void;
-  parameterNames: Set<string>;
-  variableDescriptions: VariableDescriptions;
-  variableUnitMetadata: VariableUnitMetadata;
-}) {
-  const tokenClass = classifyVariableToken(name.trim(), parameterNames);
+}: InspectableNameProps) {
+  const tokenClass = forceTokenClass ?? classifyVariableToken(name.trim(), parameterNames);
   const label = (
     <VariableLabel
-      className={`formula-token ${tokenClass}`}
+      className={`formula-token ${tokenClass}${onInspect ? " is-clickable" : ""}`}
       currentValues={currentValues}
       name={name}
       variableDescriptions={variableDescriptions}
@@ -405,7 +502,12 @@ export function AbmModelCellView({
             return (
               <li key={`${String(entry.name)}-${index}`}>
                 <div>
-                  <code>{String(entry.name)}</code> × {String(entry.size)}
+                  <InspectableName
+                    {...nameProps}
+                    forceTokenClass="formula-lowercase"
+                    name={String(entry.name ?? "")}
+                  />{" "}
+                  × {String(entry.size)}
                 </div>
                 {stateNames.length > 0 ? (
                   <div className="notebook-abm-model-population-row">
@@ -483,15 +585,11 @@ export function AbmModelCellView({
           {ticks.map((tick, index) => {
             const equations =
               tick != null && typeof tick === "object" ? tickEquations(tick as Record<string, unknown>) : [];
-            const rationInto =
-              tick != null &&
-              typeof tick === "object" &&
-              "ration-fcfs" in (tick as Record<string, unknown>)
-                ? String(((tick as Record<string, unknown>)["ration-fcfs"] as { into?: unknown })?.into ?? "")
-                : "";
+            const ration = rationFcfsFields(tick);
+            const shuffle = isShuffleTick(tick);
             return (
               <li key={index}>
-                <div>{formatTickLabel(tick)}</div>
+                <div>{renderTickLabel(tick, nameProps)}</div>
                 {equations.length > 0 ? (
                   <ul className="notebook-abm-model-equations">
                     {equations.map((row) => {
@@ -521,12 +619,38 @@ export function AbmModelCellView({
                     })}
                   </ul>
                 ) : null}
-                {rationInto ? (
+                {ration ? (
                   <ul className="notebook-abm-model-equations">
                     <li>
-                      <InspectableName {...nameProps} name={rationInto} />
-                      <code> ← ration-fcfs</code>
+                      <InspectableName {...nameProps} name={ration.into} />
+                      <span className="notebook-abm-model-expression">
+                        {" "}
+                        ← ration-fcfs(
+                        {ration.demand || ration.supply
+                          ? highlightFormula(
+                              [ration.demand, ration.supply].filter(Boolean).join(", "),
+                              parameterNames,
+                              undefined,
+                              mergedDescriptions,
+                              units,
+                              handleInspect,
+                              undefined,
+                              currentValues,
+                              highlightedVariable,
+                              true
+                            )
+                          : null}
+                        )
+                      </span>
+                      {mergedDescriptions.get(ration.into) ? (
+                        <> — {mergedDescriptions.get(ration.into)}</>
+                      ) : null}
                     </li>
+                  </ul>
+                ) : null}
+                {shuffle ? (
+                  <ul className="notebook-abm-model-equations">
+                    <li className="notebook-abm-model-tick-note">{SHUFFLE_TICK_DESCRIPTION}</li>
                   </ul>
                 ) : null}
               </li>
@@ -620,7 +744,12 @@ export function AbmModelCellView({
                   : [];
               return (
                 <li key={index}>
-                  <code>{populationName}</code> agents [{formatAgents(row.agents)}]
+                  <InspectableName
+                    {...nameProps}
+                    forceTokenClass="formula-lowercase"
+                    name={populationName}
+                  />{" "}
+                  agents [{formatAgents(row.agents)}]
                   {row.maxAgents != null ? <> (maxAgents={String(row.maxAgents)})</> : null}
                   <ul className="notebook-abm-model-series notebook-abm-model-series-grid">
                     {variables.flatMap((variable) => {

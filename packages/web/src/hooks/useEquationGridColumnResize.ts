@@ -68,7 +68,22 @@ type ResizableEquationColumn = "variable" | "expression";
 interface UseEquationGridColumnResizeOptions {
   isEmbedded?: boolean;
   layout?: EquationColumnResizeLayout;
+  /** When set, all hook instances with the same group share live column widths. */
+  syncGroup?: string;
+  /** Override space reserved after the expression column when computing max widths. */
+  trailingReservedWidthPx?: number;
+  /** Override the static max expression column width. */
+  maxExpressionWidthPx?: number;
   valueColumnCollapse?: EquationViewColumnCollapseState;
+}
+
+const EQUATION_GRID_COLUMN_WIDTH_SYNC_EVENT = "sfcr:equation-grid-column-widths";
+
+interface EquationGridColumnWidthSyncDetail {
+  expressionWidthPx: number;
+  sourceId: string;
+  syncGroup: string;
+  variableWidthPx: number;
 }
 
 function layoutStorageSuffix(layout: EquationColumnResizeLayout): string {
@@ -137,8 +152,13 @@ function clampWidthPx(nextWidth: number, minWidthPx: number, maxWidthPx: number)
 
 function getTrailingReservedWidthPx(
   layout: EquationColumnResizeLayout,
-  valueColumnCollapse?: EquationViewColumnCollapseState
+  valueColumnCollapse?: EquationViewColumnCollapseState,
+  trailingReservedWidthPx?: number
 ) {
+  if (trailingReservedWidthPx != null) {
+    return trailingReservedWidthPx;
+  }
+
   if (layout === "equation-view") {
     return getEquationViewTrailingReservedWidthPx(
       valueColumnCollapse ?? {
@@ -178,7 +198,8 @@ function getMaxColumnWidthPx(
   staticMaxWidthPx: number,
   otherColumnWidthPx: number,
   layout: EquationColumnResizeLayout,
-  valueColumnCollapse?: EquationViewColumnCollapseState
+  valueColumnCollapse?: EquationViewColumnCollapseState,
+  trailingReservedWidthPx?: number
 ) {
   if (shellWidth < 320) {
     return staticMaxWidthPx;
@@ -188,7 +209,7 @@ function getMaxColumnWidthPx(
     minWidthPx,
     shellWidth -
       otherColumnWidthPx -
-      getTrailingReservedWidthPx(layout, valueColumnCollapse)
+      getTrailingReservedWidthPx(layout, valueColumnCollapse, trailingReservedWidthPx)
   );
 }
 
@@ -201,6 +222,9 @@ function buildResizeHandleStyle(leftPx: number): CSSProperties {
 export function useEquationGridColumnResize({
   isEmbedded = false,
   layout = "equation-grid",
+  syncGroup,
+  trailingReservedWidthPx,
+  maxExpressionWidthPx: maxExpressionWidthPxOption,
   valueColumnCollapse
 }: UseEquationGridColumnResizeOptions = {}) {
   const variableStorageKey =
@@ -226,14 +250,16 @@ export function useEquationGridColumnResize({
   const staticMaxVariableWidthPx = isEmbedded
     ? MAX_VARIABLE_WIDTH_PX.embedded
     : MAX_VARIABLE_WIDTH_PX.workspace;
-  const staticMaxExpressionWidthPx = isEmbedded
-    ? MAX_EXPRESSION_WIDTH_PX.embedded
-    : MAX_EXPRESSION_WIDTH_PX.workspace;
+  const staticMaxExpressionWidthPx =
+    maxExpressionWidthPxOption ??
+    (isEmbedded ? MAX_EXPRESSION_WIDTH_PX.embedded : MAX_EXPRESSION_WIDTH_PX.workspace);
 
   const shellRef = useRef<HTMLDivElement | null>(null);
   const variableHeaderRef = useRef<HTMLSpanElement | null>(null);
   const expressionHeaderRef = useRef<HTMLSpanElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const syncSourceIdRef = useRef(`eq-col-resize-${Math.random().toString(36).slice(2)}`);
+  const suppressSyncBroadcastRef = useRef(false);
   const dragStateRef = useRef<{
     column: ResizableEquationColumn;
     startClientX: number;
@@ -296,7 +322,8 @@ export function useEquationGridColumnResize({
           staticMaxVariableWidthPx,
           expressionWidthPx,
           layout,
-          valueColumnCollapse
+          valueColumnCollapse,
+          trailingReservedWidthPx
         )
       )
     );
@@ -309,7 +336,8 @@ export function useEquationGridColumnResize({
           staticMaxExpressionWidthPx,
           variableWidthPx,
           layout,
-          valueColumnCollapse
+          valueColumnCollapse,
+          trailingReservedWidthPx
         )
       )
     );
@@ -320,6 +348,7 @@ export function useEquationGridColumnResize({
     minVariableWidthPx,
     staticMaxExpressionWidthPx,
     staticMaxVariableWidthPx,
+    trailingReservedWidthPx,
     valueColumnCollapse,
     variableWidthPx
   ]);
@@ -371,6 +400,60 @@ export function useEquationGridColumnResize({
       // Ignore storage failures so resizing still works in restricted environments.
     }
   }, [expressionStorageKey, expressionWidthPx]);
+
+  useEffect(() => {
+    if (!syncGroup || typeof window === "undefined") {
+      return;
+    }
+
+    if (suppressSyncBroadcastRef.current) {
+      suppressSyncBroadcastRef.current = false;
+      return;
+    }
+
+    const detail: EquationGridColumnWidthSyncDetail = {
+      expressionWidthPx,
+      sourceId: syncSourceIdRef.current,
+      syncGroup,
+      variableWidthPx
+    };
+    window.dispatchEvent(
+      new CustomEvent<EquationGridColumnWidthSyncDetail>(EQUATION_GRID_COLUMN_WIDTH_SYNC_EVENT, {
+        detail
+      })
+    );
+  }, [expressionWidthPx, syncGroup, variableWidthPx]);
+
+  useEffect(() => {
+    if (!syncGroup || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleSync = (event: Event) => {
+      const detail = (event as CustomEvent<EquationGridColumnWidthSyncDetail>).detail;
+      if (!detail || detail.syncGroup !== syncGroup || detail.sourceId === syncSourceIdRef.current) {
+        return;
+      }
+
+      setVariableWidthPx((current) => {
+        if (current === detail.variableWidthPx) {
+          return current;
+        }
+        suppressSyncBroadcastRef.current = true;
+        return detail.variableWidthPx;
+      });
+      setExpressionWidthPx((current) => {
+        if (current === detail.expressionWidthPx) {
+          return current;
+        }
+        suppressSyncBroadcastRef.current = true;
+        return detail.expressionWidthPx;
+      });
+    };
+
+    window.addEventListener(EQUATION_GRID_COLUMN_WIDTH_SYNC_EVENT, handleSync);
+    return () => window.removeEventListener(EQUATION_GRID_COLUMN_WIDTH_SYNC_EVENT, handleSync);
+  }, [syncGroup]);
 
   useEffect(() => {
     const shell = shellRef.current;

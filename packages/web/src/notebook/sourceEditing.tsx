@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import { isRowComment, parseLenientJsonValue } from "@sfcr/notebook-core";
+import { normalizeAbmSpec, validateAbmSpec } from "@sfcr/core";
+import { abmSpecFromCell, isRowComment, parseLenientJsonValue } from "@sfcr/notebook-core";
 
 import { stringifyJsonWithCompactLeaves } from "../lib/jsonFormat";
 import { normalizeUnitMetaAliases } from "../lib/unitMeta";
@@ -168,6 +169,15 @@ export function findNotebookHelpTopic(topicId: NotebookHelpTopicId): NotebookHel
 
 export function isSourceEditable(cell: NotebookCell): boolean {
   return !["model", "equations", "solver", "externals", "observed", "initial-values"].includes(cell.type);
+}
+
+export function validateAbmModelCellSemantics(cell: AbmModelCell): string | null {
+  try {
+    validateAbmSpec(normalizeAbmSpec(abmSpecFromCell(cell)));
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Invalid ABM model";
+  }
 }
 
 export function serializeCellBody(cell: NotebookCell): string {
@@ -745,9 +755,11 @@ Behavior:
 - modelId
 - populations
 - ticks
-- record
 
-Optional: params, check
+Optional: params, state.aggregates, record, check
+
+Use Visual for normal editing. Use JSON for bulk edits or unsupported legacy shapes.
+When record is omitted, all macros plus first/last-agent state are recorded by default.
 
 Ticks use YAML one-key wrappers (do / for / hire-lottery / shuffle / ration-fcfs).
 Run cells with engine: "abm" reference this cell via sourceModelId.`;
@@ -1185,11 +1197,10 @@ function validateCellSourceShape(
         throw new Error("abm-model cells require ticks.");
       }
       if (
-        (parsed as AbmModelCell).record == null ||
-        typeof (parsed as AbmModelCell).record !== "object" ||
-        Array.isArray((parsed as AbmModelCell).record)
+        (parsed as AbmModelCell).record != null &&
+        typeof (parsed as AbmModelCell).record !== "object"
       ) {
-        throw new Error("abm-model cells require a record object.");
+        throw new Error("abm-model record must be an object or directive array.");
       }
       return;
     case "matrix":
