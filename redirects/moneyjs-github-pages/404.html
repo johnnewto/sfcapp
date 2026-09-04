@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecting to SFCApp...</title>
+    <script>
+      (function () {
+        var fromBase = "/moneyjs";
+        var toBase = "/sfcapp";
+        var pathname = window.location.pathname;
+        var rest = pathname === fromBase || pathname === fromBase + "/"
+          ? "/"
+          : pathname.indexOf(fromBase + "/") === 0
+            ? pathname.slice(fromBase.length)
+            : pathname;
+        window.location.replace(toBase + rest + window.location.search + window.location.hash);
+      })();
+    </script>
+    <noscript>
+      <meta http-equiv="refresh" content="0; url=/sfcapp/" />
+    </noscript>
+  </head>
+  <body>
+    Redirecting to <a href="/sfcapp/">SFCApp</a>…
+  </body>
+</html>

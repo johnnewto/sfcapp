@@ -24,7 +24,7 @@ describe("notebook assistant system prompt", () => {
 describe("chat API notebook share shortening", () => {
   it("rejects shorten requests without SHARE_LINKS", async () => {
     const response = await worker.fetch(
-      createShareShortenRequest("https://johnnewto.github.io/moneyjs/notebook?nbz=abc"),
+      createShareShortenRequest("https://johnnewto.github.io/sfcapp/notebook?nbz=abc"),
       env
     );
 
@@ -33,7 +33,7 @@ describe("chat API notebook share shortening", () => {
   });
 
   it("rejects shorten requests for non-notebook URLs", async () => {
-    const response = await worker.fetch(createShareShortenRequest("https://johnnewto.github.io/moneyjs/"), {
+    const response = await worker.fetch(createShareShortenRequest("https://johnnewto.github.io/sfcapp/"), {
       ...env,
       SHARE_LINKS: createMemoryKv()
     });
@@ -43,7 +43,7 @@ describe("chat API notebook share shortening", () => {
   });
 
   it("accepts hash-based notebook share URLs", async () => {
-    const longUrl = "https://johnnewto.github.io/moneyjs/#/notebook?nbz=compressed";
+    const longUrl = "https://johnnewto.github.io/sfcapp/#/notebook?nbz=compressed";
     const shareLinks = createMemoryKv();
     const response = await worker.fetch(createShareShortenRequest(longUrl), {
       ...env,
@@ -60,7 +60,7 @@ describe("chat API notebook share shortening", () => {
   });
 
   it("returns a short link for valid notebook share URLs and stores the long URL", async () => {
-    const longUrl = "https://johnnewto.github.io/moneyjs/notebook?nbz=compressed";
+    const longUrl = "https://johnnewto.github.io/sfcapp/notebook?nbz=compressed";
     const shareLinks = createMemoryKv();
     const response = await worker.fetch(createShareShortenRequest(longUrl), {
       ...env,
@@ -78,7 +78,7 @@ describe("chat API notebook share shortening", () => {
   });
 
   it("accepts publish-view share URLs", async () => {
-    const longUrl = "https://johnnewto.github.io/moneyjs/publish/live#?nbz=compressed";
+    const longUrl = "https://johnnewto.github.io/sfcapp/publish/live#?nbz=compressed";
     const shareLinks = createMemoryKv();
     const response = await worker.fetch(createShareShortenRequest(longUrl), {
       ...env,
@@ -95,7 +95,7 @@ describe("chat API notebook share shortening", () => {
   });
 
   it("uses SHORT_LINK_BASE_URL when configured", async () => {
-    const longUrl = "https://johnnewto.github.io/moneyjs/notebook?nbz=compressed";
+    const longUrl = "https://johnnewto.github.io/sfcapp/notebook?nbz=compressed";
     const response = await worker.fetch(createShareShortenRequest(longUrl), {
       ...env,
       SHARE_LINKS: createMemoryKv(),
@@ -108,7 +108,7 @@ describe("chat API notebook share shortening", () => {
   });
 
   it("redirects GET /s/:code to the stored long URL", async () => {
-    const longUrl = "https://johnnewto.github.io/moneyjs/notebook?nbz=compressed";
+    const longUrl = "https://johnnewto.github.io/sfcapp/notebook?nbz=compressed";
     const shareLinks = createMemoryKv();
     const shortenResponse = await worker.fetch(createShareShortenRequest(longUrl), {
       ...env,

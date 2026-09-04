@@ -50,7 +50,7 @@ describe("notebookShareLink", () => {
     });
 
     const built = buildNotebookShareUrl({
-      basePath: "/moneyjs/",
+      basePath: "/sfcapp/",
       cellId: "intro",
       document,
       origin: "https://example.test"
@@ -61,7 +61,7 @@ describe("notebookShareLink", () => {
       return;
     }
 
-    expect(built.url).toMatch(/^https:\/\/example\.test\/moneyjs\/#\/notebook\?/);
+    expect(built.url).toMatch(/^https:\/\/example\.test\/sfcapp\/#\/notebook\?/);
     const hashQuery = built.url.split("?").slice(1).join("?");
     const params = new URLSearchParams(hashQuery);
     expect(params.get(NOTEBOOK_SHARE_QUERY_PARAM)).toBeTruthy();

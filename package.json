@@ -23,7 +23,7 @@
     "web:compile:notebook-yaml": "pnpm --filter @sfcr/web compile:notebook-yaml -- --write",
     "web:compile:notebook-yaml:public": "pnpm --filter @sfcr/web compile:notebook-yaml -- --write --write-public-examples",
     "web:preview": "pnpm --filter @sfcr/web exec vite preview --port 4173",
-    "web:build:pages": "VITE_BASE_PATH=/moneyjs/ pnpm --filter @sfcr/web build",
+    "web:build:pages": "VITE_BASE_PATH=/sfcapp/ pnpm --filter @sfcr/web build",
     "web:build:cloudflare": "VITE_BASE_PATH=/ pnpm --filter @sfcr/web build",
     "web:preview:pages": "pnpm web:build:pages && node ./scripts/preview-pages.mjs"
   },

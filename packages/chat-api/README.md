@@ -5,8 +5,8 @@ Cloudflare Worker proxy for the in-notebook assistant, first-party notebook shar
 Endpoints:
 
 - `POST /v1/notebook-assistant/ask`: Q&A and safe edit proposals for the current notebook.
-- `POST /v1/notebook-share/shorten`: shorten a MoneyJS `nbz` share URL into `/s/:code` (requires `SHARE_LINKS` KV binding).
-- `GET /s/:code`: redirect to the stored long MoneyJS share URL.
+- `POST /v1/notebook-share/shorten`: shorten an SFCApp `nbz` share URL into `/s/:code` (requires `SHARE_LINKS` KV binding).
+- `GET /s/:code`: redirect to the stored long SFCApp share URL.
 - `POST /v1/chat-builder/draft`: generate a full notebook draft (used by the eval harness and API clients, not a browser route).
 
 ## Local Development
@@ -69,7 +69,7 @@ On `localhost`, the web app calls `http://localhost:8787/v1/notebook-share/short
 
 ## Notebook share shortening
 
-MoneyJS **Share link** builds a long URL with an `nbz` query parameter (LZ-compressed notebook JSON), then calls this Worker to mint a short `/s/:code` link before copying to the clipboard.
+SFCApp **Share link** builds a long URL with an `nbz` query parameter (LZ-compressed notebook JSON), then calls this Worker to mint a short `/s/:code` link before copying to the clipboard.
 
 Flow:
 
@@ -77,7 +77,7 @@ Flow:
 2. Browser `POST`s `{ "url": "<long share url>" }` to `/v1/notebook-share/shorten`.
 3. Worker validates the URL origin (must match `ALLOWED_ORIGINS` / `DISCOVERY_ALLOWED_ORIGINS`) and that it is a notebook share link with `nbz`.
 4. Worker stores `{ url, createdAt }` in the `SHARE_LINKS` KV namespace under an 8-character code.
-5. Browser copies `https://<worker-or-SHORT_LINK_BASE_URL>/s/<code>`. Opening that URL `GET`s the Worker, which `302`s to the long MoneyJS URL. If shortening fails, Share link copies the long URL instead.
+5. Browser copies `https://<worker-or-SHORT_LINK_BASE_URL>/s/<code>`. Opening that URL `GET`s the Worker, which `302`s to the long SFCApp URL. If shortening fails, Share link copies the long URL instead.
 
 **Local:** run `pnpm --filter @sfcr/chat-api dev` (in-memory KV), then `pnpm dev` in another terminal.
 
@@ -107,12 +107,12 @@ VITE_NOTEBOOK_ASSISTANT_API_URL=https://sfcr-chat-api.<account>.workers.dev/v1/n
 SHORT=$(curl -s -X POST "https://sfcr-chat-api.<account>.workers.dev/v1/notebook-share/shorten" \
   -H "Content-Type: application/json" \
   -H "Origin: https://johnnewto.github.io" \
-  -d '{"url":"https://johnnewto.github.io/moneyjs/notebook?nbz=test"}')
+  -d '{"url":"https://johnnewto.github.io/sfcapp/notebook?nbz=test"}')
 echo "$SHORT"
 # Expected: {"shortUrl":"https://sfcr-chat-api.<account>.workers.dev/s/<code>"}
 
 curl -sI "$(echo "$SHORT" | sed -n 's/.*"shortUrl":"\([^"]*\)".*/\1/p')"
-# Expected: HTTP/2 302 and Location: https://johnnewto.github.io/moneyjs/notebook?nbz=test
+# Expected: HTTP/2 302 and Location: https://johnnewto.github.io/sfcapp/notebook?nbz=test
 ```
 
 `503` with `SHARE_LINKS is not configured` means the KV binding is missing. Short links open on the **Worker** host and redirect to GitHub Pages or Cloudflare Pages (or a future custom domain). Share URLs (and compressed `nbz` payloads) are capped at 128,000 characters; shortening does not raise that limit.
@@ -159,7 +159,7 @@ For production, set:
 - `BETA_PASSWORD`: optional Cloudflare secret. When set, browser requests must include the matching beta password.
 - `SHARE_LINKS`: Cloudflare KV namespace binding in `wrangler.toml` for notebook share short links.
 - `SHORT_LINK_BASE_URL`: optional var. When set, minted short URLs use this origin instead of the Worker request origin.
-- `ALLOWED_ORIGINS`: comma-separated allowed browser origins, for example `https://johnnewto.github.io,https://moneyjs.pages.dev`.
+- `ALLOWED_ORIGINS`: comma-separated allowed browser origins, for example `https://johnnewto.github.io,https://sfcapp.pages.dev`.
 - `DISCOVERY_ALLOWED_ORIGINS`: comma-separated allowed origins for public discovery bundles. Defaults to `ALLOWED_ORIGINS` when unset.
 - `MAX_OUTPUT_TOKENS`: output token cap for each OpenAI response. Defaults to `8000`.
 - `OPENAI_MODEL_ALLOWLIST`: comma-separated model ids accepted by the proxy, for example `gpt-5.4-mini,gpt-5.4,gpt-4.1,gpt-5.5,o3`.
@@ -171,7 +171,7 @@ Configure GitHub Pages and Cloudflare Pages builds with the same repository vari
 VITE_NOTEBOOK_ASSISTANT_API_URL=https://sfcr-chat-api.<account>.workers.dev/v1/notebook-assistant/ask
 ```
 
-Both static hosts share this Worker. Short links mint on the Worker and redirect to whichever long MoneyJS URL was shortened.
+Both static hosts share this Worker. Short links mint on the Worker and redirect to whichever long SFCApp URL was shortened.
 
 The Worker only fetches notebook discovery bundles from trusted origins. Discovery resources are capped at 250 KB each, example loading is capped at five unique examples, and the assembled discovery bundle is capped at 1 MB. Public discovery resources are cached for 10 minutes when Cloudflare's default cache is available.
 

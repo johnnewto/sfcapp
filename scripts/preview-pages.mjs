@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "../packages/web/dist");
 const port = Number.parseInt(process.env.PORT ?? "4173", 10);
-const basePath = "/moneyjs";
+const basePath = "/sfcapp";
 
 const mimeTypes = new Map([
   [".css", "text/css; charset=utf-8"],

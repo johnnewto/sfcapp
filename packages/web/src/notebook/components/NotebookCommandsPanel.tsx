@@ -44,7 +44,7 @@ export function NotebookCommandsPanel({
         <div className="notebook-commands-panel-header-draggable" {...dragHandleProps}>
           <p className="panel-subtitle">Notebook commands</p>
           <div className="notebook-commands-panel-meta">
-            <span className="eyebrow">MoneyJS</span>
+            <span className="eyebrow">SFCApp</span>
             <span className="notebook-build-badge" title={buildDateLabel}>
               {buildDateLabel}
             </span>

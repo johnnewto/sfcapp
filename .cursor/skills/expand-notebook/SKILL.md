@@ -1,9 +1,9 @@
 ---
 name: expand-notebook
-description: Expand a moneyjs pilot template or public example notebook with new sections and explanatory "[more]" panels grounded in a textbook reference. Use when adding cells to packages/web/src/notebook/templates/<id>.notebook.yaml or public/notebook-examples/, writing inline `more:` panels, or replicating a Godley & Lavoie / SFC chapter into a notebook. Composes with sfcr-notebook-files for YAML mechanics.
+description: Expand an SFCApp pilot template or public example notebook with new sections and explanatory "[more]" panels grounded in a textbook reference. Use when adding cells to packages/web/src/notebook/templates/<id>.notebook.yaml or public/notebook-examples/, writing inline `more:` panels, or replicating a Godley & Lavoie / SFC chapter into a notebook. Composes with sfcr-notebook-files for YAML mechanics.
 ---
 
-# Expand a moneyjs notebook
+# Expand an SFCApp notebook
 
 Add sections to a pilot template or public example: new cells in the notebook YAML plus
 matching collapsible **"[more]"** explanations, with prose grounded in a cited

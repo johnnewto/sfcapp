@@ -1,6 +1,6 @@
 # SIM notebook. Explanatory "[more]" panels live inline on each cell as a
 # `more: |` block scalar (there is no separate sim.md sidecar). The build script
-# (app/scripts/build-notebook-data.mjs) reads these and the moneyjs YAML parser
+# (app/scripts/build-notebook-data.mjs) reads these and the SFCApp YAML parser
 # ignores the field. Panels render via AssistantMarkdown — use backticks, not
 # LaTeX, and `pow(b, e)` rather than `^`.
 #

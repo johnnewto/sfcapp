@@ -1,6 +1,6 @@
 OPENAI_API_KEY=sk-your-key
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://johnnewto.github.io,https://moneyjs.pages.dev
-DISCOVERY_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://johnnewto.github.io,https://moneyjs.pages.dev
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://johnnewto.github.io,https://sfcapp.pages.dev,https://moneyjs.pages.dev
+DISCOVERY_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://johnnewto.github.io,https://sfcapp.pages.dev,https://moneyjs.pages.dev
 BETA_PASSWORD=
 MAX_OUTPUT_TOKENS=8000
 OPENAI_MODEL_ALLOWLIST=gpt-5.4-mini,gpt-5.4,gpt-4.1,gpt-5.5,o3

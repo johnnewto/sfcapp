@@ -750,7 +750,7 @@ export function PublicationNotebookApp({ route }: { route: PublicationRouteLocat
     >
       {!isEmbed ? (
         <header className="publication-header publication-no-print">
-          <p className="publication-eyebrow">MoneyJS publication</p>
+          <p className="publication-eyebrow">SFCApp publication</p>
           <h1 className="publication-title">{viewModel.title}</h1>
           {showCatalog ? (
             <PublicationNotebookPicker id="publication-notebook-picker-header" route={route} />

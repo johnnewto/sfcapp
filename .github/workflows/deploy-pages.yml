@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      VITE_BASE_PATH: /moneyjs/
+      VITE_BASE_PATH: /sfcapp/
       VITE_NOTEBOOK_ASSISTANT_API_URL: ${{ vars.VITE_NOTEBOOK_ASSISTANT_API_URL }}
       VITE_CHAT_BUILDER_API_URL: ${{ vars.VITE_CHAT_BUILDER_API_URL }}
     steps:

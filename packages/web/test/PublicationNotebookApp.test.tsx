@@ -125,7 +125,7 @@ describe("PublicationNotebookApp", () => {
     );
 
     expect(screen.getByText(/adapts the BMW vignette/i)).toBeInTheDocument();
-    expect(screen.queryByText(/MoneyJS publication/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/SFCApp publication/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Appendix$/)).not.toBeInTheDocument();
     expect(screen.queryByRole("complementary", { name: "Contents" })).not.toBeInTheDocument();
   });
