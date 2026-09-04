@@ -231,7 +231,7 @@ Cloudflare Pages uses `packages/web/public/_redirects` (`/* → /index.html` wit
 2. Add GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 3. Set repository variable `VITE_NOTEBOOK_ASSISTANT_API_URL` (or `VITE_CHAT_BUILDER_API_URL`) to the Worker ask URL — both static deploy workflows read these vars.
 4. After updating Worker allowlists, redeploy the Worker: `pnpm --filter @sfcr/chat-api run deploy`.
-5. First successful Cloudflare Pages deploy creates project `sfcapp`; confirm at `https://sfcapp.pages.dev/`. The same workflow keeps `moneyjs.pages.dev` as a redirect to that host.
+5. Wrangler no longer creates a Pages project on first deploy. The Cloudflare Pages workflow creates project `sfcapp` if it is missing, then deploys to `https://sfcapp.pages.dev/`. The same workflow keeps `moneyjs.pages.dev` as a redirect to that host. You can also create it once locally with `pnpm dlx wrangler pages project create sfcapp --production-branch=main`.
 
 ### Chat API
 

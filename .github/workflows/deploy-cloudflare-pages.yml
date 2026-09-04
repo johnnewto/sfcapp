@@ -38,6 +38,28 @@ jobs:
       - name: Build application
         run: pnpm build
 
+      - name: Ensure Cloudflare Pages project sfcapp exists
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects"
+          CODE="$(curl -sS -o /tmp/cf-pages-sfcapp.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "${API}/sfcapp")"
+          if [ "$CODE" = "200" ]; then
+            echo "Pages project sfcapp already exists"
+            exit 0
+          fi
+          if [ "$CODE" != "404" ]; then
+            echo "Unexpected response checking Pages project sfcapp (HTTP $CODE):"
+            cat /tmp/cf-pages-sfcapp.json
+            exit 1
+          fi
+          echo "Creating Pages project sfcapp"
+          curl -sS -f -X POST "$API" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"sfcapp","production_branch":"main"}'
+
       - name: Deploy to Cloudflare Pages
         run: pnpm dlx wrangler pages deploy packages/web/dist --project-name=sfcapp --branch=main
 
