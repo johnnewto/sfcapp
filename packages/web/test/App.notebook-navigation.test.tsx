@@ -104,7 +104,7 @@ describe("App notebook navigation and inspection", () => {
       throw new Error("Expected formula token for Y");
     }
 
-    fireEvent.mouseEnter(yToken);
+    fireEvent.pointerOver(yToken);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Income = GDP");
   }, 10000);
 
@@ -553,12 +553,12 @@ describe("App notebook navigation and inspection", () => {
       throw new Error("Expected matrix token for rm.");
     }
 
-    fireEvent.mouseEnter(rmToken);
+    fireEvent.pointerOver(rmToken);
     await waitFor(() => {
       expect(screen.getByRole("tooltip")).toHaveTextContent("Rate of interest on bank deposits");
     });
     expect(screen.getByRole("tooltip").textContent).toMatch(/Rate of interest on bank deposits\s*1\/yr/i);
-    fireEvent.mouseLeave(rmToken);
+    fireEvent.pointerOut(rmToken);
   });
 
   it("edits a matrix entry inline in the run view with per-cell apply and cancel", async () => {

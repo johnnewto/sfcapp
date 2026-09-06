@@ -16,6 +16,7 @@ import { newRowComment } from "../rowCommentHelpers";
 import { useInlineCommentRowEdit } from "../useInlineCommentRowEdit";
 import { useInlineEquationRowEdit } from "../useInlineEquationRowEdit";
 import { CommentRowReadView } from "./CommentRowReadView";
+import { EquationReadRowList } from "./EquationReadRowList";
 import { ImplicitEquationsSection } from "./ImplicitEquationsSection";
 import {
   canMoveRowDown,
@@ -51,10 +52,10 @@ import { EquationsModelViewHeaderRowStatic } from "./notebookModelViewHeaderRows
 import { useNotebookFloatingHeaderRow } from "../useNotebookFloatingHeaderRow";
 import {
   collectCollapsibleSectionCommentIds,
-  isEquationRowHiddenBySectionCollapse,
   sectionCommentHasEquations,
   useEquationSectionCollapseState
 } from "../equationSectionCollapse";
+import { collectVisibleEquationReadItems } from "../equationReadRows";
 import { EquationSectionCollapseControls } from "./EquationSectionCollapseControls";
 import { initialValueCellProps, useVariableInitialValueEdit } from "../useVariableInitialValueEdit";
 
@@ -73,7 +74,8 @@ export function ModelCellView({
   onToggleCollapsed,
   onVariableInspectRequest,
   highlightedVariable = null,
-  title
+  title,
+  viewportRoot = null
 }: {
   cell: ModelCell;
   cells: NotebookCell[];
@@ -90,20 +92,28 @@ export function ModelCellView({
   onToggleCollapsed(): void;
   onVariableInspectRequest(args: VariableInspectRequest): void;
   title: string;
+  viewportRoot?: Element | null;
 }) {
   const modelSource = { sourceModelCellId: cell.id };
   const modelViewDragScroll = useDragScroll<HTMLElement>();
   const [draftEditor, setDraftEditor] = useState(cell.editor);
-  const issues = validateEditorState(draftEditor);
-  const buildDiagnostics = diagnoseBuildRuntime(draftEditor);
-  const allIssues = [...issues, ...buildDiagnostics.issues];
-  const issueMap = Object.fromEntries(allIssues.map((issue) => [issue.path, issue.message]));
-  const equationIssueMap = Object.fromEntries(
-    allIssues
-      .filter((issue) => issue.path.startsWith("equations."))
-      .map((issue) => [issue.path, issue])
+  const issues = useMemo(() => validateEditorState(draftEditor), [draftEditor]);
+  const buildDiagnostics = useMemo(() => diagnoseBuildRuntime(draftEditor), [draftEditor]);
+  const allIssues = useMemo(() => [...issues, ...buildDiagnostics.issues], [buildDiagnostics.issues, issues]);
+  const issueMap = useMemo(
+    () => Object.fromEntries(allIssues.map((issue) => [issue.path, issue.message])),
+    [allIssues]
   );
-  const runtime = safeBuildRuntime(cell.editor);
+  const equationIssueMap = useMemo(
+    () =>
+      Object.fromEntries(
+        allIssues
+          .filter((issue) => issue.path.startsWith("equations."))
+          .map((issue) => [issue.path, issue])
+      ),
+    [allIssues]
+  );
+  const runtime = useMemo(() => safeBuildRuntime(cell.editor), [cell.editor]);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
   const [pinnedTrace, setPinnedTrace] = useState<PinnedTrace | null>(null);
   const parameterNameSet = useMemo(
@@ -145,7 +155,7 @@ export function ModelCellView({
       ? buildActiveTrace(traceModel, hoveredRowId, "both")
       : null;
   const [isEditingEquations, setIsEditingEquations] = useState(false);
-  const hasDraftEdits = JSON.stringify(draftEditor) !== JSON.stringify(cell.editor);
+  const hasDraftEdits = draftEditor !== cell.editor;
 
   useEffect(() => {
     onEditingChange?.(isEditingEquations);
@@ -203,6 +213,10 @@ export function ModelCellView({
     cell.id,
     cell.editor.equations,
     collapsibleSectionIds
+  );
+  const visibleReadItems = useMemo(
+    () => collectVisibleEquationReadItems(cell.editor.equations, sectionCollapse.collapsedSectionIds),
+    [cell.editor.equations, sectionCollapse.collapsedSectionIds]
   );
 
   return (
@@ -300,29 +314,115 @@ export function ModelCellView({
           onMouseDown={modelViewDragScroll.dragScrollProps.onMouseDown}
         >
           <NotebookEquationViewTable ariaLabel="Model equations">
-            {cell.editor.equations.map((row, index) => {
-              if (isRowComment(row)) {
-                const inferredBoundary = sectionBoundaries.get(row.id) ?? null;
+            <EquationReadRowList
+              editingIndex={
+                inlineEdit.editingEquationId
+                  ? cell.editor.equations.findIndex((row) => row.id === inlineEdit.editingEquationId)
+                  : null
+              }
+              items={visibleReadItems}
+              viewportRoot={viewportRoot}
+              renderItem={(item) => {
+                if (item.kind === "implicit") {
+                  return null;
+                }
+
+                const row = cell.editor.equations[item.index];
+                if (!row) {
+                  return null;
+                }
+
+                if (item.kind === "comment" && isRowComment(row)) {
+                  const inferredBoundary = sectionBoundaries.get(row.id) ?? null;
+                  return (
+                    <CommentRowReadView
+                      key={row.id}
+                      commentEdit={commentEdit}
+                      currentValues={currentValues}
+                      equations={cell.editor.equations}
+                      externals={cell.editor.externals}
+                      highlightedVariable={highlightedVariable}
+                      index={item.index}
+                      inferredBoundary={inferredBoundary}
+                      parameterNames={parameterNameSet}
+                      row={row}
+                      sectionCollapsible={Boolean(
+                        inferredBoundary && sectionCommentHasEquations(cell.editor.equations, item.index)
+                      )}
+                      sectionCollapsed={sectionCollapse.isSectionCollapsed(row.id)}
+                      variableDescriptions={variableDescriptions}
+                      variableUnitMetadata={variableUnitMetadata}
+                      onCancelDataRowEdit={inlineEdit.cancelRowEdit}
+                      onContextMenu={equationRowMenu.handleRowContextMenu}
+                      onInspectVariable={(selectedVariable) =>
+                        onVariableInspectRequest({
+                          currentValues,
+                          editor: cell.editor,
+                          modelSource,
+                          selectedVariable,
+                          variableDescriptions,
+                          variableUnitMetadata
+                        })
+                      }
+                      onToggleSectionCollapse={() => sectionCollapse.toggleSectionCollapse(row.id)}
+                    />
+                  );
+                }
+
+                if (item.kind !== "equation" || isRowComment(row)) {
+                  return null;
+                }
+
+                const equation = row;
+                const issue =
+                  issueMap[`equations.${item.index}.name`] ?? issueMap[`equations.${item.index}.expression`];
+                const traceRole = activeTrace?.rowStates.get(equation.id) ?? null;
+
                 return (
-                  <CommentRowReadView
-                    key={row.id}
-                    commentEdit={commentEdit}
+                  <NotebookEquationReadRow
+                    key={equation.id}
+                    activeTraceTokenStates={traceRole ? activeTrace?.tokenStates : undefined}
                     currentValues={currentValues}
-                    equations={cell.editor.equations}
-                    externals={cell.editor.externals}
+                    laggedCurrentValues={laggedCurrentValues}
+                    laggedPeriodLabel={laggedPeriodLabel}
+                    equation={equation}
+                    equationIndex={item.index}
+                    formatRoleLabel={formatEquationRoleLabel}
                     highlightedVariable={highlightedVariable}
-                    index={index}
-                    inferredBoundary={inferredBoundary}
+                    isHovered={hoveredRowId === equation.id}
+                    isEditing={inlineEdit.editingEquationId === equation.id}
+                    issueMessage={issue}
+                    onContextMenu={(event) => {
+                      if (inlineEdit.editingEquationId === equation.id) {
+                        return;
+                      }
+                      equationRowMenu.handleRowContextMenu(event, item.index);
+                    }}
                     parameterNames={parameterNameSet}
-                    row={row}
-                    sectionCollapsible={Boolean(
-                      inferredBoundary && sectionCommentHasEquations(cell.editor.equations, index)
-                    )}
-                    sectionCollapsed={sectionCollapse.isSectionCollapsed(row.id)}
+                    rowDraft={{
+                      expression: inlineEdit.draftExpression,
+                      name: inlineEdit.draftName
+                    }}
+                    rowEditFocus={inlineEdit.editFocus}
+                    rowValidationError={inlineEdit.validationError}
+                    rowValidationWarning={inlineEdit.validationWarning}
+                    traceRole={traceRole}
                     variableDescriptions={variableDescriptions}
                     variableUnitMetadata={variableUnitMetadata}
-                    onCancelDataRowEdit={inlineEdit.cancelRowEdit}
-                    onContextMenu={equationRowMenu.handleRowContextMenu}
+                    onApplyRow={inlineEdit.applyRowEdit}
+                    onBeginRowEdit={(equationId, focus) => {
+                      commentEdit.cancelRowEdit();
+                      initialValueEdit.cancelEdit();
+                      inlineEdit.beginRowEdit(equationId, focus);
+                    }}
+                    onCancelRow={inlineEdit.cancelRowEdit}
+                    onDraftExpressionChange={inlineEdit.setDraftExpression}
+                    onDraftNameChange={inlineEdit.setDraftName}
+                    {...initialValueCellProps(
+                      equation.name,
+                      cell.editor.initialValues,
+                      initialValueEdit
+                    )}
                     onInspectVariable={(selectedVariable) =>
                       onVariableInspectRequest({
                         currentValues,
@@ -333,102 +433,29 @@ export function ModelCellView({
                         variableUnitMetadata
                       })
                     }
-                    onToggleSectionCollapse={() => sectionCollapse.toggleSectionCollapse(row.id)}
+                    onRowClick={(event) =>
+                      schedulePinnedTraceToggle(scheduleDeferredAction, setPinnedTrace, equation.id, event)
+                    }
+                    onRowMouseEnter={() => setHoveredRowId(equation.id)}
+                    onRowMouseLeave={() =>
+                      setHoveredRowId((current) => (current === equation.id ? null : current))
+                    }
+                    onSelectVariableInExpression={(selectedVariable) =>
+                      scheduleDeferredAction(() =>
+                        onVariableInspectRequest({
+                          currentValues,
+                          editor: cell.editor,
+                          modelSource,
+                          selectedVariable,
+                          variableDescriptions,
+                          variableUnitMetadata
+                        })
+                      )
+                    }
                   />
                 );
-              }
-
-              if (
-                isEquationRowHiddenBySectionCollapse(
-                  cell.editor.equations,
-                  sectionCollapse.collapsedSectionIds,
-                  index
-                )
-              ) {
-                return null;
-              }
-
-              const equation = row;
-              const issue =
-                issueMap[`equations.${index}.name`] ?? issueMap[`equations.${index}.expression`];
-
-              return (
-                <NotebookEquationReadRow
-                  key={equation.id}
-                  activeTraceTokenStates={activeTrace?.tokenStates}
-                  currentValues={currentValues}
-                  laggedCurrentValues={laggedCurrentValues}
-                  laggedPeriodLabel={laggedPeriodLabel}
-                  equation={equation}
-                  equationIndex={index}
-                  formatRoleLabel={formatEquationRoleLabel}
-                  highlightedVariable={highlightedVariable}
-                  hoveredRowId={hoveredRowId}
-                  isEditing={inlineEdit.editingEquationId === equation.id}
-                  issueMessage={issue}
-                  onContextMenu={(event) => {
-                    if (inlineEdit.editingEquationId === equation.id) {
-                      return;
-                    }
-                    equationRowMenu.handleRowContextMenu(event, index);
-                  }}
-                  parameterNames={parameterNameSet}
-                  rowDraft={{
-                    expression: inlineEdit.draftExpression,
-                    name: inlineEdit.draftName
-                  }}
-                  rowEditFocus={inlineEdit.editFocus}
-                  rowValidationError={inlineEdit.validationError}
-                  rowValidationWarning={inlineEdit.validationWarning}
-                  traceRole={activeTrace?.rowStates.get(equation.id) ?? null}
-                  variableDescriptions={variableDescriptions}
-                  variableUnitMetadata={variableUnitMetadata}
-                  onApplyRow={inlineEdit.applyRowEdit}
-                  onBeginRowEdit={(equationId, focus) => {
-                    commentEdit.cancelRowEdit();
-                    initialValueEdit.cancelEdit();
-                    inlineEdit.beginRowEdit(equationId, focus);
-                  }}
-                  onCancelRow={inlineEdit.cancelRowEdit}
-                  onDraftExpressionChange={inlineEdit.setDraftExpression}
-                  onDraftNameChange={inlineEdit.setDraftName}
-                  {...initialValueCellProps(
-                    equation.name,
-                    cell.editor.initialValues,
-                    initialValueEdit
-                  )}
-                  onInspectVariable={(selectedVariable) =>
-                    onVariableInspectRequest({
-                      currentValues,
-                      editor: cell.editor,
-                      modelSource,
-                      selectedVariable,
-                      variableDescriptions,
-                      variableUnitMetadata
-                    })
-                  }
-                  onRowClick={(event) =>
-                    schedulePinnedTraceToggle(scheduleDeferredAction, setPinnedTrace, equation.id, event)
-                  }
-                  onRowMouseEnter={() => setHoveredRowId(equation.id)}
-                  onRowMouseLeave={() =>
-                    setHoveredRowId((current) => (current === equation.id ? null : current))
-                  }
-                  onSelectVariableInExpression={(selectedVariable) =>
-                    scheduleDeferredAction(() =>
-                      onVariableInspectRequest({
-                        currentValues,
-                        editor: cell.editor,
-                        modelSource,
-                        selectedVariable,
-                        variableDescriptions,
-                        variableUnitMetadata
-                      })
-                    )
-                  }
-                />
-              );
-            })}
+              }}
+            />
           </NotebookEquationViewTable>
           {equationRowMenu.rowContextMenu ? (
             <GridRowContextMenu
@@ -551,33 +578,33 @@ export function EquationsCellView({
   const tableShellRef = useRef<HTMLDivElement | null>(null);
   const valueColumnsCollapse = useEquationValueColumnsCollapse(tableShellRef);
   const [draftEquations, setDraftEquations] = useState(cell.equations);
-  const editor = buildEditorStateFromSections({
-    equations: draftEquations,
-    externals,
-    initialValues: [],
-    options:
-      solverCell?.options ?? {
-        periods: 100,
-        solverMethod: "GAUSS_SEIDEL",
-        toleranceText: "1e-15",
-        maxIterations: 200,
-        defaultInitialValueText: "1e-15",
-        hiddenLeftVariable: "",
-        hiddenRightVariable: "",
-        hiddenToleranceText: "0.00001",
-        relativeHiddenTolerance: false
-      }
-  });
-  const issues = validateEditorState(editor);
-  const buildDiagnostics = diagnoseBuildRuntime(editor);
-  const allIssues = [...issues, ...buildDiagnostics.issues];
-  const issueMap = Object.fromEntries(allIssues.map((issue) => [issue.path, issue.message]));
-  const equationIssueMap = Object.fromEntries(
-    allIssues
-      .filter((issue) => issue.path.startsWith("equations."))
-      .map((issue) => [issue.path, issue])
+  const editor = useMemo(
+    () =>
+      buildEditorStateFromSections({
+        equations: draftEquations,
+        externals,
+        initialValues: [],
+        options: solverCell?.options ?? defaultNotebookEditorOptions()
+      }),
+    [draftEquations, externals, solverCell]
   );
-  const runtime = safeBuildRuntime(editor);
+  const issues = useMemo(() => validateEditorState(editor), [editor]);
+  const buildDiagnostics = useMemo(() => diagnoseBuildRuntime(editor), [editor]);
+  const allIssues = useMemo(() => [...issues, ...buildDiagnostics.issues], [buildDiagnostics.issues, issues]);
+  const issueMap = useMemo(
+    () => Object.fromEntries(allIssues.map((issue) => [issue.path, issue.message])),
+    [allIssues]
+  );
+  const equationIssueMap = useMemo(
+    () =>
+      Object.fromEntries(
+        allIssues
+          .filter((issue) => issue.path.startsWith("equations."))
+          .map((issue) => [issue.path, issue])
+      ),
+    [allIssues]
+  );
+  const runtime = useMemo(() => safeBuildRuntime(editor), [editor]);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
   const [pinnedTrace, setPinnedTrace] = useState<PinnedTrace | null>(null);
   const parameterNameSet = useMemo(() => new Set(externalRowsOnly(externals).map((external) => external.name)), [externals]);
@@ -636,7 +663,7 @@ export function EquationsCellView({
       cellRootRef,
       enabled: floatingEnabled
     });
-  const hasDraftEdits = JSON.stringify(draftEquations) !== JSON.stringify(cell.equations);
+  const hasDraftEdits = draftEquations !== cell.equations;
   const externalDisplayValues = useMemo(
     () => buildExternalDisplayValues(externals, selectedPeriodIndex),
     [externals, selectedPeriodIndex]
@@ -717,6 +744,15 @@ export function EquationsCellView({
   });
   const { scheduleDeferredAction } = useDeferredAction();
   const sectionCollapse = useEquationSectionCollapseState(cell.id, cell.equations, collapsibleSectionIds);
+  const visibleReadItems = useMemo(
+    () =>
+      collectVisibleEquationReadItems(
+        cell.equations,
+        sectionCollapse.collapsedSectionIds,
+        Boolean(implicitEquationContext.boundary)
+      ),
+    [cell.equations, implicitEquationContext.boundary, sectionCollapse.collapsedSectionIds]
+  );
 
   return (
     <div ref={cellRootRef} className="notebook-model-stack">
@@ -857,29 +893,147 @@ export function EquationsCellView({
             tableShellRef={tableShellRef}
             valueColumnsCollapse={valueColumnsCollapse}
           >
-            {cell.equations.map((row, index) => {
-              if (isRowComment(row)) {
-                const inferredBoundary = sectionBoundaries.get(row.id) ?? null;
+            <EquationReadRowList
+              editingIndex={
+                inlineEdit.editingEquationId
+                  ? cell.equations.findIndex((row) => row.id === inlineEdit.editingEquationId)
+                  : null
+              }
+              items={visibleReadItems}
+              viewportRoot={viewportRoot}
+              renderItem={(item) => {
+                if (item.kind === "implicit") {
+                  return (
+                    <ImplicitEquationsSection
+                      boundary={implicitEquationContext.boundary}
+                      currentValues={currentValues}
+                      entries={implicitEquationContext.entries}
+                      highlightedVariable={highlightedVariable}
+                      laggedCurrentValues={laggedCurrentValues}
+                      laggedPeriodLabel={laggedPeriodLabel}
+                      parameterNames={parameterNameSet}
+                      preferredRun={implicitEquationContext.preferredRun}
+                      sectionCollapsible={implicitEquationContext.entries.length > 0}
+                      sectionCollapsed={sectionCollapse.isSectionCollapsed(
+                        IMPLICIT_MATRIX_INTEGRATION_SECTION_ID
+                      )}
+                      variableDescriptions={variableDescriptions}
+                      variableUnitMetadata={variableUnitMetadata}
+                      onInspectVariable={(selectedVariable) =>
+                        onVariableInspectRequest({
+                          currentValues,
+                          editor: inspectEditor,
+                          modelSource,
+                          sourceRunCellId: implicitEquationContext.preferredRun?.id ?? null,
+                          selectedVariable,
+                          variableDescriptions,
+                          variableUnitMetadata
+                        })
+                      }
+                      onToggleSectionCollapse={() =>
+                        sectionCollapse.toggleSectionCollapse(IMPLICIT_MATRIX_INTEGRATION_SECTION_ID)
+                      }
+                    />
+                  );
+                }
+
+                const row = cell.equations[item.index];
+                if (!row) {
+                  return null;
+                }
+
+                if (item.kind === "comment" && isRowComment(row)) {
+                  const inferredBoundary = sectionBoundaries.get(row.id) ?? null;
+                  return (
+                    <CommentRowReadView
+                      key={row.id}
+                      commentEdit={commentEdit}
+                      currentValues={currentValues}
+                      equations={cell.equations}
+                      externals={externals}
+                      highlightedVariable={highlightedVariable}
+                      index={item.index}
+                      inferredBoundary={inferredBoundary}
+                      parameterNames={parameterNameSet}
+                      row={row}
+                      sectionCollapsible={Boolean(
+                        inferredBoundary && sectionCommentHasEquations(cell.equations, item.index)
+                      )}
+                      sectionCollapsed={sectionCollapse.isSectionCollapsed(row.id)}
+                      variableDescriptions={variableDescriptions}
+                      variableUnitMetadata={variableUnitMetadata}
+                      onCancelDataRowEdit={inlineEdit.cancelRowEdit}
+                      onContextMenu={equationRowMenu.handleRowContextMenu}
+                      onInspectVariable={(selectedVariable) =>
+                        onVariableInspectRequest({
+                          currentValues,
+                          editor: inspectEditor,
+                          modelSource,
+                          selectedVariable,
+                          variableDescriptions,
+                          variableUnitMetadata
+                        })
+                      }
+                      onToggleSectionCollapse={() => sectionCollapse.toggleSectionCollapse(row.id)}
+                    />
+                  );
+                }
+
+                if (item.kind !== "equation" || isRowComment(row)) {
+                  return null;
+                }
+
+                const equation = row;
+                const issue =
+                  issueMap[`equations.${item.index}.name`] ?? issueMap[`equations.${item.index}.expression`];
+                const traceRole = activeTrace?.rowStates.get(equation.id) ?? null;
+
                 return (
-                  <CommentRowReadView
-                    key={row.id}
-                    commentEdit={commentEdit}
+                  <NotebookEquationReadRow
+                    key={equation.id}
+                    activeTraceTokenStates={traceRole ? activeTrace?.tokenStates : undefined}
                     currentValues={currentValues}
-                    equations={cell.equations}
-                    externals={externals}
+                    laggedCurrentValues={laggedCurrentValues}
+                    laggedPeriodLabel={laggedPeriodLabel}
+                    displayTokens={showExternalValues ? externalDisplayValues : undefined}
+                    equation={equation}
+                    equationIndex={item.index}
+                    formatRoleLabel={formatEquationRoleLabel}
                     highlightedVariable={highlightedVariable}
-                    index={index}
-                    inferredBoundary={inferredBoundary}
+                    isHovered={hoveredRowId === equation.id}
+                    isEditing={inlineEdit.editingEquationId === equation.id}
+                    issueMessage={issue}
+                    onContextMenu={(event) => {
+                      if (inlineEdit.editingEquationId === equation.id) {
+                        return;
+                      }
+                      equationRowMenu.handleRowContextMenu(event, item.index);
+                    }}
                     parameterNames={parameterNameSet}
-                    row={row}
-                    sectionCollapsible={Boolean(
-                      inferredBoundary && sectionCommentHasEquations(cell.equations, index)
-                    )}
-                    sectionCollapsed={sectionCollapse.isSectionCollapsed(row.id)}
+                    rowDraft={{
+                      expression: inlineEdit.draftExpression,
+                      name: inlineEdit.draftName
+                    }}
+                    rowEditFocus={inlineEdit.editFocus}
+                    rowValidationError={inlineEdit.validationError}
+                    rowValidationWarning={inlineEdit.validationWarning}
+                    traceRole={traceRole}
                     variableDescriptions={variableDescriptions}
                     variableUnitMetadata={variableUnitMetadata}
-                    onCancelDataRowEdit={inlineEdit.cancelRowEdit}
-                    onContextMenu={equationRowMenu.handleRowContextMenu}
+                    onApplyRow={inlineEdit.applyRowEdit}
+                    onBeginRowEdit={(equationId, focus) => {
+                      commentEdit.cancelRowEdit();
+                      initialValueEdit.cancelEdit();
+                      inlineEdit.beginRowEdit(equationId, focus);
+                    }}
+                    onCancelRow={inlineEdit.cancelRowEdit}
+                    onDraftExpressionChange={inlineEdit.setDraftExpression}
+                    onDraftNameChange={inlineEdit.setDraftName}
+                    {...initialValueCellProps(
+                      equation.name,
+                      initialValuesCell?.initialValues ?? [],
+                      initialValueEdit
+                    )}
                     onInspectVariable={(selectedVariable) =>
                       onVariableInspectRequest({
                         currentValues,
@@ -890,137 +1044,39 @@ export function EquationsCellView({
                         variableUnitMetadata
                       })
                     }
-                    onToggleSectionCollapse={() => sectionCollapse.toggleSectionCollapse(row.id)}
+                    onRowClick={(event) =>
+                      schedulePinnedTraceToggle(scheduleDeferredAction, setPinnedTrace, equation.id, event)
+                    }
+                    onRowMouseEnter={() => setHoveredRowId(equation.id)}
+                    onRowMouseLeave={() =>
+                      setHoveredRowId((current) => (current === equation.id ? null : current))
+                    }
+                    onSelectVariableInExpression={(selectedVariable) =>
+                      scheduleDeferredAction(() =>
+                        onVariableInspectRequest({
+                          currentValues,
+                          editor: inspectEditor,
+                          modelSource,
+                          selectedVariable,
+                          variableDescriptions,
+                          variableUnitMetadata
+                        })
+                      )
+                    }
+                    askAiActive={askAiVariable === equation.name}
+                    onAskAi={
+                      equationAi?.enabled && !isEditingEquations
+                        ? () => {
+                            setIsEquationsCellAskAiOpen(false);
+                            setAskAiVariable((current) =>
+                              current === equation.name ? null : equation.name
+                            );
+                          }
+                        : undefined
+                    }
                   />
                 );
-              }
-
-              if (
-                isEquationRowHiddenBySectionCollapse(cell.equations, sectionCollapse.collapsedSectionIds, index)
-              ) {
-                return null;
-              }
-
-              const equation = row;
-              const issue =
-                issueMap[`equations.${index}.name`] ?? issueMap[`equations.${index}.expression`];
-
-              return (
-                <NotebookEquationReadRow
-                  key={equation.id}
-                  activeTraceTokenStates={activeTrace?.tokenStates}
-                  currentValues={currentValues}
-                  laggedCurrentValues={laggedCurrentValues}
-                  laggedPeriodLabel={laggedPeriodLabel}
-                  displayTokens={showExternalValues ? externalDisplayValues : undefined}
-                  equation={equation}
-                  equationIndex={index}
-                  formatRoleLabel={formatEquationRoleLabel}
-                  highlightedVariable={highlightedVariable}
-                  hoveredRowId={hoveredRowId}
-                  isEditing={inlineEdit.editingEquationId === equation.id}
-                  issueMessage={issue}
-                  onContextMenu={(event) => {
-                    if (inlineEdit.editingEquationId === equation.id) {
-                      return;
-                    }
-                    equationRowMenu.handleRowContextMenu(event, index);
-                  }}
-                  parameterNames={parameterNameSet}
-                  rowDraft={{
-                    expression: inlineEdit.draftExpression,
-                    name: inlineEdit.draftName
-                  }}
-                  rowEditFocus={inlineEdit.editFocus}
-                  rowValidationError={inlineEdit.validationError}
-                  rowValidationWarning={inlineEdit.validationWarning}
-                  traceRole={activeTrace?.rowStates.get(equation.id) ?? null}
-                  variableDescriptions={variableDescriptions}
-                  variableUnitMetadata={variableUnitMetadata}
-                  onApplyRow={inlineEdit.applyRowEdit}
-                  onBeginRowEdit={(equationId, focus) => {
-                    commentEdit.cancelRowEdit();
-                    initialValueEdit.cancelEdit();
-                    inlineEdit.beginRowEdit(equationId, focus);
-                  }}
-                  onCancelRow={inlineEdit.cancelRowEdit}
-                  onDraftExpressionChange={inlineEdit.setDraftExpression}
-                  onDraftNameChange={inlineEdit.setDraftName}
-                  {...initialValueCellProps(
-                    equation.name,
-                    initialValuesCell?.initialValues ?? [],
-                    initialValueEdit
-                  )}
-                  onInspectVariable={(selectedVariable) =>
-                    onVariableInspectRequest({
-                      currentValues,
-                      editor: inspectEditor,
-                      modelSource,
-                      selectedVariable,
-                      variableDescriptions,
-                      variableUnitMetadata
-                    })
-                  }
-                  onRowClick={(event) =>
-                    schedulePinnedTraceToggle(scheduleDeferredAction, setPinnedTrace, equation.id, event)
-                  }
-                  onRowMouseEnter={() => setHoveredRowId(equation.id)}
-                  onRowMouseLeave={() =>
-                    setHoveredRowId((current) => (current === equation.id ? null : current))
-                  }
-                  onSelectVariableInExpression={(selectedVariable) =>
-                    scheduleDeferredAction(() =>
-                      onVariableInspectRequest({
-                        currentValues,
-                        editor: inspectEditor,
-                        modelSource,
-                        selectedVariable,
-                        variableDescriptions,
-                        variableUnitMetadata
-                      })
-                    )
-                  }
-                  askAiActive={askAiVariable === equation.name}
-                  onAskAi={
-                    equationAi?.enabled && !isEditingEquations
-                      ? () => {
-                          setIsEquationsCellAskAiOpen(false);
-                          setAskAiVariable((current) =>
-                            current === equation.name ? null : equation.name
-                          );
-                        }
-                      : undefined
-                  }
-                />
-              );
-            })}
-            <ImplicitEquationsSection
-              boundary={implicitEquationContext.boundary}
-              currentValues={currentValues}
-              entries={implicitEquationContext.entries}
-              highlightedVariable={highlightedVariable}
-              laggedCurrentValues={laggedCurrentValues}
-              laggedPeriodLabel={laggedPeriodLabel}
-              parameterNames={parameterNameSet}
-              preferredRun={implicitEquationContext.preferredRun}
-              sectionCollapsible={implicitEquationContext.entries.length > 0}
-              sectionCollapsed={sectionCollapse.isSectionCollapsed(IMPLICIT_MATRIX_INTEGRATION_SECTION_ID)}
-              variableDescriptions={variableDescriptions}
-              variableUnitMetadata={variableUnitMetadata}
-              onInspectVariable={(selectedVariable) =>
-                onVariableInspectRequest({
-                  currentValues,
-                  editor: inspectEditor,
-                  modelSource,
-                  sourceRunCellId: implicitEquationContext.preferredRun?.id ?? null,
-                  selectedVariable,
-                  variableDescriptions,
-                  variableUnitMetadata
-                })
-              }
-              onToggleSectionCollapse={() =>
-                sectionCollapse.toggleSectionCollapse(IMPLICIT_MATRIX_INTEGRATION_SECTION_ID)
-              }
+              }}
             />
           </NotebookEquationViewTable>
           {equationRowMenu.rowContextMenu ? (

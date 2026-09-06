@@ -37,7 +37,7 @@ import {
   type TraceTokenRole
 } from "./EquationTrace";
 import { useEquationGridColumnResize } from "../hooks/useEquationGridColumnResize";
-import { InstantTooltip } from "./InstantTooltip";
+import { FORMULA_TOOLTIP_ATTR } from "./InstantTooltip";
 import { MirroredEquationUnitSummaryDialog } from "./MirroredEquationUnitSummaryDialog";
 import { EquationUnitPickerPanel } from "./EquationUnitPickerPanel";
 import { VariableUnitStatusDialog } from "./VariableUnitStatusDialog";
@@ -846,15 +846,15 @@ export function highlightFormula(
           }
         : undefined;
     parts.push(
-      <InstantTooltip
+      <span
         key={`${token}-${index}`}
         className={tokenClassName}
+        {...(tokenDescription ? { [FORMULA_TOOLTIP_ATTR]: tokenDescription } : {})}
         onClick={selectVariableOnClick}
         onMouseDown={selectVariableOnMouseDown}
-        tooltip={tokenDescription}
       >
-        <span className={tokenClassName}>{renderedTokenNode}</span>
-      </InstantTooltip>
+        {renderedTokenNode}
+      </span>
     );
     lastIndex = index + token.length;
   }

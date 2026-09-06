@@ -4,8 +4,35 @@ import { isRowComment, type EquationListItem } from "@sfcr/notebook-core";
 
 const EQUATION_SECTION_COLLAPSE_STORAGE_PREFIX = "sfcr.equation-section-collapse.";
 
-function equationSectionCollapseStorageKey(cellId: string): string {
+/** Collapse every section on first view when the equation list is this large. */
+export const AUTO_COLLAPSE_EQUATION_SECTION_THRESHOLD = 80;
+
+export function equationSectionCollapseStorageKey(cellId: string): string {
   return `${EQUATION_SECTION_COLLAPSE_STORAGE_PREFIX}${cellId}`;
+}
+
+export function shouldAutoCollapseEquationSections(equationCount: number): boolean {
+  return equationCount > AUTO_COLLAPSE_EQUATION_SECTION_THRESHOLD;
+}
+
+export function resolveEquationSectionCollapsedIds({
+  collapsibleSectionIds,
+  equationCount,
+  storedIds,
+  validSectionIds
+}: {
+  collapsibleSectionIds: readonly string[];
+  equationCount: number;
+  storedIds: readonly string[] | null;
+  validSectionIds: ReadonlySet<string>;
+}): Set<string> {
+  if (storedIds) {
+    return filterCollapsedSectionIds(storedIds, validSectionIds);
+  }
+  if (shouldAutoCollapseEquationSections(equationCount) && collapsibleSectionIds.length > 0) {
+    return filterCollapsedSectionIds(collapsibleSectionIds, validSectionIds);
+  }
+  return new Set();
 }
 
 export function sectionCommentHasEquations(
@@ -80,26 +107,33 @@ function filterCollapsedSectionIds(
   return filtered;
 }
 
-function readStoredCollapsedSectionIds(storageKey: string, validSectionIds: ReadonlySet<string>): Set<string> {
+function parseStoredCollapsedSectionIds(raw: string): string[] | null {
+  const parsed = JSON.parse(raw) as unknown;
+  if (Array.isArray(parsed)) {
+    const ids = parsed.filter((value): value is string => typeof value === "string");
+    // Legacy writes stored [] on first mount even when the user never chose.
+    // Treat that as unset so large models can still auto-collapse.
+    return ids.length === 0 ? null : ids;
+  }
+  if (parsed && typeof parsed === "object" && Array.isArray((parsed as { ids?: unknown }).ids)) {
+    return (parsed as { ids: unknown[] }).ids.filter((value): value is string => typeof value === "string");
+  }
+  return null;
+}
+
+function readStoredCollapsedSectionIds(storageKey: string): string[] | null {
   if (typeof window === "undefined") {
-    return new Set();
+    return null;
   }
 
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) {
-      return new Set();
+      return null;
     }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return new Set();
-    }
-    return filterCollapsedSectionIds(
-      parsed.filter((value): value is string => typeof value === "string"),
-      validSectionIds
-    );
+    return parseStoredCollapsedSectionIds(raw);
   } catch {
-    return new Set();
+    return null;
   }
 }
 
@@ -109,10 +143,22 @@ function writeStoredCollapsedSectionIds(storageKey: string, collapsedSectionIds:
   }
 
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify([...collapsedSectionIds]));
+    window.localStorage.setItem(storageKey, JSON.stringify({ ids: [...collapsedSectionIds] }));
   } catch {
     // Ignore quota / private-mode failures.
   }
+}
+
+function collapsedSectionIdsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const id of left) {
+    if (!right.has(id)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function useEquationSectionCollapseState(
@@ -139,14 +185,34 @@ export function useEquationSectionCollapseState(
     return ids;
   }, [collapsibleSectionIds, equations]);
   const validSectionIdsKey = useMemo(() => [...validSectionIds].sort().join("\n"), [validSectionIds]);
+  const collapsibleSectionIdsKey = useMemo(
+    () => [...collapsibleSectionIdSet].sort().join("\n"),
+    [collapsibleSectionIdSet]
+  );
   const storageKey = useMemo(() => equationSectionCollapseStorageKey(cellId), [cellId]);
+  const equationCount = equations.length;
+
   const [collapsedSectionIds, setCollapsedSectionIds] = useState<Set<string>>(() =>
-    readStoredCollapsedSectionIds(storageKey, validSectionIds)
+    resolveEquationSectionCollapsedIds({
+      collapsibleSectionIds,
+      equationCount,
+      storedIds: readStoredCollapsedSectionIds(storageKey),
+      validSectionIds
+    })
   );
 
   useEffect(() => {
-    setCollapsedSectionIds(readStoredCollapsedSectionIds(storageKey, validSectionIds));
-  }, [storageKey, validSectionIdsKey]);
+    setCollapsedSectionIds((current) => {
+      const next = resolveEquationSectionCollapsedIds({
+        collapsibleSectionIds,
+        equationCount,
+        storedIds: readStoredCollapsedSectionIds(storageKey),
+        validSectionIds
+      });
+      return collapsedSectionIdsEqual(current, next) ? current : next;
+    });
+    // collapsibleSectionIdsKey / validSectionIdsKey stand in for the Set/array identities.
+  }, [collapsibleSectionIdsKey, equationCount, storageKey, validSectionIdsKey]);
 
   useEffect(() => {
     setCollapsedSectionIds((current) => {

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
+import { DelegatedFormulaTooltip } from "../components/InstantTooltip";
 import "../styles/app.css";
 import {
   migratePublicationHashToPathname,
@@ -68,6 +69,7 @@ export function App() {
 
   return (
     <Suspense fallback={<div className="app-loading">Loading notebook...</div>}>
+      <DelegatedFormulaTooltip />
       <AppContent />
     </Suspense>
   );

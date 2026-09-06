@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EquationRow } from "../src/lib/editorModel";
 import { EquationGridEditor } from "../src/components/EquationGridEditor";
+import { DelegatedFormulaTooltip } from "../src/components/InstantTooltip";
 
 afterEach(() => {
   cleanup();
@@ -341,24 +342,27 @@ describe("EquationGridEditor", () => {
 
   it("adds instant tooltips to described variable tokens", () => {
     render(
-      <EquationGridEditor
-        equations={[{ id: "eq-y", name: "Y", desc: "Income = GDP", expression: "alpha1 * Y" }]}
-        issues={{}}
-        onChange={vi.fn()}
-        parameterNames={["alpha1"]}
-        variableDescriptions={
-          new Map([
-            ["Y", "Income = GDP"],
-            ["alpha1", "Propensity to consume out of income"]
-          ])
-        }
-        variableUnitMetadata={
-          new Map([
-            ["Y", { dimensionKind: "flow", baseUnit: "$" }],
-            ["alpha1", { dimensionKind: "aux" }]
-          ])
-        }
-      />
+      <>
+        <DelegatedFormulaTooltip />
+        <EquationGridEditor
+          equations={[{ id: "eq-y", name: "Y", desc: "Income = GDP", expression: "alpha1 * Y" }]}
+          issues={{}}
+          onChange={vi.fn()}
+          parameterNames={["alpha1"]}
+          variableDescriptions={
+            new Map([
+              ["Y", "Income = GDP"],
+              ["alpha1", "Propensity to consume out of income"]
+            ])
+          }
+          variableUnitMetadata={
+            new Map([
+              ["Y", { dimensionKind: "flow", baseUnit: "$" }],
+              ["alpha1", { dimensionKind: "aux" }]
+            ])
+          }
+        />
+      </>
     );
 
     const alphaToken = getFormulaTokensByText(document.body, "α1")[0];
@@ -367,9 +371,9 @@ describe("EquationGridEditor", () => {
       throw new Error("Expected formula token for alpha1");
     }
 
-    fireEvent.mouseEnter(alphaToken);
+    fireEvent.pointerOver(alphaToken);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Propensity to consume out of income");
-    fireEvent.mouseLeave(alphaToken);
+    fireEvent.pointerOut(alphaToken);
 
     const yToken = screen
       .getAllByText("Y")
@@ -379,31 +383,34 @@ describe("EquationGridEditor", () => {
       throw new Error("Expected formula token for Y");
     }
 
-    fireEvent.mouseEnter(yToken);
+    fireEvent.pointerOver(yToken);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Income = GDP");
     expect(screen.getByRole("tooltip")).toHaveTextContent("$/yr");
   });
 
   it("adds tooltips to lowercase variable tokens when metadata exists", () => {
     render(
-      <EquationGridEditor
-        equations={[{ id: "eq-yd", name: "YD", expression: "lag(rl) * lag(Mh)" }]}
-        issues={{}}
-        onChange={vi.fn()}
-        parameterNames={[]}
-        variableDescriptions={
-          new Map([
-            ["rl", "Rate of interest on bank loans"],
-            ["Mh", "Bank deposits held by households"]
-          ])
-        }
-        variableUnitMetadata={
-          new Map([
-            ["rl", { stockFlow: "aux", signature: { time: -1 } }],
-            ["Mh", { stockFlow: "stock", signature: { money: 1 } }]
-          ])
-        }
-      />
+      <>
+        <DelegatedFormulaTooltip />
+        <EquationGridEditor
+          equations={[{ id: "eq-yd", name: "YD", expression: "lag(rl) * lag(Mh)" }]}
+          issues={{}}
+          onChange={vi.fn()}
+          parameterNames={[]}
+          variableDescriptions={
+            new Map([
+              ["rl", "Rate of interest on bank loans"],
+              ["Mh", "Bank deposits held by households"]
+            ])
+          }
+          variableUnitMetadata={
+            new Map([
+              ["rl", { stockFlow: "aux", signature: { time: -1 } }],
+              ["Mh", { stockFlow: "stock", signature: { money: 1 } }]
+            ])
+          }
+        />
+      </>
     );
 
     const rlToken = screen
@@ -414,7 +421,7 @@ describe("EquationGridEditor", () => {
       throw new Error("Expected formula token for rl");
     }
 
-    fireEvent.mouseEnter(rlToken);
+    fireEvent.pointerOver(rlToken);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Rate of interest on bank loans");
   });
 

@@ -35,6 +35,7 @@
     "@sfcr/core-worker": "workspace:*",
     "@sfcr/notebook-core": "workspace:*",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.14.10",
     "@xyflow/react": "^12.10.2",
     "ajv": "^8.20.0",
     "codemirror": "^6.0.2",

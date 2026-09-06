@@ -23,6 +23,16 @@
   min-width: 0;
   width: 100%;
 }
+.notebook-equation-virtual-list {
+  position: relative;
+  width: 100%;
+}
+.notebook-equation-virtual-item {
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
 .notebook-model-view-table-resizable {
   --eq-col-expression-width: 280px;
   --eq-col-role-width: 4.25rem;

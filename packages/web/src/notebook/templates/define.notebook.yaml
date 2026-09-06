@@ -1,0 +1,1689 @@
+format: sfcr-notebook-yaml
+formatVersion: 1
+id: define-notebook
+title: DEFINE 1.1
+metadata:
+  version: 1
+  template: define
+  timeAxis:
+    startYear: 2021
+cells:
+  - markdown:
+      id: intro
+      title: Overview
+      source: This notebook ports DEFINE 1.1 (August 2022), the global ecological stock-flow consistent model of Dafermos and Nikolaidi. Period 1 is calendar year 2021; the baseline runs through 2100.
+      more: |
+        **DEFINE** (Dynamic Ecosystem-FINance-Economy) joins Godley-Lavoie stock-flow
+        accounting with Georgescu-Roegen's flow-fund treatment of matter and energy.
+        Version 1.1 adds dirty-sector loan weights, carbon taxes and green subsidies,
+        green public investment, endogenous loan spreads, and a TCRE climate module
+        in which warming is proportional to cumulative CO2.
+
+        The executable equations come from
+        `references/define-1.1/R DEFINE 1.1-Aug2022 CODE.R`
+        ([DEFINE-model/VERSION_1.1_AUG2022](https://github.com/DEFINE-model/VERSION_1.1_AUG2022)),
+        which produces the simulations in Dafermos Y. and Nikolaidi M. (2022),
+        _Assessing climate policies: an ecological stock-flow consistent perspective_,
+        European Journal of Economics and Economic Policies. The technical manual is
+        [define-1.1-manual-aug-22.pdf](https://define-model.org/wp-content/uploads/2022/10/define-1.1-manual-aug-22.pdf).
+
+        Period 1 is the 2021 data-consistent snapshot from R, not a Gauss-Seidel
+        solve of the behavioural equations. From period 2 the notebook uses the same
+        identities as the `else` branch of the R time loop. The redundant check is
+        `SEC_CB = SEC_CBred` (manual Eq. 187 vs 188-red).
+
+        The baseline follows an SSP3-6.0-like carbon-tax path with recycled revenues
+        paid as green subsidies. Output growth slows as climate damages and resource
+        constraints bind; temperature reaches about 3.2C in 2100 in the R calibration.
+
+        Scenarios 1-9 are the deterministic policy experiments behind paper Figures
+        1-3. Appendix B Monte Carlo paths (R scenarios 2-3) are omitted; set
+        `random_dummy` and `damage_dummy` in the externals cell to explore those.
+  - matrix:
+      id: balance-sheet
+      sourceRunCellId: baseline-run
+      title: DEFINE 1.1 balance sheet
+      description: Balance-sheet matrix for households, firms, banks, government and central banks.
+      note: Validated against the DEFINE 1.1 R baseline (SEC_CB = SEC_CBred).
+      columns: [Households, Firms, Banks, Government, Central banks, Sum]
+      sectors: [Households, Firms, Banks, Government, Central banks, ""]
+      accountingKind: balance-sheet
+      rows:
+        - [Capital, Conventional capital, "", +KC_PRI, "", +KC_GOV, "", +KC]
+        - [Capital, Green capital, "", +KG_PRI, "", +KG_GOV, "", +KG]
+        - [Capital, Durable consumption, +DC, "", "", "", "", +DC]
+        - [Deposits, Deposits, +D, "", -D, "", "", "0"]
+        - [Loans, Conventional loans, "", -LC, +LC, "", "", "0"]
+        - [Loans, Green loans, "", -LG, +LG, "", "", "0"]
+        - [Bonds, Conventional bonds, "+p_C_bar * b_CH", "-p_C_bar * b_C", "", "", "+p_C_bar * b_CCB", "0"]
+        - [Bonds, Green bonds, "+p_G_bar * b_GH", "-p_G_bar * b_G", "", "", "+p_G_bar * b_GCB", "0"]
+        - [Securities, Government securities, +SEC_H, "", +SEC_B, -SEC, +SEC_CB, "0"]
+        - [HPM, High-powered money, "", "", +HPM, "", -HPM, "0"]
+        - [Advances, Central-bank advances, "", "", -A, "", +A, "0"]
+        - [Wealth, Net worth, -V_H, "-(K_PRI - L - p_C_bar * b_C - p_G_bar * b_G)", -CAP, "-(KC_GOV + KG_GOV - SEC)", -V_CB, "-(K + DC)"]
+        - [Sum, Sum, "0", "0", "0", "0", "0", "0"]
+      more: |
+        Households hold deposits `D`, conventional and green bonds, government
+        securities and durable consumption `DC`. Firms own private capital and issue
+        loans and bonds. Banks hold loans, government securities and high-powered
+        money against deposits, advances and own funds `CAP`. The government issues
+        securities `SEC` and accumulates public capital. Central banks hold bonds,
+        securities and advances, and issue high-powered money.
+
+        Reading assets as positive and liabilities as negative, every financial row
+        sums across sectors to zero. The capital and durables rows are the real
+        assets that net worth has to match. The hidden equation
+        `SEC_CB = SEC_CBred` is the redundant central-bank residual.
+  - matrix:
+      id: transaction-flow
+      sourceRunCellId: baseline-run
+      title: DEFINE 1.1 transactions-flow matrix
+      description: Transactions-flow matrix with a split current/capital account for firms.
+      note: Validated against the DEFINE 1.1 identities.
+      columns: [Households, Firms curr., Firms cap., Banks, Government, Central banks, Sum]
+      sectors: [Households, Firms, Firms, Banks, Government, Central banks, ""]
+      accountingKind: transaction-flow
+      rows:
+        - [Consumption, Private consumption, -CO_PRI, +CO_PRI, "", "", "", "", "0"]
+        - [Consumption, Government consumption, "", +CO_GOV, "", "", -CO_GOV, "", "0"]
+        - [Investment, Private investment, "", +I_PRI, -I_PRI, "", "", "", "0"]
+        - [Investment, Government investment, "", +I_GOV, "", "", -I_GOV, "", "0"]
+        - [Wages, Wages, "+wage * N", "-wage * N", "", "", "", "", "0"]
+        - [Profits, Distributed firm profits, +DP, -DP, "", "", "", "", "0"]
+        - [Profits, Retained firm profits, "", -RP, +RP, "", "", "", "0"]
+        - [Profits, Distributed bank profits, +BP_D, "", "", -BP_D, "", "", "0"]
+        - [Profits, Undistributed bank profits, "", "", "", -BP_U, "", "", "0"]
+        - [Interest, Deposit interest, "+int_D * lag(D)", "", "", "-int_D * lag(D)", "", "", "0"]
+        - [Interest, Loan and coupon interest, "+coupon_C * lag(b_CH) + coupon_G * lag(b_GH) + int_S * lag(SEC_H)", "-Interest - coupon_C * lag(b_C) - coupon_G * lag(b_G)", "", "+int_G * lag(LG) + int_C_S1 * lag(LC_S1) + int_C_S2 * lag(LC_S2) + int_C_S3 * lag(LC_S3) + int_C_S4 * lag(LC_S4) + int_S * lag(SEC_B) - int_A * lag(A)", "-int_S * lag(SEC)", +CBP, "0"]
+        - [Taxes, Taxes, -TAX_H, "-TAX_F - TAX_C", "", "", +TAX, "", "0"]
+        - [Transfers, Green subsidies, "", +SUB, "", "", -SUB, "", "0"]
+        - [Transfers, Bank bailouts, "", "", "", +BAILOUT, -BAILOUT, "", "0"]
+        - [CB, Central-bank profits, "", "", "", "", +CBP, -CBP, "0"]
+        - [Deposits, Change in deposits, "-d(D)", "", "", "+d(D)", "", "", "0"]
+        - [Loans, Change in loans, "", "", "+d(L)", "-d(L)", "", "", "0"]
+        - [HPM, Change in HPM, "", "", "", "-d(HPM)", "", "+d(HPM)", "0"]
+        - [Advances, Change in advances, "", "", "", "+d(A)", "", "-d(A)", "0"]
+        - [Securities, Change in government securities, "-d(SEC_H)", "", "", "-d(SEC_B)", "+d(SEC)", "-d(SEC_CB)", "0"]
+        - [Sum, Sum, "0", "0", "0", "0", "0", "0", "0"]
+      more: |
+        Household disposable income is wages plus distributed firm and bank profits
+        plus interest, minus taxes. What is not consumed and not placed in bonds or
+        government securities is added to deposits.
+
+        Firms sell consumption and investment goods, pay wages, interest, coupons
+        and taxes, receive green subsidies, and finance capital accumulation with
+        retained earnings, new loans and new bonds. Banks earn the loan-deposit
+        spread and may receive bailouts. The government spends on consumption and
+        investment, collects taxes including the carbon tax, and pays subsidies.
+        Central-bank profits `CBP` are remitted to the government.
+  - sequence:
+      id: transaction-flow-sequence
+      title: DEFINE 1.1 transaction flow sequence
+      source:
+        kind: matrix
+        matrixCellId: transaction-flow
+      description: Sequence view generated from the transactions-flow matrix at the selected simulation period.
+  - markdown:
+      id: ecology-note
+      title: Ecosystem, climate and green capital
+      source: Material intensity, recycling, energy intensity, the non-fossil share and sequestration all respond to the green-to-conventional capital mix. Fossil emissions `EMIS_F = omega * (1 - seq) * E_F` feed cumulative CO2 and temperature via TCRE.
+      more: |
+        Four physical processes are consolidated in production: extraction, energy
+        conversion, recycling and final output. Material intensity `mu` and the
+        recycling rate `rho` improve as green non-energy capital rises relative to
+        conventional non-energy capital. Energy intensity `epsilon` falls and the
+        non-fossil share `theta` rises with green energy capital. Sequestration
+        `seq` tracks sequestration capital in mining/utilities and manufacturing.
+
+        Temperature is `TEMP = TCRE * CO2_CUM / (1 - f_nc)`, so warming is
+        approximately proportional to cumulative emissions (Matthews et al. 2021).
+        Damages `D_T` then hit investment, consumption, depreciation, labour-force
+        participation and productivities. Green public investment and cheaper green
+        finance raise `K_G / K_C` and that is what pulls intensity down.
+  - equations:
+      id: equations
+      title: DEFINE 1.1 model
+      modelId: define
+      collapsed: false
+      rows:
+        - "Time index"
+        - [t, "lag(t) + 1", "Calendar index; period 1 is 2021.", year, aux, identity]
+        - [MY, "mu*(Y-CO_GOV)", "Eq. (1)", "", aux, identity]
+        - [M, "MY-REC", "Eq. (2)", "", aux, identity]
+        - [REC, "rho*DEM", "Eq. (3)", "", aux, identity]
+        - [DEM, "mu*(delta*(lag(K_PRI)+ lag(K_GOV))+xi*lag(DC))", "Eq. (4)", "", aux, identity]
+        - [SES, "lag(SES)+MY-DEM", "Eq. (5)", "", aux, identity]
+        - [W, "M+CEN+O2-EMIS_F-(SES- lag(SES))", "Eq. (6)", "", aux, identity]
+        - [CEN, "(1/car)*EMIS_F", "Eq. (7)", "", aux, identity]
+        - [O2, "EMIS_F-CEN", "Eq. (8)", "", aux, identity]
+        - [HW_CUM, "lag(HW_CUM)+haz*W", "Eq. (9)", "", aux, identity]
+        - [hazratio, "HW_CUM/POP", "Eq. (10)", "", aux, identity]
+        - [REV_M, "lag(REV_M)+CON_M-M", "Eq. (11)", "", aux, identity]
+        - [CON_M, "con_M*lag(RES_M)", "Eq. (12)", "", aux, identity]
+        - [RES_M, "lag(RES_M)-CON_M", "Eq. (13)", "", aux, identity]
+        - [dep_M, "M/lag(REV_M)", "Eq. (14)", "", aux, identity]
+        - "2.1.2 Energy"
+        - [E, "epsilon*Y", "Eq. (15)", "", aux, identity]
+        - [E_NF, "theta*E", "Eq. (16)", "", aux, identity]
+        - [E_F, "E-E_NF", "Eq. (17)", "", aux, identity]
+        - [ED, "E_F+E_NF", "Eq. (18)", "", aux, identity]
+        - [REV_E, "lag(REV_E)+CON_E-E_F", "Eq. (19)", "", aux, identity]
+        - [CON_E, "con_E*lag(RES_E)", "Eq. (20)", "", aux, identity]
+        - [RES_E, "lag(RES_E)-CON_E", "Eq. (21)", "", aux, identity]
+        - [dep_E, "E_F/lag(REV_E)", "Eq. (22)", "", aux, identity]
+        - "2.1.3 Emissions and climate change"
+        - [EMIS_F, "omega*(1-seq)*E_F", "Eq. (23)", "", aux, identity]
+        - [g_EMIS_L, "lag(g_EMIS_L)*(1-zeta_9)", "Eq. (24)", "", aux, identity]
+        - [EMIS_L, "lag(EMIS_L)*(1-g_EMIS_L)", "Eq. (25)", "", aux, identity]
+        - [EMIS, "EMIS_F+EMIS_L", "Eq. (26)", "", aux, identity]
+        - [CO2_CUM, "lag(CO2_CUM)+EMIS", "Eq. (27)", "", aux, identity]
+        - [TEMP, "(1/(1-f_nc))*TCRE*CO2_CUM", "Eq. (28)", "", aux, identity]
+        - "2.1.4 Ecological efficiency and technology"
+        - [omega, "lag(omega)*(1+g_omega)", "Eq. (29)", "", aux, identity]
+        - [g_omega, "lag(g_omega)*(1-zeta_1)", "Eq. (30)", "", aux, identity]
+        - [mu, "mu_max-((mu_max-mu_min)/(1+pi_1*exp(-pi_2*((lag(KGNE))/(lag(KCNE))))))", "Eq. (31)", "", aux, identity]
+        - [rho, "rho_max/(1+pi_3*exp(-pi_4*((lag(KGNE))/(lag(KCNE)))))", "Eq. (32)", "", aux, identity]
+        - [epsilon, "epsilon_max-((epsilon_max-epsilon_min)/(1+pi_5*exp(-pi_6*((lag(KGE))/(lag(KCE))))))", "Eq. (33)", "", aux, identity]
+        - [theta, "1/(1+pi_7*exp(-pi_8*((lag(KGE))/(lag(KCE)))))", "Eq. (34)", "", aux, identity]
+        - [seq, "1/(1+pi_9*exp(-pi_10*((lag(KSEQ))/(lag(KCE_PRI_S1)+lag(KCE_PRI_S2)))))", "Eq. (35)", "", aux, identity]
+        - "2.2.1 Output determination"
+        - [Y_star_M, "(lag(REV_M)+REC)/mu", "Eq. (36)", "", aux, identity]
+        - [Y_star_E, "lag(REV_E)/((1-theta)*epsilon)", "Eq. (37)", "", aux, identity]
+        - [Y_star_K, "v*K_PRI", "Eq. (38)", "", aux, identity]
+        - [Y_star_N, "lambda*LF*h", "Eq. (39)", "", aux, identity]
+        - [Y_star, "min(min(Y_star_M, Y_star_E),min(Y_star_N_Exp, Y_star_K))", "Eq. (40)", "", aux, identity]
+        - [Y, "CO_PRI+I_PRI+CO_GOV+I_GOV", "Eq. (41)", "", aux, identity]
+        - [Y_N, "CO_PRI_N+I_PRI+CO_GOV+I_GOV", "Y_N", "", aux, identity]
+        - [um, "(Y-CO_GOV)/Y_star_M", "Eq. (42)", "", aux, identity]
+        - [ue, "Y/Y_star_E", "Eq. (43)", "", aux, identity]
+        - [u, "Y/Y_star_K", "Eq. (44)", "", aux, identity]
+        - [re, "Y/Y_star_N", "Eq. (45)", "", aux, identity]
+        - [D_T, "(1-(1/(1+eta_1*TEMP+eta_2*pow(TEMP, 2)+eta_3*pow(TEMP, 6.754))))*damage_dummy", "Eq. (46)", "", aux, identity]
+        - [D_TP, "p*D_T", "Eq. (47)", "", aux, identity]
+        - [D_TF, "1-(1-D_T)/(1-D_TP)", "Eq. (48)", "", aux, identity]
+        - "2.2.2 Firms"
+        - [TP_G, "Y-wage*N-lag(int_C_S1)*lag(LC_S1)-lag(int_C_S2)*lag(LC_S2)-lag(int_C_S3)*lag(LC_S3)-lag(int_C_S4)*lag(LC_S4)-lag(int_G)*(lag(LG_S1)+lag(LG_S2)+lag(LG_S3)+lag(LG_S4))-delta*lag(K_PRI)-lag(coupon_C)*lag(b_C)-lag(coupon_G)*lag(b_G)", "Eq. (49)", "", aux, identity]
+        - [TP, "TP_G-TAX_F -TAX_C+SUB", "Eq. (50)", "", aux, identity]
+        - [RP, "s_F*lag(TP)", "Eq. (51)", "", aux, identity]
+        - [DP, "TP-RP", "Eq. (52)", "", aux, identity]
+        - [r, "TP/K_PRI", "Eq. (53)", "", aux, identity]
+        - [I_PRI_D, "(((alpha_00)/(1+exp(random1*random_dummy+alpha_01-alpha_1*lag(u)-alpha_2*lag(r)+(alpha_31*pow(lag(ur), (-alpha_32)))+(alpha_41*pow((1-lag(ue)), (-alpha_42)))+(alpha_51*pow((1-lag(um)), (-alpha_52)))))-delta_init+delta)*lag(K_PRI))*(1-lag(D_T))*(1-stag_adjust*g_POP_stag)", "Eq. (54)", "", aux, identity]
+        - [I_PRI_D_S1, "sh_GVA_S1*I_PRI_D", "Eq. (55)", "", aux, identity]
+        - [I_PRI_D_S2, "sh_GVA_S2*I_PRI_D", "Eq. (55)", "", aux, identity]
+        - [I_PRI_D_S3, "sh_GVA_S3*I_PRI_D", "Eq. (55)", "", aux, identity]
+        - [I_PRI_D_S4, "sh_GVA_S4*I_PRI_D", "Eq. (55)", "", aux, identity]
+        - [IG_PRI_D_S1, "beta_S1*I_PRI_D_S1", "Eq. (56)", "", aux, identity]
+        - [IG_PRI_D_S2, "beta_S2*I_PRI_D_S2", "Eq. (56)", "", aux, identity]
+        - [IG_PRI_D_S3, "beta_S3*I_PRI_D_S3", "Eq. (56)", "", aux, identity]
+        - [IG_PRI_D_S4, "beta_S4*I_PRI_D_S4", "Eq. (56)", "", aux, identity]
+        - [beta_S1, "min(lag(beta)*(1-beta_is_endogenous_different)+(beta_0_S1-beta_1*sh_EMIS_F_S1* (lag(tucr)-lag(tucn))-beta_2*(lag(sh_L)*(lag(int_G)-lag(int_C_S1))+(1-lag(sh_L))*(lag(yield_G)-lag(yield_C))))* beta_is_endogenous_different,1)", "Eq. (57)", "", aux, identity]
+        - [beta_S2, "min(lag(beta)* (1-beta_is_endogenous_different)+(beta_0_S2-beta_1*sh_EMIS_F_S2*( lag(tucr)-lag(tucn))-beta_2*(lag(sh_L)*(lag(int_G)-lag(int_C_S2))+(1-lag(sh_L))*(lag(yield_G)-lag(yield_C))))*beta_is_endogenous_different ,1)", "Eq. (57)", "", aux, identity]
+        - [beta_S3, "min(lag(beta)*(1-beta_is_endogenous_different)+(beta_0_S3-beta_1*sh_EMIS_F_S3*( lag(tucr)-lag(tucn))-beta_2*(lag(sh_L)*(lag(int_G)-lag(int_C_S3))+(1-lag(sh_L))*(lag(yield_G)-lag(yield_C))))*beta_is_endogenous_different,1)", "Eq. (57)", "", aux, identity]
+        - [beta_S4, "min(lag(beta)*(1-beta_is_endogenous_different)+(beta_0_S4-beta_1*sh_EMIS_F_S4*( lag(tucr)-lag(tucn))-beta_2*(lag(sh_L)*(lag(int_G)-lag(int_C_S4))+(1-lag(sh_L))*(lag(yield_G)-lag(yield_C))))*beta_is_endogenous_different ,1)", "Eq. (57)", "", aux, identity]
+        - [beta_0_S1, "if(t == 6) { lag(beta_0_S1)*(1+g_beta_0)*(1+beta_dummy_0*1) } else { lag(beta_0_S1)*(1+g_beta_0) }", "Eq. (58)", "", aux, identity]
+        - [beta_0_S2, "if(t == 6) { lag(beta_0_S2)*(1+g_beta_0)*(1+beta_dummy_0*4) } else { lag(beta_0_S2)*(1+g_beta_0) }", "Eq. (58)", "", aux, identity]
+        - [beta_0_S3, "if(t == 6) { lag(beta_0_S3)*(1+g_beta_0)*(1+beta_dummy_0*6) } else { lag(beta_0_S3)*(1+g_beta_0) }", "Eq. (58)", "", aux, identity]
+        - [beta_0_S4, "if(t == 6) { lag(beta_0_S4)*(1+g_beta_0)*(1+beta_dummy_0*7) } else { lag(beta_0_S4)*(1+g_beta_0) }", "Eq. (58)", "", aux, identity]
+        - [g_beta_0, "lag(g_beta_0)*(1-zeta_2)", "Eq. (59)", "", aux, identity]
+        - [tucr, "ucr*(1-gov_SUB)", "Eq. (60)", "", aux, identity]
+        - [tucn, "ucn+ tau_C*omega*(1-seq)", "Eq. (61)", "", aux, identity]
+        - [ucn, "lag(ucn)*(1+g_ucn)", "Eq. (62)", "", aux, identity]
+        - [g_ucn, "lag(g_ucn)*(1-zeta_8)", "Eq. (63)", "", aux, identity]
+        - [endog, "(1-ucr_dummy)+ucr_dummy*(1-theta)/(1-lag(theta))", "endog", "", aux, identity]
+        - [ucr, "max(lag(ucr)*(1-g_ucr)*endog,0.4*ucr_init)", "Eq. (64)", "", aux, identity]
+        - [g_ucr, "lag(g_ucr)*(1-zeta_7)", "Eq. (65)", "", aux, identity]
+        - [IC_PRI_D_S1, "I_PRI_D_S1-IG_PRI_D_S1", "Eq. (66)", "", aux, identity]
+        - [IC_PRI_D_S2, "I_PRI_D_S2-IG_PRI_D_S2", "Eq. (66)", "", aux, identity]
+        - [IC_PRI_D_S3, "I_PRI_D_S3-IG_PRI_D_S3", "Eq. (66)", "", aux, identity]
+        - [IC_PRI_D_S4, "I_PRI_D_S4-IG_PRI_D_S4", "Eq. (66)", "", aux, identity]
+        - [NLG_DN_S1, "IG_PRI_D_S1-sh_GVA_S1*beta_S1*RP+rep*lag(LG_S1)-delta*lag(KG_PRI_S1)-sh_GVA_S1*p_G_bar*(b_G-lag(b_G))", "Eq. (67)", "", aux, identity]
+        - [NLG_DN_S2, "IG_PRI_D_S2-sh_GVA_S2*beta_S2*RP+rep*lag(LG_S2)-delta*lag(KG_PRI_S2)-sh_GVA_S2*p_G_bar*(b_G-lag(b_G))", "Eq. (67)", "", aux, identity]
+        - [NLG_DN_S3, "IG_PRI_D_S3-sh_GVA_S3*beta_S3*RP+rep*lag(LG_S3)-delta*lag(KG_PRI_S3)-sh_GVA_S3*p_G_bar*(b_G-lag(b_G))", "Eq. (67)", "", aux, identity]
+        - [NLG_DN_S4, "IG_PRI_D_S4-sh_GVA_S4*beta_S4*RP+rep*lag(LG_S4)-delta*lag(KG_PRI_S4)-sh_GVA_S4*p_G_bar*(b_G-lag(b_G))", "Eq. (67)", "", aux, identity]
+        - [NLG_D_S1, "if(NLC_DN_S1>=0) { NLG_DN_S1 } else { NLG_DN_S1+NLC_DN_S1 }", "NLG_D_S1", "", aux, identity]
+        - [NLG_D_S2, "if(NLC_DN_S2>=0) { NLG_DN_S2 } else { NLG_DN_S2+NLC_DN_S2 }", "NLG_D_S2", "", aux, identity]
+        - [NLG_D_S3, "if(NLC_DN_S3>=0) { NLG_DN_S3 } else { NLG_DN_S3+NLC_DN_S3 }", "NLG_D_S3", "", aux, identity]
+        - [NLG_D_S4, "if(NLC_DN_S4>=0) { NLG_DN_S4 } else { NLG_DN_S4+NLC_DN_S4 }", "NLG_D_S4", "", aux, identity]
+        - [NLC_DN_S1, "IC_PRI_D_S1-sh_GVA_S1*(1-beta_S1)*RP+rep*lag(LC_S1)-delta*lag(KC_PRI_S1)-sh_GVA_S1*p_C_bar*(b_C-lag(b_C))", "Eq. (68)", "", aux, identity]
+        - [NLC_DN_S2, "IC_PRI_D_S2-sh_GVA_S2*(1-beta_S2)*RP+rep*lag(LC_S2)-delta*lag(KC_PRI_S2)-sh_GVA_S2*p_C_bar*(b_C-lag(b_C))", "Eq. (68)", "", aux, identity]
+        - [NLC_DN_S3, "IC_PRI_D_S3-sh_GVA_S3*(1-beta_S3)*RP+rep*lag(LC_S3)-delta*lag(KC_PRI_S3)-sh_GVA_S3*p_C_bar*(b_C-lag(b_C))", "Eq. (68)", "", aux, identity]
+        - [NLC_DN_S4, "IC_PRI_D_S4-sh_GVA_S4*(1-beta_S4)*RP+rep*lag(LC_S4)-delta*lag(KC_PRI_S4)-sh_GVA_S4*p_C_bar*(b_C-lag(b_C))", "Eq. (68)", "", aux, identity]
+        - [NLC_D_S1, "if(NLC_DN_S1>=0) { NLC_DN_S1 } else { 0 }", "NLC_D_S1", "", aux, identity]
+        - [NLC_D_S2, "if(NLC_DN_S2>=0) { NLC_DN_S2 } else { 0 }", "NLC_D_S2", "", aux, identity]
+        - [NLC_D_S3, "if(NLC_DN_S3>=0) { NLC_DN_S3 } else { 0 }", "NLC_D_S3", "", aux, identity]
+        - [NLC_D_S4, "if(NLC_DN_S4>=0) { NLC_DN_S4 } else { 0 }", "NLC_D_S4", "", aux, identity]
+        - [IG_PRI_S1, "sh_GVA_S1*beta_S1*RP+(LG_S1-lag(LG_S1))+delta*lag(KG_PRI_S1)+sh_GVA_S1*p_G_bar*(b_G-lag(b_G))+def*lag(LG_S1)", "Eq. (69)", "", aux, identity]
+        - [IG_PRI_S2, "sh_GVA_S2*beta_S2*RP+(LG_S2-lag(LG_S2))+delta*lag(KG_PRI_S2)+sh_GVA_S2*p_G_bar*(b_G-lag(b_G))+def*lag(LG_S2)", "Eq. (69)", "", aux, identity]
+        - [IG_PRI_S3, "sh_GVA_S3*beta_S3*RP+(LG_S3-lag(LG_S3))+delta*lag(KG_PRI_S3)+sh_GVA_S3*p_G_bar*(b_G-lag(b_G))+def*lag(LG_S3)", "Eq. (69)", "", aux, identity]
+        - [IG_PRI_S4, "sh_GVA_S4*beta_S4*RP+(LG_S4-lag(LG_S4))+delta*lag(KG_PRI_S4)+sh_GVA_S4*p_G_bar*(b_G-lag(b_G))+def*lag(LG_S4)", "Eq. (69)", "", aux, identity]
+        - [IC_PRI_S1, "sh_GVA_S1*(1-beta_S1)*RP+(LC_S1-lag(LC_S1))+delta*lag(KC_PRI_S1)+sh_GVA_S1*p_C_bar*(b_C-lag(b_C))+def*lag(LC_S1)", "Eq. (70)", "", aux, identity]
+        - [IC_PRI_S2, "sh_GVA_S2*(1-beta_S2)*RP+(LC_S2-lag(LC_S2))+delta*lag(KC_PRI_S2)+sh_GVA_S2*p_C_bar*(b_C-lag(b_C))+def*lag(LC_S2)", "Eq. (70)", "", aux, identity]
+        - [IC_PRI_S3, "sh_GVA_S3*(1-beta_S3)*RP+(LC_S3-lag(LC_S3))+delta*lag(KC_PRI_S3)+sh_GVA_S3*p_C_bar*(b_C-lag(b_C))+def*lag(LC_S3)", "Eq. (70)", "", aux, identity]
+        - [IC_PRI_S4, "RP+(LC-lag(LC))+(LG-lag(LG))+delta*lag(K_PRI)-IG_PRI_S1-IG_PRI_S2-IG_PRI_S3 -IG_PRI_S4-IC_PRI_S1-IC_PRI_S2-IC_PRI_S3+p_G_bar*(b_G-lag(b_G))+p_C_bar*(b_C-lag(b_C))+DL", "Eq. (71)", "", aux, identity]
+        - [IG_PRI, "IG_PRI_S1+IG_PRI_S2+IG_PRI_S3+IG_PRI_S4", "Eq. (72)", "", aux, identity]
+        - [IC_PRI, "IC_PRI_S1+IC_PRI_S2+IC_PRI_S3+IC_PRI_S4", "Eq. (73)", "", aux, identity]
+        - [I_PRI, "IC_PRI+IG_PRI", "Eq. (74)", "", aux, identity]
+        - [kappa, "IG_PRI/I_PRI", "Eq. (75)", "", aux, identity]
+        - [L, "LC+LG", "Eq. (76)", "", aux, identity]
+        - [KG_PRI_S1, "lag(KG_PRI_S1)+IG_PRI_S1-delta*lag(KG_PRI_S1)", "Eq. (77)", "", aux, identity]
+        - [KG_PRI_S2, "lag(KG_PRI_S2)+IG_PRI_S2-delta*lag(KG_PRI_S2)", "Eq. (77)", "", aux, identity]
+        - [KG_PRI_S3, "lag(KG_PRI_S3)+IG_PRI_S3-delta*lag(KG_PRI_S3)", "Eq. (77)", "", aux, identity]
+        - [KG_PRI_S4, "lag(KG_PRI_S4)+IG_PRI_S4-delta*lag(KG_PRI_S4)", "Eq. (77)", "", aux, identity]
+        - [KC_PRI_S1, "lag(KC_PRI_S1)+IC_PRI_S1-delta*lag(KC_PRI_S1)", "Eq. (78)", "", aux, identity]
+        - [KC_PRI_S2, "lag(KC_PRI_S2)+IC_PRI_S2-delta*lag(KC_PRI_S2)", "Eq. (78)", "", aux, identity]
+        - [KC_PRI_S3, "lag(KC_PRI_S3)+IC_PRI_S3-delta*lag(KC_PRI_S3)", "Eq. (78)", "", aux, identity]
+        - [KC_PRI_S4, "lag(KC_PRI_S4)+IC_PRI_S4-delta*lag(KC_PRI_S4)", "Eq. (78)", "", aux, identity]
+        - [KG_PRI, "KG_PRI_S1+KG_PRI_S2+KG_PRI_S3+KG_PRI_S4", "Eq. (79)", "", aux, identity]
+        - [KC_PRI, "KC_PRI_S1+KC_PRI_S2+KC_PRI_S3+KC_PRI_S4", "Eq. (80)", "", aux, identity]
+        - [K_PRI, "KC_PRI+KG_PRI", "Eq. (81)", "", aux, identity]
+        - [KGE_PRI_S1, "gamma_E1*KG_PRI_S1", "Eq. (82)", "", aux, identity]
+        - [KGE_PRI_S2, "gamma_E2*KG_PRI_S2", "Eq. (82)", "", aux, identity]
+        - [KGE_PRI_S3, "gamma_E3*KG_PRI_S3", "Eq. (82)", "", aux, identity]
+        - [KGE_PRI_S4, "gamma_E4*KG_PRI_S4", "Eq. (82)", "", aux, identity]
+        - [KGNE_PRI_S1, "(1-gamma_E1)*KG_PRI_S1", "Eq. (83)", "", aux, identity]
+        - [KGNE_PRI_S2, "(1-gamma_E2)*KG_PRI_S2", "Eq. (83)", "", aux, identity]
+        - [KGNE_PRI_S3, "(1-gamma_E3)*KG_PRI_S3", "Eq. (83)", "", aux, identity]
+        - [KGNE_PRI_S4, "(1-gamma_E4)*KG_PRI_S4", "Eq. (83)", "", aux, identity]
+        - [KCE_PRI_S1, "gamma_E1*KC_PRI_S1", "Eq. (84)", "", aux, identity]
+        - [KCE_PRI_S2, "gamma_E2*KC_PRI_S2", "Eq. (84)", "", aux, identity]
+        - [KCE_PRI_S3, "gamma_E3*KC_PRI_S3", "Eq. (84)", "", aux, identity]
+        - [KCE_PRI_S4, "gamma_E4*KC_PRI_S4", "Eq. (84)", "", aux, identity]
+        - [KCNE_PRI_S1, "(1-gamma_E1)*KC_PRI_S1", "Eq. (85)", "", aux, identity]
+        - [KCNE_PRI_S2, "(1-gamma_E2)*KC_PRI_S2", "Eq. (85)", "", aux, identity]
+        - [KCNE_PRI_S3, "(1-gamma_E3)*KC_PRI_S3", "Eq. (85)", "", aux, identity]
+        - [KCNE_PRI_S4, "(1-gamma_E4)*KC_PRI_S4", "Eq. (85)", "", aux, identity]
+        - [KSEQ_PRI_S1, "gamma_SEQ1*KGE_PRI_S1", "Eq. (86)", "", aux, identity]
+        - [KSEQ_PRI_S2, "gamma_SEQ2*KGE_PRI_S2", "Eq. (86)", "", aux, identity]
+        - [KGE, "KGE_PRI_S1+KGE_PRI_S2+KGE_PRI_S3+KGE_PRI_S4+gamma_E*KG_GOV", "Eq. (87)", "", aux, identity]
+        - [KGNE, "KGNE_PRI_S1+KGNE_PRI_S2+KGNE_PRI_S3+KGNE_PRI_S4+ (1-gamma_E)*KG_GOV", "Eq. (88)", "", aux, identity]
+        - [KCE, "KCE_PRI_S1+KCE_PRI_S2+KCE_PRI_S3+KCE_PRI_S4+gamma_E*KC_GOV", "Eq. (89)", "", aux, identity]
+        - [KCNE, "KCNE_PRI_S1+KCNE_PRI_S2+KCNE_PRI_S3+KCNE_PRI_S4+ (1-gamma_E)*KC_GOV", "Eq. (90)", "", aux, identity]
+        - [KSEQ, "KSEQ_PRI_S1+KSEQ_PRI_S2", "Eq. (91)", "", aux, identity]
+        - [delta, "delta_0+(1-delta_0)*(1-ad_K)*lag(D_TF)", "Eq. (92)", "", aux, identity]
+        - [v, "lag(v)*(1-(1-ad_P)*lag(D_TP))", "Eq. (93)", "", aux, identity]
+        - [g_lambda, "sigma_0+sigma_1+sigma_2*g_Y", "Eq. (94)", "", aux, identity]
+        - [sigma_0, "if(lambda_is_optimal==0) { lag(sigma_0)*(1-zeta_3) } else { sigma_0_optimal }", "Eq. (95)", "", aux, identity]
+        - [lambda, "lag(lambda)*(1+g_lambda)*(1-(1-ad_P)*lag(D_TP))", "Eq. (96)", "", aux, identity]
+        - [wage, "s_W*lambda*h", "Eq. (97)", "", aux, identity]
+        - [s_W, "s_W_0-s_W_1*lag(ur)", "Eq. (98)", "", aux, identity]
+        - [N, "Y/(lambda *h)", "Eq. (99)", "", aux, identity]
+        - [ur, "1-re", "Eq. (100)", "", aux, identity]
+        - [h, "lag(h)*(1+g_h)", "Eq. (101)", "", aux, identity]
+        - [g_h, "min(0, phi*( ur_T-lag(ur)))", "Eq. (102)", "", aux, identity]
+        - [b_C, "lag(b_C)+(x_1*IC_PRI_D)/p_C_bar", "Eq. (103)", "", aux, identity]
+        - [b_G, "lag(b_G)+(x_2*IG_PRI_D)/p_G_bar", "Eq. (104)", "", aux, identity]
+        - [x_1, "max(x_10-x_11*lag(yield_C),0)", "Eq. (105)", "", aux, identity]
+        - [x_2, "x_20-x_21*lag(yield_G)", "Eq. (106)", "", aux, identity]
+        - [x_20, "lag(x_20)*(1+g_x_20)", "Eq. (107)", "", aux, identity]
+        - [g_x_20, "lag(g_x_20)*(1-zeta_4)", "Eq. (108)", "", aux, identity]
+        - [yield_C, "coupon_C/p_C", "Eq. (109)", "", aux, identity]
+        - [yield_G, "coupon_G/p_G", "Eq. (110)", "", aux, identity]
+        - [coupon_C, "lag(yield_C)*p_C_bar", "Eq. (111)", "", aux, identity]
+        - [coupon_G, "lag(yield_G)*p_G_bar", "Eq. (112)", "", aux, identity]
+        - [B_C, "B_CH+B_CCB", "Eq. (113)", "", aux, identity]
+        - [B_G, "B_GH+B_GCB", "Eq. (114)", "", aux, identity]
+        - [p_C, "B_C/b_C", "Eq. (115)", "", aux, identity]
+        - [p_G, "B_G/b_G", "Eq. (116)", "", aux, identity]
+        - [B, "B_C+B_G", "Eq. (117)", "", aux, identity]
+        - [DL, "def*lag(L)", "Eq. (118)", "", aux, identity]
+        - [def, "def_max/(1+def_0*exp(def_1-def_2*lag(illiq)))", "Eq. (119)", "", aux, identity]
+        - [illiq, "((lag(int_C_S1)+rep)*lag(LC_S1)+(lag(int_C_S2)+rep)*lag(LC_S2)+(lag(int_C_S3)+rep)*lag(LC_S3)+(lag(int_C_S4)+rep)*lag(LC_S4)+(lag(int_G)+rep)*lag(LG)+lag(coupon_C)*lag(b_C)+lag(coupon_G)*lag(b_G)+wage*N+TAX_F+TAX_C-SUB+delta*lag(K_PRI))/(Y+(1-CR_C_S1)*NLC_D_S1+(1-CR_C_S2)*NLC_D_S2+(1-CR_C_S3)*NLC_D_S3+(1-CR_C_S4)*NLC_D_S4+ (1-CR_G)*(NLG_D_S1+ NLG_D_S2+ NLG_D_S3+NLG_D_S4)+(b_C-lag(b_C))*p_C_bar+ (b_G-lag(b_G))*p_G_bar)", "Eq. (120)", "", aux, identity]
+        - [dsr, "((lag(int_C_S1)+rep)*lag(LC_S1)+(lag(int_C_S2)+rep)*lag(LC_S2)+(lag(int_C_S3)+rep)*lag(LC_S3)+(lag(int_C_S4)+rep)*lag(LC_S4)+(lag(int_G)+rep)*lag(LG)+lag(coupon_C)*lag(b_C)+lag(coupon_G)*lag(b_G))/(TP+lag(int_C_S1)*lag(LC_S1)+lag(int_C_S2)*lag(LC_S2)+lag(int_C_S3)*lag(LC_S3)+lag(int_C_S4)*lag(LC_S4)+(lag(int_G))*lag(LG)+lag(coupon_C)*lag(b_C)+lag(coupon_G)*lag(b_G))", "Eq. (121)", "", aux, identity]
+        - "2.2.3 Households"
+        - [Y_HG, "wage*N+DP+BP_D+int_D*lag(D)+int_S*lag(SEC_H)+lag(coupon_C)*lag(b_CH)+lag(coupon_G)*lag(b_GH)", "Eq. (122)", "", aux, identity]
+        - [Y_H, "Y_HG-TAX_H", "Eq. (123)", "", aux, identity]
+        - [con_change, "lag(con_change)+(con_change_end/duration)*dummy_con_change", "con_change", "", aux, identity]
+        - [CO_PRI_N, "((c_1-con_change*c_1)*lag(Y_H)+(c_2-con_change*c_2)*lag(V_HF))*(1-lag(D_T))", "Eq. (124)", "", aux, identity]
+        - [CO_PRI, "if(Y_N<Y_star) { CO_PRI_N } else { pr*(Y_star-CO_GOV-I_GOV-I_PRI) }", "Eq. (125)", "", aux, identity]
+        - [V_HF, "lag(V_HF)+Y_H-CO_PRI+lag(b_CH)*(p_C-lag(p_C))+lag(b_GH)*(p_G-lag(p_G))", "Eq. (126)", "", aux, identity]
+        - [SEC_H, "(lambda_10+lambda_10prime*lag(D_T)+lambda_11*int_S+lambda_12*lag(yield_C)+lambda_13*lag(yield_G)+lambda_14*int_D+lambda_15*(lag(Y_H)/lag(V_HF)))*lag(V_HF)", "Eq. (127)", "", aux, identity]
+        - [B_CH, "(lambda_20+lambda_20prime*lag(D_T)+lambda_21*int_S+lambda_22*lag(yield_C)+lambda_23*lag(yield_G)+lambda_24*int_D+lambda_25*(lag(Y_H)/lag(V_HF)))*lag(V_HF)", "Eq. (128)", "", aux, identity]
+        - [B_GH, "(lambda_30+lambda_30prime*lag(D_T)+lambda_31*int_S+lambda_32*lag(yield_C)+lambda_33*lag(yield_G)+lambda_34*int_D+lambda_35*(lag(Y_H)/lag(V_HF)))*lag(V_HF)", "Eq. (129)", "", aux, identity]
+        - [D_N, "(lambda_40+lambda_40prime*lag(D_T)+lambda_41*int_S+lambda_42*lag(yield_C)+lambda_43*lag(yield_G)+lambda_44*int_D+lambda_45*(lag(Y_H)/lag(V_HF)))*lag(V_HF)", "Eq. (130n)", "", aux, identity]
+        - [D, "lag(D)+Y_H-CO_PRI-(SEC_H-lag(SEC_H))-(b_CH-lag(b_CH))*p_C_bar-(b_GH-lag(b_GH))*p_G_bar", "Eq. (130)", "", aux, identity]
+        - [lambda_30, "lag(lambda_30)*(1+g_lambda_30)", "Eq. (131)", "", aux, identity]
+        - [g_lambda_30, "zeta_10*lag(g_bG)", "Eq. (132)", "", aux, identity]
+        - [lambda_40, "1- lambda_10- lambda_20- lambda_30", "lambda_40", "", aux, identity]
+        - [b_CH, "B_CH/p_C", "Eq. (133)", "", aux, identity]
+        - [b_GH, "B_GH/p_G", "Eq. (134)", "", aux, identity]
+        - [DC, "lag(DC)+CO_PRI-xi*lag(DC)", "Eq. (135)", "", aux, identity]
+        - [g_POP, "lag(g_POP)*(1-zeta_5)", "Eq. (136)", "", aux, identity]
+        - [POP, "lag(POP)*(1+g_POP)", "Eq. (137)", "", aux, identity]
+        - [LF, "(lf_1-lf_2*lag(hazratio))*(1-(1-ad_LF)*lag(D_TF))*POP", "Eq. (138)", "", aux, identity]
+        - [lf_1, "lag(lf_1)*(1-zeta_6)", "Eq. (139)", "", aux, identity]
+        - "2.2.4 Banks"
+        - [BP, "lag(int_C_S1)*lag(LC_S1)+lag(int_C_S2)*lag(LC_S2) +lag(int_C_S3)*lag(LC_S3) +lag(int_C_S4)*lag(LC_S4)+lag(int_G)*(lag(LG_S1)+lag(LG_S2)+lag(LG_S3)+lag(LG_S4))+int_S*lag(SEC_B)-int_D*lag(D)-int_A*lag(A)", "Eq. (140)", "", aux, identity]
+        - [CAP, "lag(CAP)+BP_U-DL+BAILOUT", "Eq. (141)", "", aux, identity]
+        - [CAP_before, "lag(CAP)+BP_U-DL", "CAP_before", "", aux, identity]
+        - [BP_U, "s_B*lag(BP)", "Eq. (142)", "", aux, identity]
+        - [BP_D, "BP-BP_U", "Eq. (143)", "", aux, identity]
+        - [HPM, "h_1*D", "Eq. (144)", "", aux, identity]
+        - [SEC_BN, "lag(SEC_B)+(A-lag(A))+(D-lag(D))+BP_U+BAILOUT -(LG-lag(LG))-(LC-lag(LC))-(HPM-lag(HPM))-DL", "SEC_BN", "", aux, identity]
+        - [SEC_B, "if(A_N>0) { h_2*D } else { SEC_BN }", "Eq. (145)", "", aux, identity]
+        - [A_N, "lag(A)+(h_2*D-lag(SEC_B))+(LG-lag(LG))+(LC-lag(LC))+(HPM-lag(HPM))+DL-(D-lag(D))-BP_U-BAILOUT", "A_N", "", aux, identity]
+        - [A, "if(A_N>0) { A_N } else { 0 }", "Eq. (146)", "", aux, identity]
+        - [w_G, "if(t < 4) { w_G_initial } else { w_G_2022 }", "w_G", "", aux, identity]
+        - [w_C_S1, "if(t < 4) { w_C_S1_initial } else { w_C_S1_2022 }", "w_C_S1", "", aux, identity]
+        - [w_C_S2, "if(t < 4) { w_C_S2_initial } else { w_C_S2_2022 }", "w_C_S2", "", aux, identity]
+        - [w_C_S3, "if(t < 4) { w_C_S3_initial } else { w_C_S3_2022 }", "w_C_S3", "", aux, identity]
+        - [w_C_S4, "if(t < 4) { w_C_S4_initial } else { w_C_S4_2022 }", "w_C_S4", "", aux, identity]
+        - [CR, "CR_max/(1+r_0*exp(r_1-r_2*lag(dsr)+r_3*(lag(CAR)-CAR_min)))*cr_rationing_dummy", "Eq. (147)", "", aux, identity]
+        - [CR_G, "(1+l_1*(lag(w_G)-lag(w_LT)))*CR", "Eq. (148)", "", aux, identity]
+        - [CR_C_S1, "(1+l_1*(lag(w_C_S1)-lag(w_LT)))*CR", "Eq. (149)", "", aux, identity]
+        - [CR_C_S2, "(1+l_1*(lag(w_C_S2)-lag(w_LT)))*CR", "Eq. (149)", "", aux, identity]
+        - [CR_C_S3, "(1+l_1*(lag(w_C_S3)-lag(w_LT)))*CR", "Eq. (149)", "", aux, identity]
+        - [CR_C_S4, "(CR-lag(sh_NLG)*CR_G-lag(sh_NLC_S1)*CR_C_S1-lag(sh_NLC_S2)*CR_C_S2-lag(sh_NLC_S3)*CR_C_S3)/(lag(sh_NLC_S4)+0.001)", "Eq. (150)", "", aux, identity]
+        - [LC_S1, "lag(LC_S1)+(1-CR_C_S1)*NLC_D_S1-rep*lag(LC_S1)-def*lag(LC_S1)", "Eq. (151)", "", aux, identity]
+        - [LC_S2, "lag(LC_S2)+(1-CR_C_S2)*NLC_D_S2-rep*lag(LC_S2)-def*lag(LC_S2)", "Eq. (151)", "", aux, identity]
+        - [LC_S3, "lag(LC_S3)+(1-CR_C_S3)*NLC_D_S3-rep*lag(LC_S3)-def*lag(LC_S3)", "Eq. (151)", "", aux, identity]
+        - [LC_S4, "lag(LC_S4)+(1-CR_C_S4)*NLC_D_S4-rep*lag(LC_S4)-def*lag(LC_S4)", "Eq. (151)", "", aux, identity]
+        - [LG_S1, "lag(LG_S1)+(1-CR_G)*NLG_D_S1-rep*lag(LG_S1)-def*lag(LG_S1)", "Eq. (152)", "", aux, identity]
+        - [LG_S2, "lag(LG_S2)+(1-CR_G)*NLG_D_S2-rep*lag(LG_S2)-def*lag(LG_S2)", "Eq. (152)", "", aux, identity]
+        - [LG_S3, "lag(LG_S3)+(1-CR_G)*NLG_D_S3-rep*lag(LG_S3)-def*lag(LG_S3)", "Eq. (152)", "", aux, identity]
+        - [LG_S4, "lag(LG_S4)+(1-CR_G)*NLG_D_S4-rep*lag(LG_S4)-def*lag(LG_S4)", "Eq. (152)", "", aux, identity]
+        - [LC, "LC_S1+LC_S2+LC_S3+LC_S4", "Eq. (153)", "", aux, identity]
+        - [LG, "LG_S1+LG_S2+LG_S3+LG_S4", "Eq. (154)", "", aux, identity]
+        - [lev_B, "(HPM+LG+LC+SEC_B)/CAP", "Eq. (155)", "", aux, identity]
+        - [CAR, "CAP/(w_G*LG+w_C_S1*LC_S1+w_C_S2*LC_S2+w_C_S3*LC_S3 +w_C_S4*LC_S4+w_S*SEC_B+w_H*HPM)", "Eq. (156)", "", aux, identity]
+        - [lev_B_before, "(lag(HPM)+lag(LG)+lag(LC)+lag(SEC_B))*(1+lag(g_Y))/CAP_before", "lev_B_before", "", aux, identity]
+        - [CAR_before, "CAP_before/((w_G*lag(LG)+w_C_S1*lag(LC_S1)+w_C_S2*lag(LC_S2)+w_C_S3*lag(LC_S3)+w_C_S4*lag(LC_S4)+w_S*lag(SEC_B)+w_H*lag(HPM))*(1+lag(g_Y)))", "CAR_before", "", aux, identity]
+        - [w_LT, "lag(sh_LG)*w_G+lag(sh_LC_S1)*w_C_S1+lag(sh_LC_S2)*w_C_S2+lag(sh_LC_S3)*w_C_S3+lag(sh_LC_S4)*w_C_S4", "Eq. (157)", "", aux, identity]
+        - [int_G, "spr_G+int_A", "Eq. (158)", "", aux, identity]
+        - [int_C_S1, "spr_C_S1+int_A", "Eq. (159)", "", aux, identity]
+        - [int_C_S2, "spr_C_S2+int_A", "Eq. (159)", "", aux, identity]
+        - [int_C_S3, "spr_C_S3+int_A", "Eq. (159)", "", aux, identity]
+        - [int_C_S4, "spr_C_S4+int_A", "Eq. (159)", "", aux, identity]
+        - [spr, "spr_0-spr_1*(lag(CAR)-CAR_min)+spr_2*lag(dsr)", "Eq. (160)", "", aux, identity]
+        - [spr_G, "(1+spr_3*(lag(w_G)-lag(w_LT)))*spr", "Eq. (161)", "", aux, identity]
+        - [spr_C_S1, "(1+spr_3*(lag(w_C_S1)-lag(w_LT)))*spr", "Eq. (162)", "", aux, identity]
+        - [spr_C_S2, "(1+spr_3*(lag(w_C_S2)-lag(w_LT)))*spr", "Eq. (162)", "", aux, identity]
+        - [spr_C_S3, "(1+spr_3*(lag(w_C_S3)-lag(w_LT)))*spr", "Eq. (162)", "", aux, identity]
+        - [spr_C_S4, "(spr-lag(sh_LG)*spr_G-lag(sh_LC_S1)*spr_C_S1-lag(sh_LC_S2)*spr_C_S2-lag(sh_LC_S3)*spr_C_S3)/lag(sh_LC_S4)", "Eq. (163)", "", aux, identity]
+        - [sh_NLG, "(NLG_D_S1+NLG_D_S2+NLG_D_S3+NLG_D_S4)/(NLG_D_S1+NLG_D_S2+NLG_D_S3+NLG_D_S4+NLC_D_S1+NLC_D_S2+NLC_D_S3+NLC_D_S4)", "sh_NLG", "", aux, identity]
+        - [sh_NLC_S1, "NLC_D_S1/(NLG_D_S1+NLG_D_S2+NLG_D_S3+NLG_D_S4+NLC_D_S1+NLC_D_S2+NLC_D_S3+NLC_D_S4)", "sh_NLC_S1", "", aux, identity]
+        - [sh_NLC_S2, "NLC_D_S2/(NLG_D_S1+NLG_D_S2+NLG_D_S3+NLG_D_S4+NLC_D_S1+NLC_D_S2+NLC_D_S3+NLC_D_S4)", "sh_NLC_S2", "", aux, identity]
+        - [sh_NLC_S3, "NLC_D_S3/(NLG_D_S1+NLG_D_S2+NLG_D_S3+NLG_D_S4+NLC_D_S1+NLC_D_S2+NLC_D_S3+NLC_D_S4)", "sh_NLC_S3", "", aux, identity]
+        - [sh_NLC_S4, "1-sh_NLG-sh_NLC_S1-sh_NLC_S2-sh_NLC_S3", "sh_NLC_S4", "", aux, identity]
+        - [sh_LG, "LG/L", "sh_LG", "", aux, identity]
+        - [sh_LC_S1, "LC_S1/L", "sh_LC_S1", "", aux, identity]
+        - [sh_LC_S2, "LC_S2/L", "sh_LC_S2", "", aux, identity]
+        - [sh_LC_S3, "LC_S3/L", "sh_LC_S3", "", aux, identity]
+        - [sh_LC_S4, "1-sh_LG-sh_LC_S1 -sh_LC_S2-sh_LC_S3", "sh_LC_S4", "", aux, identity]
+        - "2.2.5 Government"
+        - [GNS, "-CO_GOV+TAX-int_S*lag(SEC)+CBP-SUB-delta*lag(K_GOV)", "Eq. (164)", "", aux, identity]
+        - [SEC, "lag(SEC)+I_GOV-GNS-delta*lag(K_GOV)+BAILOUT", "Eq. (165)", "", aux, identity]
+        - [IG_GOV, "gov_IG*lag(Y)", "Eq. (166)", "", aux, identity]
+        - [IC_GOV, "gov_IC*lag(Y)", "Eq. (167)", "", aux, identity]
+        - [I_GOV, "IC_GOV+IG_GOV", "Eq. (168)", "", aux, identity]
+        - [KG_GOV, "lag(KG_GOV)+IG_GOV-delta*lag(KG_GOV)", "Eq. (169)", "", aux, identity]
+        - [KC_GOV, "lag(KC_GOV)+IC_GOV-delta*lag(KC_GOV)", "Eq. (170)", "", aux, identity]
+        - [K_GOV, "KC_GOV+KG_GOV", "Eq. (171)", "", aux, identity]
+        - [K, "K_PRI+K_GOV", "Eq. (172)", "", aux, identity]
+        - [KG, "KG_PRI+KG_GOV", "Eq. (173)", "", aux, identity]
+        - [KC, "KC_PRI+KC_GOV", "Eq. (174)", "", aux, identity]
+        - [BAILOUT_CAR, "if(CAR_before>CAR_min) { 0 } else { CAR_min*(w_G*lag(LG)+w_C_S1*lag(LC_S1)+w_C_S2*lag(LC_S2)+w_C_S3*lag(LC_S3)+w_C_S4*lag(LC_S4)+w_S*lag(SEC_B))*(1+lag(g_Y))-CAP_before }", "BAILOUT_CAR", "", aux, identity]
+        - [BAILOUT_levB, "if(lev_B_before<lev_B_max) { 0 } else { (lag(HPM)+lag(LG)+lag(LC)+lag(SEC_B))*(1+lag(g_Y))/lev_B_max-CAP_before }", "BAILOUT_levB", "", aux, identity]
+        - [BAILOUT, "max(BAILOUT_CAR,BAILOUT_levB)", "BAILOUT", "", aux, identity]
+        - [CO_GOV, "gov_C*lag(Y)", "Eq. (175)", "", aux, identity]
+        - [SUB, "if(t < 4) { tau_C*lag(EMIS_F) } else { (1-stop_recycling_dummy)* tau_C*lag(EMIS_F) + stop_recycling_dummy*((1-subsidy_increase_dummy)*tau_C_4*EMIS_F_3+subsidy_increase_dummy*gov_SUB*lag(E_NF)*lag(ucr)) }", "Eq. (176)", "", aux, identity]
+        - [gov_SUB, "if(t < 4) { min(SUB/(lag(E_NF)*lag(ucr)),0.999) } else { (1-subsidy_increase_dummy)*min(SUB/(lag(E_NF)*lag(ucr)),0.999)+subsidy_increase_dummy*subsidy_ratio*gov_SUB_3 }", "Eq. (177)", "", aux, identity]
+        - [TAX_H, "tau_H*lag(Y_HG)", "Eq. (178)", "", aux, identity]
+        - [TAX_F, "tau_F*lag(TP_G)", "Eq. (179)", "", aux, identity]
+        - [TAX_C, "tau_C*lag(EMIS_F)", "Eq. (180)", "", aux, identity]
+        - [tau_C, "if(t < 4) { tau_C_baseline } else { (1- tau_C_dummy_H - tau_C_dummy_M)*tau_C_baseline+tau_C_dummy_H*tau_C_policy_High +tau_C_dummy_M*tau_C_policy_Medium }", "tau_C", "", aux, identity]
+        - [TAX, "TAX_H+TAX_F+TAX_C", "Eq. (181)", "", aux, identity]
+        - "2.2.6 Central bank"
+        - [CBP, "lag(coupon_C)*lag(b_CCB)+lag(coupon_G)*lag(b_GCB)+int_A*lag(A)+int_S*lag(SEC_CB)", "Eq. (182)", "", aux, identity]
+        - [B_GCB, "s_G*lag(B_G)", "Eq. (183)", "", aux, identity]
+        - [B_CCB, "s_C*lag(B_C)", "Eq. (184)", "", aux, identity]
+        - [b_CCB, "B_CCB/p_C", "Eq. (185)", "", aux, identity]
+        - [b_GCB, "B_GCB/p_G", "Eq. (186)", "", aux, identity]
+        - [SEC_CB, "SEC-SEC_H-SEC_B", "Eq. (187)", "", aux, identity]
+        - [SEC_CBred, "lag(SEC_CB)+(HPM-lag(HPM))-(A-lag(A))-p_C_bar*(b_CCB-lag(b_CCB))-p_G_bar*(b_GCB-lag(b_GCB))", "Eq. (188-red)", "", aux, identity]
+        - "Auxiliary equations"
+        - [g_Y, "(Y-lag(Y))/lag(Y)", "g_Y", "", aux, identity]
+        - [gI, "(I_PRI-lag(I_PRI))/lag(I_PRI)", "gI", "", aux, identity]
+        - [gC, "(CO_PRI-lag(CO_PRI))/lag(CO_PRI)", "gC", "", aux, identity]
+        - [g_K, "(K_PRI-lag(K_PRI))/lag(K_PRI)", "g_K", "", aux, identity]
+        - [ur_per, "ur*100", "ur_per", "", aux, identity]
+        - [g_Y_per, "g_Y*100", "g_Y_per", "", aux, identity]
+        - [theta_per, "theta*100", "theta_per", "", aux, identity]
+        - [greenI, "IG_PRI/I_PRI", "greenI", "", aux, identity]
+        - [r_total, "(TP/K_PRI) *100", "r_total", "", aux, identity]
+        - [Y_POP_ratio, "(Y/POP)", "Y_POP_ratio", "", aux, identity]
+        - [I_Y_ratio, "I_PRI/Y", "I_Y_ratio", "", aux, identity]
+        - [C_Y_ratio, "CO_PRI/Y", "C_Y_ratio", "", aux, identity]
+        - [C_K_ratio, "CO_PRI/K_PRI", "C_K_ratio", "", aux, identity]
+        - [Y_K_ratio, "Y/K_PRI", "Y_K_ratio", "", aux, identity]
+        - [Y_H_Y_ratio, "Y_H/Y", "Y_H_Y_ratio", "", aux, identity]
+        - [Y_H_K_ratio, "Y_H/K_PRI", "Y_H_K_ratio", "", aux, identity]
+        - [A_K_ratio, "A/K_PRI", "A_K_ratio", "", aux, identity]
+        - [sigma_0_optimal, "(((g_Y-g_lf)/(1+ g_lf)*(1-(1-ad_P)*lag(D_TP)))+(1-ad_P)*lag(D_TP))/(1-(1-ad_P)*lag(D_TP)) -sigma_1-sigma_2*g_Y", "sigma_0_optimal", "", aux, identity]
+        - "h_optimal[i]<-h_optimal[i-1]*(1+g_h[i])"
+        - [omega_ratio, "omega/omega_init", "omega_ratio", "", aux, identity]
+        - [mu_ratio, "mu/mu_init", "mu_ratio", "", aux, identity]
+        - [rho_ratio, "rho/rho_init", "rho_ratio", "", aux, identity]
+        - [epsilon_ratio, "epsilon/epsilon_init", "epsilon_ratio", "", aux, identity]
+        - [Wbill, "wage*N", "Wbill", "", aux, identity]
+        - [Interest, "int_C_S1*lag(LC_S1)+int_C_S2*lag(LC_S2)+int_C_S3*lag(LC_S3)+int_C_S4*lag(LC_S4)+int_G*lag(LG)", "Interest", "", aux, identity]
+        - [Depreciation, "delta*lag(K_PRI)", "Depreciation", "", aux, identity]
+        - [SEC_Y, "SEC/Y", "SEC_Y", "", aux, identity]
+        - [SEC_Y_per, "SEC/Y*100", "SEC_Y_per", "", aux, identity]
+        - [fiscal_balance_per, "fiscal_balance*100", "fiscal_balance_per", "", aux, identity]
+        - [PORT_BCH, "B_CH/lag(V_HF)", "PORT_BCH", "", aux, identity]
+        - [PORT_BGH, "B_GH/lag(V_HF)", "PORT_BGH", "", aux, identity]
+        - [PORT_SECH, "SEC_H/lag(V_HF)", "PORT_SECH", "", aux, identity]
+        - [PORT_D, "D_N/lag(V_HF)", "PORT_D", "", aux, identity]
+        - [L_K, "L/K_PRI", "L_K", "", aux, identity]
+        - [I, "I_PRI+I_GOV", "I", "", aux, identity]
+        - [sh_L, "L/(L+B)", "sh_L", "", aux, identity]
+        - [g_bC, "(b_C-lag(b_C))/lag(b_C)", "g_bC", "", aux, identity]
+        - [g_bG, "(b_G-lag(b_G))/lag(b_G)", "g_bG", "", aux, identity]
+        - [g_pG, "(p_G-lag(p_G))/lag(p_G)", "g_pG", "", aux, identity]
+        - [g_pC, "(p_C-lag(p_C))/lag(p_C)", "g_pC", "", aux, identity]
+        - [B_C_issue, "x_1*IC_PRI_D", "B_C_issue", "", aux, identity]
+        - [B_G_issue, "x_2*IG_PRI_D", "B_G_issue", "", aux, identity]
+        - [IG_cum, "lag(IG_cum)+IG_PRI+IG_GOV", "IG_cum", "", aux, identity]
+        - [IC_cum, "lag(IC_cum)+IC_PRI+IC_GOV", "IC_cum", "", aux, identity]
+        - [IG_E_Y_cum, "lag(IG_E_Y_cum)+IG_E_Y", "IG_E_Y_cum", "", aux, identity]
+        - [IG_E, "gamma_E1*IG_PRI_S1+ gamma_E2*IG_PRI_S2+ gamma_E3*IG_PRI_S3+ gamma_E4*IG_PRI_S4+ gamma_E*IG_GOV", "IG_E", "", aux, identity]
+        - [IG_E_Y, "IG_E/Y*100", "IG_E_Y", "", aux, identity]
+        - [yield_C_per, "yield_C*100", "yield_C_per", "", aux, identity]
+        - [yield_G_per, "yield_G*100", "yield_G_per", "", aux, identity]
+        - [Y_star_N_Exp, "lag(Y_star_N)*(1+lag(g_star_N))", "Y_star_N_Exp", "", aux, identity]
+        - [g_star_N, "( Y_star_N-lag(Y_star_N))/ lag(Y_star_N)", "g_star_N", "", aux, identity]
+        - [V_CB, "p_C_bar*b_CCB+ p_G_bar*b_GCB+A+SEC_CB-HPM", "V_CB", "", aux, identity]
+        - [gGOVCO, "(CO_GOV-lag(CO_GOV))/lag(CO_GOV)", "gGOVCO", "", aux, identity]
+        - [D_K_ratio, "D/K_PRI", "D_K_ratio", "", aux, identity]
+        - [HPM_K_ratio, "HPM/K_PRI", "HPM_K_ratio", "", aux, identity]
+        - [I_K_ratio, "I_PRI/lag(K_PRI)", "I_K_ratio", "", aux, identity]
+        - [ID_K_ratio, "I_PRI_D/lag(K_PRI)", "ID_K_ratio", "", aux, identity]
+        - [fiscal_balance, "(TAX-CO_GOV-IC_GOV-IG_GOV-SUB-BAILOUT-int_S*lag(SEC))/Y", "fiscal_balance", "", aux, identity]
+        - [g_lf, "(LF-lag(LF))/lag(LF)", "g_lf", "", aux, identity]
+        - [W_POP_ratio, "W/POP", "W_POP_ratio", "", aux, identity]
+        - [E_N_ratio, "E/N", "E_N_ratio", "", aux, identity]
+        - [g_EN_ratio, "(E_N_ratio-lag(E_N_ratio))/lag(E_N_ratio)", "g_EN_ratio", "", aux, identity]
+        - [Y_E_ratio, "Y/E", "Y_E_ratio", "", aux, identity]
+        - [g_YE_ratio, "(Y_E_ratio-lag(Y_E_ratio))/lag(Y_E_ratio)", "g_YE_ratio", "", aux, identity]
+        - [lambda_perworker, "lambda*h", "lambda_perworker", "", aux, identity]
+        - [E_ratio, "E/E_init", "E_ratio", "", aux, identity]
+        - [CO2_ratio, "EMIS_F/EMIS_F_init", "CO2_ratio", "", aux, identity]
+        - [lf, "LF/POP", "lf", "", aux, identity]
+        - [haz_flow, "haz*W", "haz_flow", "", aux, identity]
+        - [Y_HD, "wage*N-TAX_H+DP+BP_D+int_D*lag(D)+int_S*lag(SEC_H)+coupon_C*lag(b_CH)+coupon_G*lag(b_GH)- xi*lag(DC)", "Y_HD", "", aux, identity]
+        - [V_H, "DC+D+p_C_bar*b_CH+p_G_bar*b_GH+SEC_H", "V_H", "", aux, identity]
+        - [KG_GOV_Y_ratio, "KG_GOV/Y", "KG_GOV_Y_ratio", "", aux, identity]
+        - [KC_GOV_Y_ratio, "KC_GOV/Y", "KC_GOV_Y_ratio", "", aux, identity]
+        - [IG_GOV_Y_ratio, "IG_GOV/Y", "IG_GOV_Y_ratio", "", aux, identity]
+        - [IC_GOV_Y_ratio, "IC_GOV/Y", "IC_GOV_Y_ratio", "", aux, identity]
+        - [KG_Y_ratio, "KG_PRI/Y", "KG_Y_ratio", "", aux, identity]
+        - [KC_Y_ratio, "KC_PRI/Y", "KC_Y_ratio", "", aux, identity]
+        - [KG_K_ratio, "KG_PRI/K_PRI", "KG_K_ratio", "", aux, identity]
+        - [LG_L_ratio_pseudo, "(beta*(g_baseline*K_PRI/(1+g_baseline)-RP-x_2*I_PRI_D)/L)/(def/(1+g_baseline)+g_baseline/(1+g_baseline))", "LG_L_ratio_pseudo", "", aux, identity]
+        - [LG_L_ratio, "LG/L", "LG_L_ratio", "", aux, identity]
+        - [KGE_KCE, "KGE/KCE", "KGE_KCE", "", aux, identity]
+        - [KGNE_KCNE, "KGNE/KCNE", "KGNE_KCNE", "", aux, identity]
+        - [KSEQ_KCE, "KSEQ/(KCE_PRI_S1+KCE_PRI_S2)", "KSEQ_KCE", "", aux, identity]
+        - [g_Y_cum, "lag(g_Y_cum)+g_Y", "g_Y_cum", "", aux, identity]
+        - [def_per, "def*100", "def_per", "", aux, identity]
+        - [CAR_per, "CAR*100", "CAR_per", "", aux, identity]
+        - [beta, "lag(beta)", "beta", "", aux, identity]
+        - [I_PRI_S1, "IC_PRI_S1+IG_PRI_S1", "Eq. (72)", "", aux, identity]
+        - [I_PRI_S2, "IC_PRI_S2+IG_PRI_S2", "Eq. (72)", "", aux, identity]
+        - [I_PRI_S3, "IC_PRI_S3+IG_PRI_S3", "Eq. (72)", "", aux, identity]
+        - [I_PRI_S4, "IC_PRI_S4+IG_PRI_S4", "Eq. (72)", "", aux, identity]
+        - [IG_PRI_D, "IG_PRI_D_S1+ IG_PRI_D_S2+ IG_PRI_D_S3+ IG_PRI_D_S4", "IG_PRI_D", "", aux, identity]
+        - [IC_PRI_D, "I_PRI_D-IG_PRI_D", "IC_PRI_D", "", aux, identity]
+        - [TAX_C_change, "TAX_C-lag(TAX_C)", "TAX_C_change", "", aux, identity]
+        - [SUB_change, "SUB-lag(SUB)", "SUB_change", "", aux, identity]
+        - [IG_GOV_change, "IG_GOV-lag(IG_GOV)", "IG_GOV_change", "", aux, identity]
+        - [EMIS_F_Y, "EMIS_F/Y", "EMIS_F_Y", "", aux, identity]
+        - [g_L_per, "(L-lag(L))/lag(L)*100", "g_L_per", "", aux, identity]
+        - [private_balance, "Y-CO_PRI-I_PRI-TAX+int_S*lag(SEC_H)+int_S*lag(SEC_B)+SUB+BAILOUT-coupon_C*lag(b_CCB)-coupon_G*lag(b_GCB)-int_A*lag(A)", "private_balance", "", aux, identity]
+        - [firms_balance, "RP+s_F*delta*lag(K_PRI)-I_PRI", "firms_balance", "", aux, identity]
+        - [households_balance, "Y_H+(1-s_F)*delta*lag(K_PRI)-CO_PRI", "households_balance", "", aux, identity]
+        - [banks_balance, "BP_U+BAILOUT", "banks_balance", "", aux, identity]
+        - [fiscal_balance_help, "TAX-CO_GOV-IC_GOV-IG_GOV-SUB-BAILOUT-int_S*lag(SEC)+CBP", "fiscal_balance_help", "", aux, identity]
+        - [private_balance_per, "private_balance/Y*100", "private_balance_per", "", aux, identity]
+        - [firms_balance_per, "firms_balance/Y*100", "firms_balance_per", "", aux, identity]
+        - [households_balance_per, "households_balance/Y*100", "households_balance_per", "", aux, identity]
+        - [banks_balance_per, "banks_balance/Y*100", "banks_balance_per", "", aux, identity]
+        - [fiscal_balance_help_per, "fiscal_balance_help/Y*100", "fiscal_balance_help_per", "", aux, identity]
+        - [g_POP_stag, "(POP-POP_init)/POP_init", "g_POP_stag", "", aux, identity]
+      more: |
+        Demand is determined by private consumption and investment plus government
+        spending, subject to Leontief supply ceilings on matter, energy, capital and
+        labour. Desired investment is a logistic function of utilisation, the profit
+        rate, unemployment and resource scarcity. Each of four sectors chooses a
+        green investment share `beta_Si` from relative energy costs and borrowing
+        costs. Banks ration loans and set spreads from capital adequacy and firms'
+        debt-service ratio.
+
+        `SEC_CB` is government securities held by central banks. `SEC_CBred` is the
+        redundant residual implied by the central-bank budget constraint. The solver
+        checks `SEC_CB = SEC_CBred`.
+  - solver:
+      id: solver
+      title: Solver
+      modelId: define
+      collapsed: true
+      method: gauss-seidel
+      tolerance: "1e-8"
+      maxIterations: 400
+      defaultInitialValue: "0"
+      hiddenLeftVariable: SEC_CB
+      hiddenRightVariable: SEC_CBred
+      hiddenTolerance: "1e-4"
+      relativeHiddenTolerance: false
+  - externals:
+      id: externals-equations
+      title: Externals
+      modelId: define
+      collapsed: true
+      rows:
+        - [CAR_min, 0.08, "CAR_min", "", aux]
+        - [CR_max, 0.5, "CR_max", "", aux]
+        - [EMIS_F_3, 36.4, "EMIS_F_3", "", aux]
+        - {name: EMIS_F_Y_SSP360, kind: series, desc: "EMIS_F_Y_SSP360", valueText: "0.39950846, 0.39354556, 0.38758265, 0.38161975, 0.37565685, 0.36969394, 0.36373104, 0.35776814, 0.35180524, 0.34584233, 0.33988264, 0.33392295, 0.32796326, 0.32200356, 0.31604387, 0.31008418, 0.30412448, 0.29816479, 0.2922051, 0.28624541, 0.28279258, 0.27933975, 0.27588692, 0.27243409, 0.26898126, 0.26552844, 0.26207561, 0.25862278, 0.25516995, 0.25171712, 0.24985396, 0.24799081, 0.24612765, 0.24426449, 0.24240134, 0.24053818, 0.23867502, 0.23681187, 0.23494871, 0.23308555, 0.22929882, 0.22551209, 0.22172536, 0.21793863, 0.2141519, 0.21036517, 0.20657844, 0.20279171, 0.19900498, 0.19521825, 0.19152843, 0.18783861, 0.1841488, 0.18045898, 0.17676916, 0.17307934, 0.16938952, 0.1656997, 0.16200988, 0.15832006, 0.15553561, 0.15275115, 0.14996669, 0.14718223, 0.14439777, 0.14161331, 0.13882885, 0.13604439, 0.13325993, 0.13047547, 0.12836959, 0.1262637, 0.12415782, 0.12205194, 0.11994606, 0.11784018, 0.1157343, 0.11362841, 0.11152253, 0.10941665"}
+        - [EMIS_F_init, 36.4, "EMIS_F_init", "", aux]
+        - [E_init, 598, "E_init", "", aux]
+        - [POP_init, 7.7, "POP_init", "", aux]
+        - [TCRE, 0.00044, "TCRE", "", aux]
+        - [ad_K, 0.8, "ad_K", "", aux]
+        - [ad_LF, 0.95, "ad_LF", "", aux]
+        - [ad_P, 0.95, "ad_P", "", aux]
+        - [alpha_00, 0.184520656174, "alpha_00", "", aux]
+        - [alpha_01, 0.369680568674, "alpha_01", "", aux]
+        - [alpha_1, 0.978580044543, "alpha_1", "", aux]
+        - [alpha_2, 1.09203860043, "alpha_2", "", aux]
+        - [alpha_31, 0.056729277945, "alpha_31", "", aux]
+        - [alpha_32, 0.5, "alpha_32", "", aux]
+        - [alpha_41, 0.1, "alpha_41", "", aux]
+        - [alpha_42, 0.99, "alpha_42", "", aux]
+        - [alpha_51, 0.1, "alpha_51", "", aux]
+        - [alpha_52, 0.99, "alpha_52", "", aux]
+        - [beta_1, 17, "beta_1", "", aux]
+        - [beta_2, 1, "beta_2", "", aux]
+        - [beta_dummy_0, 0, "beta_dummy_0", "", aux]
+        - [beta_is_endogenous_different, 1, "beta_is_endogenous_different", "", aux]
+        - [c_1, 0.802761520037, "c_1", "", aux]
+        - [c_2, 0.047, "c_2", "", aux]
+        - [car, 3.667, "car", "", aux]
+        - [con_E, 0.003, "con_E", "", aux]
+        - [con_M, 0.0015, "con_M", "", aux]
+        - [con_change_end, 0.15, "con_change_end", "", aux]
+        - [cr_rationing_dummy, 1, "cr_rationing_dummy", "", aux]
+        - [damage_dummy, 1, "damage_dummy", "", aux]
+        - [def_0, 6.69230769231, "def_0", "", aux]
+        - [def_1, 8.53102427963, "def_1", "", aux]
+        - [def_2, 11.0521662246, "def_2", "", aux]
+        - [def_max, 0.2, "def_max", "", aux]
+        - [delta_0, 0.048, "delta_0", "", aux]
+        - [delta_init, 0.048760328087, "delta_init", "", aux]
+        - [dummy_con_change, 0, "dummy_con_change", "", aux]
+        - [duration, 77, "duration", "", aux]
+        - [epsilon_init, 6.22268470343, "epsilon_init", "", aux]
+        - [epsilon_max, 12, "epsilon_max", "", aux]
+        - [epsilon_min, 2, "epsilon_min", "", aux]
+        - [eta_1, 0, "eta_1", "", aux]
+        - [eta_2, 0.00284, "eta_2", "", aux]
+        - [eta_3, 8.19e-05, "eta_3", "", aux]
+        - [f_nc, 0.14, "f_nc", "", aux]
+        - [g_baseline, 0.029, "g_baseline", "", aux]
+        - [gamma_E, 0.736709243015, "gamma_E", "", aux]
+        - [gamma_E1, 0.968962957965, "gamma_E1", "", aux]
+        - [gamma_E2, 0.386533256787, "gamma_E2", "", aux]
+        - [gamma_E3, 0.906391514452, "gamma_E3", "", aux]
+        - [gamma_E4, 0.074618741165, "gamma_E4", "", aux]
+        - [gamma_SEQ1, 0.005195600837, "gamma_SEQ1", "", aux]
+        - [gamma_SEQ2, 0.016841138358, "gamma_SEQ2", "", aux]
+        - [gov_C, 0.17, "gov_C", "", aux]
+        - [gov_IC, 0.064851583336, "gov_IC", "", aux]
+        - [gov_IG, 0.002033416664, "gov_IG", "", aux]
+        - [gov_SUB_3, 0.037160906726, "gov_SUB_3", "", aux]
+        - [h_1, 0.21, "h_1", "", aux]
+        - [h_2, 0.165719111111, "h_2", "", aux]
+        - [haz, 0.04, "haz", "", aux]
+        - [int_A, 0.056, "int_A", "", aux]
+        - [int_D, 0.04, "int_D", "", aux]
+        - [int_S, 0.0175, "int_S", "", aux]
+        - [l_1, 1, "l_1", "", aux]
+        - [lambda_10, 0.43717436977, "lambda_10", "", aux]
+        - [lambda_10prime, 0.1, "lambda_10prime", "", aux]
+        - [lambda_11, 0.03, "lambda_11", "", aux]
+        - [lambda_12, -0.01, "lambda_12", "", aux]
+        - [lambda_13, -0.01, "lambda_13", "", aux]
+        - [lambda_14, -0.01, "lambda_14", "", aux]
+        - [lambda_15, -0.01, "lambda_15", "", aux]
+        - [lambda_20, 0.081138707871, "lambda_20", "", aux]
+        - [lambda_20prime, -0.2, "lambda_20prime", "", aux]
+        - [lambda_21, -0.01, "lambda_21", "", aux]
+        - [lambda_22, 0.03, "lambda_22", "", aux]
+        - [lambda_23, -0.01, "lambda_23", "", aux]
+        - [lambda_24, -0.01, "lambda_24", "", aux]
+        - [lambda_25, -0.01, "lambda_25", "", aux]
+        - [lambda_30prime, 0, "lambda_30prime", "", aux]
+        - [lambda_31, -0.01, "lambda_31", "", aux]
+        - [lambda_32, -0.01, "lambda_32", "", aux]
+        - [lambda_33, 0.03, "lambda_33", "", aux]
+        - [lambda_34, -0.01, "lambda_34", "", aux]
+        - [lambda_35, -0.01, "lambda_35", "", aux]
+        - [lambda_40prime, 0.1, "lambda_40prime", "", aux]
+        - [lambda_41, -0.01, "lambda_41", "", aux]
+        - [lambda_42, -0.01, "lambda_42", "", aux]
+        - [lambda_43, -0.01, "lambda_43", "", aux]
+        - [lambda_44, 0.03, "lambda_44", "", aux]
+        - [lambda_45, 0.03, "lambda_45", "", aux]
+        - [lambda_is_optimal, 0, "lambda_is_optimal", "", aux]
+        - [lev_B_max, 33.3333333333, "lev_B_max", "", aux]
+        - [lf_2, 0.001, "lf_2", "", aux]
+        - [mu_init, 0.655793526098, "mu_init", "", aux]
+        - [mu_max, 1.5, "mu_max", "", aux]
+        - [mu_min, 0.3, "mu_min", "", aux]
+        - [omega_init, 0.071906187091, "omega_init", "", aux]
+        - [p, 0.1, "p", "", aux]
+        - [p_C_bar, 100, "p_C_bar", "", aux]
+        - [p_G_bar, 100, "p_G_bar", "", aux]
+        - [phi, 0, "phi", "", aux]
+        - [pi_1, 0.51546194083, "pi_1", "", aux]
+        - [pi_10, 1249.86229107, "pi_10", "", aux]
+        - [pi_2, 14.9968196496, "pi_2", "", aux]
+        - [pi_3, 2.79378394995, "pi_3", "", aux]
+        - [pi_4, 30.4226862874, "pi_4", "", aux]
+        - [pi_5, 4.3756998156, "pi_5", "", aux]
+        - [pi_6, 30.0326242685, "pi_6", "", aux]
+        - [pi_7, 17.6416055439, "pi_7", "", aux]
+        - [pi_8, 19.0590465337, "pi_8", "", aux]
+        - [pi_9, 559.090264676, "pi_9", "", aux]
+        - [pr, 0.99, "pr", "", aux]
+        - [r_0, 1.5, "r_0", "", aux]
+        - [r_1, 4.2910170783, "r_1", "", aux]
+        - [r_2, 8.53970816667, "r_2", "", aux]
+        - [r_3, 11.60900325, "r_3", "", aux]
+        - [random1, 0, "random1", "", aux]
+        - [random2, 0, "random2", "", aux]
+        - [random_dummy, 0, "random_dummy", "", aux]
+        - [rep, 0.1, "rep", "", aux]
+        - [rho_init, 0.280020439448, "rho_init", "", aux]
+        - [rho_max, 0.8, "rho_max", "", aux]
+        - [s_B, 0.786358581666, "s_B", "", aux]
+        - [s_C, 0.033931182796, "s_C", "", aux]
+        - [s_F, 0.117366167764, "s_F", "", aux]
+        - [s_G, 0.091466666667, "s_G", "", aux]
+        - [s_W_0, 0.561408, "s_W_0", "", aux]
+        - [s_W_1, 0.184, "s_W_1", "", aux]
+        - [sh_EMIS_F_S1, 0.472775959536, "sh_EMIS_F_S1", "", aux]
+        - [sh_EMIS_F_S2, 0.182088664088, "sh_EMIS_F_S2", "", aux]
+        - [sh_EMIS_F_S3, 0.244570068432, "sh_EMIS_F_S3", "", aux]
+        - [sh_EMIS_F_S4, 0.100565307944, "sh_EMIS_F_S4", "", aux]
+        - [sh_GVA_S1, 0.05495818399, "sh_GVA_S1", "", aux]
+        - [sh_GVA_S2, 0.223416965352, "sh_GVA_S2", "", aux]
+        - [sh_GVA_S3, 0.091995221027, "sh_GVA_S3", "", aux]
+        - [sh_GVA_S4, 0.62962962963, "sh_GVA_S4", "", aux]
+        - [sigma_1, 0.01, "sigma_1", "", aux]
+        - [sigma_2, 0.85, "sigma_2", "", aux]
+        - [spr_0, 0.022423493179, "spr_0", "", aux]
+        - [spr_1, 0.03371429, "spr_1", "", aux]
+        - [spr_2, 0.02325, "spr_2", "", aux]
+        - [spr_3, 1, "spr_3", "", aux]
+        - [stag_adjust, 0.2, "stag_adjust", "", aux]
+        - [stop_recycling_dummy, 0, "stop_recycling_dummy", "", aux]
+        - [subsidy_increase_dummy, 0, "subsidy_increase_dummy", "", aux]
+        - [subsidy_ratio, 1, "subsidy_ratio", "", aux]
+        - [tau_C_4, 0.004916524213, "tau_C_4", "", aux]
+        - {name: tau_C_baseline, kind: series, desc: "tau_C_baseline", valueText: "0.002374615385, 0.003026552735, 0.003857475833, 0.004916524213, 0.006266328392, 0.007986713747, 0.01017942126, 0.01297412434, 0.0165360975, 0.02107599043, 0.02687489305, 0.02688750058, 0.02690010811, 0.02691271564, 0.02692532317, 0.02693793069, 0.02695053822, 0.02696314575, 0.02697575328, 0.0269883608, 0.02815673502, 0.02932510923, 0.03049348345, 0.03166185766, 0.03283023187, 0.03399860609, 0.0351669803, 0.03633535452, 0.03750372873, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.03867210294, 0.04035815685, 0.04204421076, 0.04373026467, 0.04541631858, 0.04710237248, 0.04878842639, 0.0504744803, 0.05216053421, 0.05384658811, 0.05553264202, 0.05775588212, 0.05997912222, 0.06220236231, 0.06442560241, 0.06664884251, 0.06887208261, 0.0710953227, 0.0733185628, 0.0755418029, 0.077765043, 0.07928645504, 0.08080786708, 0.08232927912, 0.08385069117, 0.08537210321, 0.08689351525, 0.08841492729, 0.08993633933, 0.09145775138, 0.09297916342, 0.09487014376, 0.0967611241, 0.09865210444, 0.1005430848, 0.1024340651, 0.1043250455, 0.1062160258, 0.1081070061, 0.1099979865, 0.1118889668"}
+        - {name: tau_C_baseline_per, kind: series, desc: "tau_C_baseline_per", valueText: "2.374615385, 3.026552735, 3.857475833, 4.916524213, 6.266328392, 7.986713747, 10.17942126, 12.97412434, 16.5360975, 21.07599043, 26.87489305, 26.88750058, 26.90010811, 26.91271564, 26.92532317, 26.93793069, 26.95053822, 26.96314575, 26.97575328, 26.9883608, 28.15673502, 29.32510923, 30.49348345, 31.66185766, 32.83023187, 33.99860609, 35.1669803, 36.33535452, 37.50372873, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 38.67210294, 40.35815685, 42.04421076, 43.73026467, 45.41631858, 47.10237248, 48.78842639, 50.4744803, 52.16053421, 53.84658811, 55.53264202, 57.75588212, 59.97912222, 62.20236231, 64.42560241, 66.64884251, 68.87208261, 71.0953227, 73.3185628, 75.5418029, 77.765043, 79.28645504, 80.80786708, 82.32927912, 83.85069117, 85.37210321, 86.89351525, 88.41492729, 89.93633933, 91.45775138, 92.97916342, 94.87014376, 96.7611241, 98.65210444, 100.5430848, 102.4340651, 104.3250455, 106.2160258, 108.1070061, 109.9979865, 111.8889668"}
+        - [tau_C_dummy_H, 0, "tau_C_dummy_H", "", aux]
+        - [tau_C_dummy_M, 0, "tau_C_dummy_M", "", aux]
+        - {name: tau_C_policy_High, kind: series, desc: "tau_C_policy_High", valueText: "0.03077693638, 0.04049754308, 0.05021814978, 0.05993875648, 0.06965936319, 0.07937996989, 0.08910057659, 0.09882118329, 0.10854179, 0.1182623967, 0.1237953022, 0.1293282077, 0.1348611131, 0.1403940186, 0.1459269241, 0.1514598296, 0.1569927351, 0.1625256405, 0.168058546, 0.1735914515, 0.1811569691, 0.1887224867, 0.1962880043, 0.2038535219, 0.2114190395, 0.2189845571, 0.2265500747, 0.2341155923, 0.2416811099, 0.2492466274, 0.2578949856, 0.2665433437, 0.2751917018, 0.2838400599, 0.2924884181, 0.3011367762, 0.3097851343, 0.3184334924, 0.3270818505, 0.3357302087, 0.3575572614, 0.3793843141, 0.4012113669, 0.4230384196, 0.4448654723, 0.4666925251, 0.4885195778, 0.5103466305, 0.5321736832, 0.554000736, 0.5834013416, 0.6128019472, 0.6422025528, 0.6716031584, 0.701003764, 0.7304043695, 0.7598049751, 0.7892055807, 0.8186061863, 0.8480067919, 0.8827026809, 0.9173985698, 0.9520944588, 0.9867903477, 1.021486237, 1.056182126, 1.090878015, 1.125573903, 1.160269792, 1.194965681, 1.233425391, 1.2718851, 1.31034481, 1.348804519, 1.387264161, 1.425723884, 1.464183606, 1.502643329, 1.541103052, 1.579562775"}
+        - {name: tau_C_policy_High_per, kind: series, desc: "tau_C_policy_High_per", valueText: "30.77693638, 40.49754308, 50.21814978, 59.93875648, 69.65936319, 79.37996989, 89.10057659, 98.82118329, 108.54179, 118.2623967, 123.7953022, 129.3282077, 134.8611131, 140.3940186, 145.9269241, 151.4598296, 156.9927351, 162.5256405, 168.058546, 173.5914515, 181.1569691, 188.7224867, 196.2880043, 203.8535219, 211.4190395, 218.9845571, 226.5500747, 234.1155923, 241.6811099, 249.2466274, 257.8949856, 266.5433437, 275.1917018, 283.8400599, 292.4884181, 301.1367762, 309.7851343, 318.4334924, 327.0818505, 335.7302087, 357.5572614, 379.3843141, 401.2113669, 423.0384196, 444.8654723, 466.6925251, 488.5195778, 510.3466305, 532.1736832, 554.000736, 583.4013416, 612.8019472, 642.2025528, 671.6031584, 701.003764, 730.4043695, 759.8049751, 789.2055807, 818.6061863, 848.0067919, 882.7026809, 917.3985698, 952.0944588, 986.7903477, 1021.486237, 1056.182126, 1090.878015, 1125.573903, 1160.269792, 1194.965681, 1233.425391, 1271.8851, 1310.34481, 1348.804519, 1387.264161, 1425.723884, 1464.183606, 1502.643329, 1541.103052, 1579.562775"}
+        - {name: tau_C_policy_Medium, kind: series, desc: "tau_C_policy_Medium", valueText: "0.02212787483, 0.02319035664, 0.02425283844, 0.02531532024, 0.02637780205, 0.02744028385, 0.02850276566, 0.02956524746, 0.03062772927, 0.03169021107, 0.03402180556, 0.03635340005, 0.03868499455, 0.04101658904, 0.04334818353, 0.04567977803, 0.04801137252, 0.05034296701, 0.0526745615, 0.055006156, 0.05824104197, 0.06147592794, 0.06471081391, 0.06794569987, 0.07118058584, 0.07441547181, 0.07765035778, 0.08088524375, 0.08412012972, 0.08735501569, 0.09498144713, 0.1026078786, 0.11023431, 0.1178607414, 0.1254871729, 0.1331136043, 0.1407400357, 0.1483664672, 0.1559928986, 0.16361933, 0.1689212147, 0.1742230994, 0.1795249842, 0.1848268689, 0.1901287536, 0.1954306383, 0.200732523, 0.2060344077, 0.2113362924, 0.2166381771, 0.2237736319, 0.2309090868, 0.2380445416, 0.2451799964, 0.2523154512, 0.259450906, 0.2665863608, 0.2737218156, 0.2808572704, 0.2879927252, 0.2994531707, 0.3109136162, 0.3223740618, 0.3338345073, 0.3452949528, 0.3567553983, 0.3682158438, 0.3796762893, 0.3911367348, 0.4025971803, 0.4227933709, 0.4429895615, 0.4631857521, 0.4833819426, 0.5035781332, 0.5237743238, 0.5439705144, 0.5641667049, 0.5843628955, 0.6045590861"}
+        - {name: tau_C_policy_Medium_per, kind: series, desc: "tau_C_policy_Medium_per", valueText: "22.12787483, 23.19035664, 24.25283844, 25.31532024, 26.37780205, 27.44028385, 28.50276566, 29.56524746, 30.62772927, 31.69021107, 34.02180556, 36.35340005, 38.68499455, 41.01658904, 43.34818353, 45.67977803, 48.01137252, 50.34296701, 52.6745615, 55.006156, 58.24104197, 61.47592794, 64.71081391, 67.94569987, 71.18058584, 74.41547181, 77.65035778, 80.88524375, 84.12012972, 87.35501569, 94.98144713, 102.6078786, 110.23431, 117.8607414, 125.4871729, 133.1136043, 140.7400357, 148.3664672, 155.9928986, 163.61933, 168.9212147, 174.2230994, 179.5249842, 184.8268689, 190.1287536, 195.4306383, 200.732523, 206.0344077, 211.3362924, 216.6381771, 223.7736319, 230.9090868, 238.0445416, 245.1799964, 252.3154512, 259.450906, 266.5863608, 273.7218156, 280.8572704, 287.9927252, 299.4531707, 310.9136162, 322.3740618, 333.8345073, 345.2949528, 356.7553983, 368.2158438, 379.6762893, 391.1367348, 402.5971803, 422.7933709, 442.9895615, 463.1857521, 483.3819426, 503.5781332, 523.7743238, 543.9705144, 564.1667049, 584.3628955, 604.5590861"}
+        - [tau_F, 0.15, "tau_F", "", aux]
+        - [tau_H, 0.224304121732, "tau_H", "", aux]
+        - [ucr_dummy, 1, "ucr_dummy", "", aux]
+        - [ucr_init, 0.0252, "ucr_init", "", aux]
+        - [ur_T, 0.062, "ur_T", "", aux]
+        - [w_C_S1_2022, 1, "w_C_S1_2022", "", aux]
+        - [w_C_S1_initial, 1, "w_C_S1_initial", "", aux]
+        - [w_C_S2_2022, 1, "w_C_S2_2022", "", aux]
+        - [w_C_S2_initial, 1, "w_C_S2_initial", "", aux]
+        - [w_C_S3_2022, 1, "w_C_S3_2022", "", aux]
+        - [w_C_S3_initial, 1, "w_C_S3_initial", "", aux]
+        - [w_C_S4_2022, 1, "w_C_S4_2022", "", aux]
+        - [w_C_S4_initial, 1, "w_C_S4_initial", "", aux]
+        - [w_G_2022, 1, "w_G_2022", "", aux]
+        - [w_G_initial, 1, "w_G_initial", "", aux]
+        - [w_H, 0, "w_H", "", aux]
+        - [w_S, 0, "w_S", "", aux]
+        - [x_10, 0.03086740178, "x_10", "", aux]
+        - [x_11, 0.25, "x_11", "", aux]
+        - [x_21, 0.25, "x_21", "", aux]
+        - [xi, 0.009863615445, "xi", "", aux]
+        - [zeta_1, 0.0015, "zeta_1", "", aux]
+        - [zeta_10, 0.18, "zeta_10", "", aux]
+        - [zeta_2, 0.5, "zeta_2", "", aux]
+        - [zeta_3, 0.008, "zeta_3", "", aux]
+        - [zeta_4, 0.4, "zeta_4", "", aux]
+        - [zeta_5, 0.0145, "zeta_5", "", aux]
+        - [zeta_6, 0.0003, "zeta_6", "", aux]
+        - [zeta_7, 0.7, "zeta_7", "", aux]
+        - [zeta_8, 0.03, "zeta_8", "", aux]
+        - [zeta_9, 0.007, "zeta_9", "", aux]
+      more: |
+        Scalar parameters are the period-1 calibration from R after 15 Gauss-Seidel
+        iterations of the 2021 snapshot. Carbon-tax paths are the SSP3 series in
+        `_DEFINE_Carbontaxes.csv` (US$/tCO2, converted to US$ tn / GtCO2). Policy
+        dummies (`tau_C_dummy_M`, `gov_IG`, `s_G`, `w_G_2022`) are the levers used
+        in the scenarios below.
+  - initial-values:
+      id: initial-values-equations
+      title: Initial values
+      modelId: define
+      collapsed: true
+      rows:
+        - [A, 15.7017159, "2021 A"]
+        - [A_K_ratio, 0.06269955616, "2021 A_K_ratio"]
+        - [A_N, 15.7017159, "2021 A_N"]
+        - [B, 14.4, "2021 B"]
+        - [BAILOUT, 0, "2021 BAILOUT"]
+        - [BAILOUT_CAR, 0, "2021 BAILOUT_CAR"]
+        - [BAILOUT_levB, 0, "2021 BAILOUT_levB"]
+        - [BP, 3.13041934849, "2021 BP"]
+        - [BP_D, 0.738162673178, "2021 BP_D"]
+        - [BP_U, 2.39225667532, "2021 BP_U"]
+        - [B_C, 13.95, "2021 B_C"]
+        - [B_CCB, 0.46, "2021 B_CCB"]
+        - [B_CH, 13.49, "2021 B_CH"]
+        - [B_C_issue, 0.393148688047, "2021 B_C_issue"]
+        - [B_G, 0.45, "2021 B_G"]
+        - [B_GCB, 0.04, "2021 B_GCB"]
+        - [B_GH, 0.41, "2021 B_GH"]
+        - [B_G_issue, 0.012682215743, "2021 B_G_issue"]
+        - [CAP, 10.7740041, "2021 CAP"]
+        - [CAP_before, 10.7740041, "2021 CAP_before"]
+        - [CAR, 0.130339629329, "2021 CAR"]
+        - [CAR_before, 0.130339629329, "2021 CAR_before"]
+        - [CAR_per, 13.0339629329, "2021 CAR_per"]
+        - [CBP, 0.924699768853, "2021 CBP"]
+        - [CEN, 9.92637032997, "2021 CEN"]
+        - [CO2_CUM, 2365, "2021 CO2_CUM"]
+        - [CO2_ratio, 0, "2021 CO2_ratio"]
+        - [CON_E, 1514.415, "2021 CON_E"]
+        - [CON_M, 173.514935897, "2021 CON_M"]
+        - [CO_GOV, 15.8765792031, "2021 CO_GOV"]
+        - [CO_PRI, 55.2374207969, "2021 CO_PRI"]
+        - [CO_PRI_N, 55.2374207969, "2021 CO_PRI_N"]
+        - [CR, 0.2, "2021 CR"]
+        - [CR_C_S1, 0.2, "2021 CR_C_S1"]
+        - [CR_C_S2, 0.2, "2021 CR_C_S2"]
+        - [CR_C_S3, 0.2, "2021 CR_C_S3"]
+        - [CR_C_S4, 0.2, "2021 CR_C_S4"]
+        - [CR_G, 0.2, "2021 CR_G"]
+        - [C_K_ratio, 0.220572183921, "2021 C_K_ratio"]
+        - [C_Y_ratio, 0.574791059281, "2021 C_Y_ratio"]
+        - [D, 90, "2021 D"]
+        - [DC, 1462.53263752, "2021 DC"]
+        - [DEM, 19.57, "2021 DEM"]
+        - [DL, 2.08861613217, "2021 DL"]
+        - [DP, 17.7458404473, "2021 DP"]
+        - [D_K_ratio, 0.35938492903, "2021 D_K_ratio"]
+        - [D_N, 0, "2021 D_N"]
+        - [D_T, 0.004435054139, "2021 D_T"]
+        - [D_TF, 0.003993319784, "2021 D_TF"]
+        - [D_TP, 0.000443505414, "2021 D_TP"]
+        - [Depreciation, 12.210944793, "2021 Depreciation"]
+        - [E, 598, "2021 E"]
+        - [ED, 598, "2021 ED"]
+        - [EMIS, 39.3, "2021 EMIS"]
+        - [EMIS_F, 36.4, "2021 EMIS_F"]
+        - [EMIS_F_Y, 0.378772112383, "2021 EMIS_F_Y"]
+        - [EMIS_L, 2.9, "2021 EMIS_L"]
+        - [E_F, 508.3, "2021 E_F"]
+        - [E_NF, 89.7, "2021 E_NF"]
+        - [E_N_ratio, 184.790334044, "2021 E_N_ratio"]
+        - [E_ratio, 0, "2021 E_ratio"]
+        - [GNS, -0.333842012636, "2021 GNS"]
+        - [HPM, 18.9, "2021 HPM"]
+        - [HPM_K_ratio, 0.075470835096, "2021 HPM_K_ratio"]
+        - [HW_CUM, 16, "2021 HW_CUM"]
+        - [I, 24.986, "2021 I"]
+        - [IC_GOV, 6.05659587814, "2021 IC_GOV"]
+        - [IC_GOV_Y_ratio, 0.063023890511, "2021 IC_GOV_Y_ratio"]
+        - [IC_PRI, 18.1697876344, "2021 IC_PRI"]
+        - [IC_PRI_D, 21.4046979949, "2021 IC_PRI_D"]
+        - [IC_PRI_D_S1, 0.895204576277, "2021 IC_PRI_D_S1"]
+        - [IC_PRI_D_S2, 4.86935899627, "2021 IC_PRI_D_S2"]
+        - [IC_PRI_D_S3, 1.85512505159, "2021 IC_PRI_D_S3"]
+        - [IC_PRI_D_S4, 13.7850093707, "2021 IC_PRI_D_S4"]
+        - [IC_PRI_S1, 0.764279569892, "2021 IC_PRI_S1"]
+        - [IC_PRI_S2, 4.13209408602, "2021 IC_PRI_S2"]
+        - [IC_PRI_S3, 1.57652956989, "2021 IC_PRI_S3"]
+        - [IC_PRI_S4, 11.6968844086, "2021 IC_PRI_S4"]
+        - [IC_cum, 24.2263835125, "2021 IC_cum"]
+        - [ID_K_ratio, 0.090760328087, "2021 ID_K_ratio"]
+        - [IG_E, 0.559616487455, "2021 IG_E"]
+        - [IG_E_Y, 0.582327250214, "2021 IG_E_Y"]
+        - [IG_E_Y_cum, 0.582327250214, "2021 IG_E_Y_cum"]
+        - [IG_GOV, 0.189904121864, "2021 IG_GOV"]
+        - [IG_GOV_Y_ratio, 0.001976109489, "2021 IG_GOV_Y_ratio"]
+        - [IG_GOV_change, 0.189904121864, "2021 IG_GOV_change"]
+        - [IG_PRI, 0.569712365591, "2021 IG_PRI"]
+        - [IG_PRI_D, 0.68365483871, "2021 IG_PRI_D"]
+        - [IG_PRI_D_S1, 0.318731182796, "2021 IG_PRI_D_S1"]
+        - [IG_PRI_D_S2, 0.065553763441, "2021 IG_PRI_D_S2"]
+        - [IG_PRI_D_S3, 0.176897849462, "2021 IG_PRI_D_S3"]
+        - [IG_PRI_D_S4, 0.122472043011, "2021 IG_PRI_D_S4"]
+        - [IG_PRI_S1, 0.265609318996, "2021 IG_PRI_S1"]
+        - [IG_PRI_S2, 0.054628136201, "2021 IG_PRI_S2"]
+        - [IG_PRI_S3, 0.147414874552, "2021 IG_PRI_S3"]
+        - [IG_PRI_S4, 0.102060035842, "2021 IG_PRI_S4"]
+        - [IG_cum, 0.759616487455, "2021 IG_cum"]
+        - [I_GOV, 6.2465, "2021 I_GOV"]
+        - [I_K_ratio, 0.077, "2021 I_K_ratio"]
+        - [I_PRI, 18.7395, "2021 I_PRI"]
+        - [I_PRI_D, 22.0883528336, "2021 I_PRI_D"]
+        - [I_PRI_D_S1, 1.21393575907, "2021 I_PRI_D_S1"]
+        - [I_PRI_D_S2, 4.93491275971, "2021 I_PRI_D_S2"]
+        - [I_PRI_D_S3, 2.03202290106, "2021 I_PRI_D_S3"]
+        - [I_PRI_D_S4, 13.9074814137, "2021 I_PRI_D_S4"]
+        - [I_PRI_S1, 1.02988888889, "2021 I_PRI_S1"]
+        - [I_PRI_S2, 4.18672222222, "2021 I_PRI_S2"]
+        - [I_PRI_S3, 1.72394444444, "2021 I_PRI_S3"]
+        - [I_PRI_S4, 11.7989444444, "2021 I_PRI_S4"]
+        - [I_Y_ratio, 0.195, "2021 I_Y_ratio"]
+        - [Interest, 7.22982507289, "2021 Interest"]
+        - [K, 333.903818182, "2021 K"]
+        - [KC, 323.777393965, "2021 KC"]
+        - [KCE, 125.200324889, "2021 KCE"]
+        - [KCE_PRI_S1, 12.9304622161, "2021 KCE_PRI_S1"]
+        - [KCE_PRI_S2, 20.9689901391, "2021 KCE_PRI_S2"]
+        - [KCE_PRI_S3, 20.2467629986, "2021 KCE_PRI_S3"]
+        - [KCE_PRI_S4, 11.4079491402, "2021 KCE_PRI_S4"]
+        - [KCNE, 198.577069076, "2021 KCNE"]
+        - [KCNE_PRI_S1, 0.414178164433, "2021 KCNE_PRI_S1"]
+        - [KCNE_PRI_S2, 33.2798740167, "2021 KCNE_PRI_S2"]
+        - [KCNE_PRI_S3, 2.09100459497, "2021 KCNE_PRI_S3"]
+        - [KCNE_PRI_S4, 141.475213481, "2021 KCNE_PRI_S4"]
+        - [KC_GOV, 80.9629592147, "2021 KC_GOV"]
+        - [KC_GOV_Y_ratio, 0.842486568311, "2021 KC_GOV_Y_ratio"]
+        - [KC_PRI, 242.814434751, "2021 KC_PRI"]
+        - [KC_PRI_S1, 13.3446403806, "2021 KC_PRI_S1"]
+        - [KC_PRI_S2, 54.2488641558, "2021 KC_PRI_S2"]
+        - [KC_PRI_S3, 22.3377675936, "2021 KC_PRI_S3"]
+        - [KC_PRI_S4, 152.883162621, "2021 KC_PRI_S4"]
+        - [KC_Y_ratio, 2.52668506504, "2021 KC_Y_ratio"]
+        - [KG, 10.1264242164, "2021 KG"]
+        - [KGE, 7.46023031888, "2021 KGE"]
+        - [KGE_KCE, 0.05958634952, "2021 KGE_KCE"]
+        - [KGE_PRI_S1, 3.43934017595, "2021 KGE_PRI_S1"]
+        - [KGE_PRI_S2, 0.282181085044, "2021 KGE_PRI_S2"]
+        - [KGE_PRI_S3, 1.78559017595, "2021 KGE_PRI_S3"]
+        - [KGE_PRI_S4, 0.101771994135, "2021 KGE_PRI_S4"]
+        - [KGNE, 2.66619389747, "2021 KGNE"]
+        - [KGNE_KCNE, 0.013426494357, "2021 KGNE_KCNE"]
+        - [KGNE_PRI_S1, 0.110166177908, "2021 KGNE_PRI_S1"]
+        - [KGNE_PRI_S2, 0.447849462366, "2021 KGNE_PRI_S2"]
+        - [KGNE_PRI_S3, 0.184408602151, "2021 KGNE_PRI_S3"]
+        - [KGNE_PRI_S4, 1.26212121212, "2021 KGNE_PRI_S4"]
+        - [KG_GOV, 2.51299533072, "2021 KG_GOV"]
+        - [KG_GOV_Y_ratio, 0.026149795325, "2021 KG_GOV_Y_ratio"]
+        - [KG_K_ratio, 0.030401684441, "2021 KG_K_ratio"]
+        - [KG_PRI, 7.61342888563, "2021 KG_PRI"]
+        - [KG_PRI_S1, 3.54950635386, "2021 KG_PRI_S1"]
+        - [KG_PRI_S2, 0.73003054741, "2021 KG_PRI_S2"]
+        - [KG_PRI_S3, 1.9699987781, "2021 KG_PRI_S3"]
+        - [KG_PRI_S4, 1.36389320626, "2021 KG_PRI_S4"]
+        - [KG_Y_ratio, 0.079224025865, "2021 KG_Y_ratio"]
+        - [KSEQ, 0.022621689391, "2021 KSEQ"]
+        - [KSEQ_KCE, 0.000667317252, "2021 KSEQ_KCE"]
+        - [KSEQ_PRI_S1, 0.017869438696, "2021 KSEQ_PRI_S1"]
+        - [KSEQ_PRI_S2, 0.004752250695, "2021 KSEQ_PRI_S2"]
+        - [K_GOV, 83.4759545455, "2021 K_GOV"]
+        - [K_PRI, 250.427863636, "2021 K_PRI"]
+        - [L, 82.661, "2021 L"]
+        - [LC, 80.1479663624, "2021 LC"]
+        - [LC_S1, 4.4047866818, "2021 LC_S1"]
+        - [LC_S2, 17.9064154239, "2021 LC_S2"]
+        - [LC_S3, 7.37322988041, "2021 LC_S3"]
+        - [LC_S4, 50.4635343763, "2021 LC_S4"]
+        - [LF, 3.45, "2021 LF"]
+        - [LG, 2.51303363762, "2021 LG"]
+        - [LG_L_ratio, 0.030401684441, "2021 LG_L_ratio"]
+        - [LG_L_ratio_pseudo, 0.030566386665, "2021 LG_L_ratio_pseudo"]
+        - [LG_S1, 0.13811176503, "2021 LG_S1"]
+        - [LG_S2, 0.561454349145, "2021 LG_S2"]
+        - [LG_S3, 0.231187084942, "2021 LG_S3"]
+        - [LG_S4, 1.5822804385, "2021 LG_S4"]
+        - [L_K, 0.33007908465, "2021 L_K"]
+        - [M, 47.13, "2021 M"]
+        - [MY, 52.61, "2021 MY"]
+        - [N, 3.2361, "2021 N"]
+        - [NLC_DN_S1, 0, "2021 NLC_DN_S1"]
+        - [NLC_DN_S2, 0, "2021 NLC_DN_S2"]
+        - [NLC_DN_S3, 0, "2021 NLC_DN_S3"]
+        - [NLC_DN_S4, 0, "2021 NLC_DN_S4"]
+        - [NLC_D_S1, 0.576718787417, "2021 NLC_D_S1"]
+        - [NLC_D_S2, 3.44740711156, "2021 NLC_D_S2"]
+        - [NLC_D_S3, 1.28512046761, "2021 NLC_D_S3"]
+        - [NLC_D_S4, 9.77124966082, "2021 NLC_D_S4"]
+        - [NLG_DN_S1, 0, "2021 NLG_DN_S1"]
+        - [NLG_DN_S2, 0, "2021 NLG_DN_S2"]
+        - [NLG_DN_S3, 0, "2021 NLG_DN_S3"]
+        - [NLG_DN_S4, 0, "2021 NLG_DN_S4"]
+        - [NLG_D_S1, 0.130291695757, "2021 NLG_D_S1"]
+        - [NLG_D_S2, 0.075909754019, "2021 NLG_D_S2"]
+        - [NLG_D_S3, 0.086550755794, "2021 NLG_D_S3"]
+        - [NLG_D_S4, 0.190958521157, "2021 NLG_D_S4"]
+        - [O2, 26.47362967, "2021 O2"]
+        - [POP, 7.7, "2021 POP"]
+        - [PORT_BCH, 0.077330924754, "2021 PORT_BCH"]
+        - [PORT_BGH, 0.002350309796, "2021 PORT_BGH"]
+        - [PORT_D, 0.486921662555, "2021 PORT_D"]
+        - [PORT_SECH, 0.433397102895, "2021 PORT_SECH"]
+        - [REC, 5.48, "2021 REC"]
+        - [RES_E, 504805, "2021 RES_E"]
+        - [RES_M, 115676.623932, "2021 RES_M"]
+        - [REV_E, 40769, "2021 REV_E"]
+        - [REV_M, 1812.69230769, "2021 REV_M"]
+        - [RP, 2.2846467665, "2021 RP"]
+        - [SEC, 93.217, "2021 SEC"]
+        - [SEC_B, 14.91472, "2021 SEC_B"]
+        - [SEC_BN, 0, "2021 SEC_BN"]
+        - [SEC_CB, 2.6982841, "2021 SEC_CB"]
+        - [SEC_CBred, 2.6982841, "2021 SEC_CBred"]
+        - [SEC_H, 75.6039959, "2021 SEC_H"]
+        - [SEC_Y, 0.97, "2021 SEC_Y"]
+        - [SEC_Y_per, 97, "2021 SEC_Y_per"]
+        - [SES, 1178.0913977, "2021 SES"]
+        - [SUB, 0.084, "2021 SUB"]
+        - [SUB_change, 0.084, "2021 SUB_change"]
+        - [TAX, 20.2429630105, "2021 TAX"]
+        - [TAX_C, 0.084, "2021 TAX_C"]
+        - [TAX_C_change, 0.084, "2021 TAX_C_change"]
+        - [TAX_F, 3.41817187949, "2021 TAX_F"]
+        - [TAX_H, 16.7407911311, "2021 TAX_H"]
+        - [TEMP, 1.21, "2021 TEMP"]
+        - [TP, 20.0304872138, "2021 TP"]
+        - [TP_G, 23.4486590933, "2021 TP_G"]
+        - [V_CB, 0, "2021 V_CB"]
+        - [V_H, 1642.03663342, "2021 V_H"]
+        - [V_HF, 179.5039959, "2021 V_HF"]
+        - [W, 14.09, "2021 W"]
+        - [W_POP_ratio, 1.82987012987, "2021 W_POP_ratio"]
+        - [Wbill, 52.855, "2021 Wbill"]
+        - [Y, 96.1, "2021 Y"]
+        - [Y_E_ratio, 0.160702341137, "2021 Y_E_ratio"]
+        - [Y_H, 60.057949529, "2021 Y_H"]
+        - [Y_HD, 46.0386497118, "2021 Y_HD"]
+        - [Y_HG, 76.7987406601, "2021 Y_HG"]
+        - [Y_H_K_ratio, 0.239821354768, "2021 Y_H_K_ratio"]
+        - [Y_H_Y_ratio, 0.624952648585, "2021 Y_H_Y_ratio"]
+        - [Y_K_ratio, 0.383743240886, "2021 Y_K_ratio"]
+        - [Y_N, 0, "2021 Y_N"]
+        - [Y_POP_ratio, 12.4805194805, "2021 Y_POP_ratio"]
+        - [Y_star, 102.452025586, "2021 Y_star"]
+        - [Y_star_E, 7707.85146567, "2021 Y_star_E"]
+        - [Y_star_K, 131.643835616, "2021 Y_star_K"]
+        - [Y_star_M, 2772.47675577, "2021 Y_star_M"]
+        - [Y_star_N, 102.452025586, "2021 Y_star_N"]
+        - [Y_star_N_Exp, 102.452025586, "2021 Y_star_N_Exp"]
+        - [b_C, 0.1395, "2021 b_C"]
+        - [b_CCB, 0.0046, "2021 b_CCB"]
+        - [b_CH, 0.1349, "2021 b_CH"]
+        - [b_G, 0.0045, "2021 b_G"]
+        - [b_GCB, 0.0004, "2021 b_GCB"]
+        - [b_GH, 0.0041, "2021 b_GH"]
+        - [banks_balance, 2.39225667532, "2021 banks_balance"]
+        - [banks_balance_per, 2.48934097327, "2021 banks_balance_per"]
+        - [beta, 0.030950919874, "2021 beta"]
+        - [beta_0_S1, 0.290277829728, "2021 beta_0_S1"]
+        - [beta_0_S2, 0.023959069291, "2021 beta_0_S2"]
+        - [beta_0_S3, 0.101393570693, "2021 beta_0_S3"]
+        - [beta_0_S4, 0.014702087818, "2021 beta_0_S4"]
+        - [beta_S1, 0.262560172903, "2021 beta_S1"]
+        - [beta_S2, 0.013283672201, "2021 beta_S2"]
+        - [beta_S3, 0.087055047151, "2021 beta_S3"]
+        - [beta_S4, 0.008806198575, "2021 beta_S4"]
+        - [con_change, 0, "2021 con_change"]
+        - [coupon_C, 5, "2021 coupon_C"]
+        - [coupon_G, 5, "2021 coupon_G"]
+        - [def, 0.026, "2021 def"]
+        - [def_per, 2.6, "2021 def_per"]
+        - [delta, 0.048760328087, "2021 delta"]
+        - [dep_E, 0.012467806422, "2021 dep_E"]
+        - [dep_M, 0.026, "2021 dep_M"]
+        - [dsr, 0.570910610015, "2021 dsr"]
+        - [endog, 1, "2021 endog"]
+        - [epsilon, 6.22268470343, "2021 epsilon"]
+        - [epsilon_ratio, 1, "2021 epsilon_ratio"]
+        - [firms_balance, -15.0620915278, "2021 firms_balance"]
+        - [firms_balance_per, -15.6733522662, "2021 firms_balance_per"]
+        - [fiscal_balance, -0.036934852464, "2021 fiscal_balance"]
+        - [fiscal_balance_help, -2.62473955296, "2021 fiscal_balance_help"]
+        - [fiscal_balance_help_per, -2.73125863992, "2021 fiscal_balance_help_per"]
+        - [fiscal_balance_per, -3.69348524643, "2021 fiscal_balance_per"]
+        - [gC, 0, "2021 gC"]
+        - [gGOVCO, 0, "2021 gGOVCO"]
+        - [gI, 0, "2021 gI"]
+        - [g_EMIS_L, 0.02, "2021 g_EMIS_L"]
+        - [g_EN_ratio, 0, "2021 g_EN_ratio"]
+        - [g_K, 0.029, "2021 g_K"]
+        - [g_L_per, 2.9, "2021 g_L_per"]
+        - [g_POP, 0.011, "2021 g_POP"]
+        - [g_POP_stag, 0, "2021 g_POP_stag"]
+        - [g_Y, 0.058, "2021 g_Y"]
+        - [g_YE_ratio, 0, "2021 g_YE_ratio"]
+        - [g_Y_cum, 0.058, "2021 g_Y_cum"]
+        - [g_Y_per, 5.8, "2021 g_Y_per"]
+        - [g_bC, 0.029, "2021 g_bC"]
+        - [g_bG, 0.029, "2021 g_bG"]
+        - [g_beta_0, 0.0002, "2021 g_beta_0"]
+        - [g_h, 0, "2021 g_h"]
+        - [g_lambda, 0.042808064516, "2021 g_lambda"]
+        - [g_lambda_30, 0.00522, "2021 g_lambda_30"]
+        - [g_lf, 0, "2021 g_lf"]
+        - [g_omega, -0.001, "2021 g_omega"]
+        - [g_pC, 0, "2021 g_pC"]
+        - [g_pG, 0, "2021 g_pG"]
+        - [g_star_N, 0.029, "2021 g_star_N"]
+        - [g_ucn, 0.005, "2021 g_ucn"]
+        - [g_ucr, 0.01, "2021 g_ucr"]
+        - [g_x_20, 0.02, "2021 g_x_20"]
+        - [gov_SUB, 0.037160906726, "2021 gov_SUB"]
+        - [greenI, 0.030401684441, "2021 greenI"]
+        - [h, 1893, "2021 h"]
+        - [haz_flow, 0.5636, "2021 haz_flow"]
+        - [hazratio, 2.07792207792, "2021 hazratio"]
+        - [households_balance, 15.2945744055, "2021 households_balance"]
+        - [households_balance_per, 15.9152699329, "2021 households_balance_per"]
+        - [illiq, 0.771887076821, "2021 illiq"]
+        - [int_C_S1, 0.09, "2021 int_C_S1"]
+        - [int_C_S2, 0.09, "2021 int_C_S2"]
+        - [int_C_S3, 0.09, "2021 int_C_S3"]
+        - [int_C_S4, 0.09, "2021 int_C_S4"]
+        - [int_G, 0.09, "2021 int_G"]
+        - [kappa, 0.030401684441, "2021 kappa"]
+        - [lambda, 0.015687395299, "2021 lambda"]
+        - [lambda_30, 0.005271082085, "2021 lambda_30"]
+        - [lambda_40, 0.476415840273, "2021 lambda_40"]
+        - [lambda_perworker, 29.6962393004, "2021 lambda_perworker"]
+        - [lev_B, 10.8108108108, "2021 lev_B"]
+        - [lev_B_before, 10.8108108108, "2021 lev_B_before"]
+        - [lf, 0.448051948052, "2021 lf"]
+        - [lf_1, 0.450219348731, "2021 lf_1"]
+        - [mu, 0.655793526098, "2021 mu"]
+        - [mu_ratio, 1, "2021 mu_ratio"]
+        - [omega, 0.071906187091, "2021 omega"]
+        - [omega_ratio, 1, "2021 omega_ratio"]
+        - [p_C, 100, "2021 p_C"]
+        - [p_G, 100, "2021 p_G"]
+        - [private_balance, 2.62473955296, "2021 private_balance"]
+        - [private_balance_per, 2.73125863992, "2021 private_balance_per"]
+        - [r, 0.079985058064, "2021 r"]
+        - [r_total, 7.9985058064, "2021 r_total"]
+        - [re, 0.938, "2021 re"]
+        - [rho, 0.280020439448, "2021 rho"]
+        - [rho_ratio, 1, "2021 rho_ratio"]
+        - [s_W, 0.55, "2021 s_W"]
+        - [seq, 0.004101648352, "2021 seq"]
+        - [sh_L, 0.851639690504, "2021 sh_L"]
+        - [sh_LC_S1, 0.053287362623, "2021 sh_LC_S1"]
+        - [sh_LC_S2, 0.216624713273, "2021 sh_LC_S2"]
+        - [sh_LC_S3, 0.089198411348, "2021 sh_LC_S3"]
+        - [sh_LC_S4, 0.610487828315, "2021 sh_LC_S4"]
+        - [sh_LG, 0.030401684441, "2021 sh_LG"]
+        - [sh_NLC_S1, 0.05328913, "2021 sh_NLC_S1"]
+        - [sh_NLC_S2, 0.21663191, "2021 sh_NLC_S2"]
+        - [sh_NLC_S3, 0.08920137, "2021 sh_NLC_S3"]
+        - [sh_NLC_S4, 0.61050811, "2021 sh_NLC_S4"]
+        - [sh_NLG, 0.03036948, "2021 sh_NLG"]
+        - [sigma_0, -0.016491935484, "2021 sigma_0"]
+        - [sigma_0_optimal, 0, "2021 sigma_0_optimal"]
+        - [spr, 0.034, "2021 spr"]
+        - [spr_C_S1, 0.034, "2021 spr_C_S1"]
+        - [spr_C_S2, 0.034, "2021 spr_C_S2"]
+        - [spr_C_S3, 0.034, "2021 spr_C_S3"]
+        - [spr_C_S4, 0.034, "2021 spr_C_S4"]
+        - [spr_G, 0.034, "2021 spr_G"]
+        - [t, 1, Calendar year index for 2021.]
+        - [tau_C, 0.002307692308, "2021 tau_C"]
+        - [theta, 0.15, "2021 theta"]
+        - [theta_per, 15, "2021 theta_per"]
+        - [tucn, 0.021165256738, "2021 tucn"]
+        - [tucr, 0.024263545151, "2021 tucr"]
+        - [u, 0.73, "2021 u"]
+        - [ucn, 0.021, "2021 ucn"]
+        - [ucr, 0.0252, "2021 ucr"]
+        - [ue, 0.012467806422, "2021 ue"]
+        - [um, 0.028935651356, "2021 um"]
+        - [ur, 0.062, "2021 ur"]
+        - [ur_per, 6.2, "2021 ur_per"]
+        - [v, 0.525675672447, "2021 v"]
+        - [w_C_S1, 1, "2021 w_C_S1"]
+        - [w_C_S2, 1, "2021 w_C_S2"]
+        - [w_C_S3, 1, "2021 w_C_S3"]
+        - [w_C_S4, 1, "2021 w_C_S4"]
+        - [w_G, 1, "2021 w_G"]
+        - [w_LT, 1, "2021 w_LT"]
+        - [wage, 16.3329316152, "2021 wage"]
+        - [x_1, 0.01836740178, "2021 x_1"]
+        - [x_2, 0.01855061213, "2021 x_2"]
+        - [x_20, 0.03105061213, "2021 x_20"]
+        - [yield_C, 0.05, "2021 yield_C"]
+        - [yield_C_per, 5, "2021 yield_C_per"]
+        - [yield_G, 0.05, "2021 yield_G"]
+        - [yield_G_per, 5, "2021 yield_G_per"]
+      more: |
+        Period 1 is the 2021 data-consistent snapshot from R. Putting those stocks
+        and flows here means lags in period 2 are the calibrated 2021 values. World
+        GDP starts at `Y = 96.10` trillion US dollars; temperature at `TEMP = 1.21` C;
+        fossil emissions at `EMIS_F = 36.4` GtCO2.
+  - run:
+      id: baseline-run
+      title: Baseline run
+      description: DEFINE 1.1 baseline, 2021-2100, with hidden condition SEC_CB = SEC_CBred.
+      mode: baseline
+      periods: 80
+      resultKey: define_baseline
+      sourceModelId: define
+  - chart:
+      id: baseline-macro-chart
+      title: Baseline output, growth and unemployment
+      variables:
+        - Y
+        - g_Y
+        - ur
+        - u
+        - r
+      axisGroups:
+        - [Y]
+        - [g_Y, ur, u, r]
+      axisSnapTolarance: 0.5
+      sourceRunCellId: baseline-run
+      more: |
+        The R baseline is an SSP2/SSP3-6.0 mix. Growth starts near 5.8 percent in
+        2021 and slows toward 2 percent as damages and resource constraints bind.
+        Unemployment stays near 6-7 percent. Utilisation `u` and the profit rate `r`
+        drift with the capital stock and climate damages.
+  - chart:
+      id: baseline-climate-chart
+      title: Baseline temperature, emissions and green share
+      variables:
+        - TEMP
+        - EMIS
+        - EMIS_F
+        - theta
+        - seq
+        - tau_C
+      axisGroups:
+        - [TEMP]
+        - [EMIS, EMIS_F]
+        - [theta, seq]
+        - [tau_C]
+      axisSnapTolarance: 0.5
+      sourceRunCellId: baseline-run
+      more: |
+        Temperature `TEMP` tracks cumulative emissions. The non-fossil share `theta`
+        rises only slowly on the baseline because green capital remains a small slice
+        of the aggregate stock. The carbon tax `tau_C` follows the SSP3-6.0 path
+        (about 2.4 US$/tCO2 in 2021, rising through the century) and is recycled as
+        a green subsidy.
+  - table:
+      id: baseline-table
+      title: Baseline variable summary
+      variables:
+        - Y
+        - g_Y
+        - TEMP
+        - EMIS_F
+        - theta
+        - ur
+        - SEC
+        - L
+        - K_PRI
+        - IG_PRI
+        - tau_C
+        - CAR
+        - def
+      sourceRunCellId: baseline-run
+      more: |
+        Use the period selector to read 2021 (period 1) against 2050 (period 30) and
+        2100 (period 80). `SEC_CB` should stay in line with `SEC_CBred` at every date.
+  - markdown:
+      id: scenario-1-note
+      title: Green public investment
+      source: This scenario quadruples the government green-investment ratio `gov_IG` from 2024, matching R scenario 6 on the 2021-2100 path.
+      more: |
+        The run starts from the 2021 baseline snapshot (`baselineStartPeriod: 1`) and
+        raises `gov_IG` from period 4, which is calendar 2024. Public green capital
+        then raises `KGE / KCE` and `theta`, which is the DEFINE story of green
+        public investment.
+  - run:
+      id: scenario-1-run
+      title: "Scenario 1: green public investment"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              gov_IG:
+                kind: constant
+                value: 0.008133666656
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s1
+      sourceModelId: define
+  - chart:
+      id: scenario-1-chart
+      title: Scenario 1 green capital, intensity and temperature
+      variables:
+        - IG_GOV
+        - theta
+        - TEMP
+        - EMIS_F
+        - Y
+        - g_Y
+      axisMode: separate
+      sourceRunCellId: scenario-1-run
+      more: |
+        Watch `IG_GOV` step up with the higher `gov_IG`. The non-fossil share `theta`
+        then rises as public green capital accumulates. Emissions and temperature
+        combine that intensity path with output.
+  - markdown:
+      id: scenario-2-note
+      title: Medium carbon tax plus green subsidy
+      source: This scenario turns on the medium SSP3 carbon-tax path (`tau_C_dummy_M = 1`) from 2024, matching R scenario 5. Revenues continue to be recycled as green subsidies.
+      more: |
+        From period 4, `tau_C` follows `tau_C_policy_Medium` instead of
+        `tau_C_baseline`, which raises the relative cost of conventional energy
+        (`tucn`) and pulls `beta_Si` up.
+  - run:
+      id: scenario-2-run
+      title: "Scenario 2: medium carbon tax"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              tau_C_dummy_M:
+                kind: constant
+                value: 1
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s2
+      sourceModelId: define
+  - chart:
+      id: scenario-2-chart
+      title: Scenario 2 carbon tax, green share and emissions
+      variables:
+        - tau_C
+        - theta
+        - EMIS_F
+        - TEMP
+        - Y
+        - SUB
+      axisMode: separate
+      sourceRunCellId: scenario-2-run
+      more: |
+        The medium tax path is several times the baseline SSP3-6.0 schedule. Subsidies
+        `SUB` rise with tax revenues, which lowers `tucr` and supports green
+        investment. Compare temperature and emissions with scenario 1, where the
+        same engine decarbonises through public capital rather than through a tax.
+  - markdown:
+      id: scenario-3-note
+      title: Green QE
+      source: This scenario raises the central-bank share of green corporate bonds to `s_G = 0.4` from 2024, matching R scenario 9.
+      more: |
+        A higher `s_G` lifts central-bank demand for green bonds, which supports
+        `p_G` and lowers the green yield. Firms then issue more green bonds and raise
+        `beta`.
+  - run:
+      id: scenario-3-run
+      title: "Scenario 3: green QE"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              s_G:
+                kind: constant
+                value: 0.4
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s3
+      sourceModelId: define
+  - chart:
+      id: scenario-3-chart
+      title: Scenario 3 green bonds, yield and emissions
+      variables:
+        - B_GCB
+        - yield_G
+        - yield_C
+        - theta
+        - EMIS_F
+        - Y
+      axisMode: separate
+      sourceRunCellId: scenario-3-run
+      more: |
+        Central-bank green bond holdings `B_GCB` jump with `s_G`. The green yield
+        `yield_G` should fall relative to `yield_C`, which is the portfolio channel
+        from green QE into firms' green investment share.
+  - markdown:
+      id: scenario-4-note
+      title: Medium carbon tax without recycling
+      source: This scenario turns on the medium SSP3 carbon-tax path from 2024 and stops recycling revenues as green subsidies (`stop_recycling_dummy = 1`), matching R scenario 4 / paper Figure 1 CT.
+      more: |
+        Without recycling, `SUB` no longer tracks `tau_C * lag(EMIS_F)` after 2023. The tax still raises conventional energy costs, but green capital does not get the matching subsidy.
+  - run:
+      id: scenario-4-run
+      title: "Scenario 4: medium carbon tax without recycling"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              tau_C_dummy_M:
+                kind: constant
+                value: 1
+              stop_recycling_dummy:
+                kind: constant
+                value: 1
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s4
+      sourceModelId: define
+  - chart:
+      id: scenario-4-chart
+      title: Scenario 4 tax without recycling
+      variables:
+        - tau_C
+        - SUB
+        - gov_SUB
+        - theta
+        - EMIS_F
+        - TEMP
+      axisMode: separate
+      sourceRunCellId: scenario-4-run
+      more: |
+        Compare `SUB` with scenario 2: here subsidies stay near the pre-2024 level while the tax keeps rising.
+  - markdown:
+      id: scenario-5-note
+      title: Dirty penalty factor
+      source: This scenario raises conventional-loan risk weights from 2024 (`w_C_Si_2022 = 1 + min(dd_Si, 1) * 0.25`), matching R scenario 7 / paper Figure 2 DPF.
+      more: |
+        Higher dirty-sector risk weights tighten conventional credit and raise conventional loan rates relative to green loans, which is DEFINE's bank-capital channel into the energy mix.
+  - run:
+      id: scenario-5-run
+      title: "Scenario 5: dirty penalty factor"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              w_C_S1_2022:
+                kind: constant
+                value: 1.25
+              w_C_S2_2022:
+                kind: constant
+                value: 1.20375429391
+              w_C_S3_2022:
+                kind: constant
+                value: 1.25
+              w_C_S4_2022:
+                kind: constant
+                value: 1.03993034286
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s5
+      sourceModelId: define
+  - chart:
+      id: scenario-5-chart
+      title: Scenario 5 dirty penalty factor
+      variables:
+        - w_C_S1
+        - CR_C_S1
+        - theta
+        - EMIS_F
+        - TEMP
+        - Y
+      axisMode: separate
+      sourceRunCellId: scenario-5-run
+      more: |
+        Watch conventional credit rationing `CR_C_S1` and the non-fossil share `theta` after the risk-weight step.
+  - markdown:
+      id: scenario-6-note
+      title: Green supporting factor
+      source: This scenario cuts the green-loan risk weight to `w_G_2022 = 0.75` from 2024, matching R scenario 8 / paper Figure 2 GSF.
+      more: |
+        A lower green risk weight eases green credit and is the counterpart of the dirty penalty factor on the conventional book.
+  - run:
+      id: scenario-6-run
+      title: "Scenario 6: green supporting factor"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              w_G_2022:
+                kind: constant
+                value: 0.75
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s6
+      sourceModelId: define
+  - chart:
+      id: scenario-6-chart
+      title: Scenario 6 green supporting factor
+      variables:
+        - w_G
+        - CR_G
+        - theta
+        - EMIS_F
+        - TEMP
+        - Y
+      axisMode: separate
+      sourceRunCellId: scenario-6-run
+      more: |
+        Green credit rationing `CR_G` should ease relative to baseline as banks are asked to hold less capital against green loans.
+  - markdown:
+      id: scenario-7-note
+      title: Sufficiency
+      source: This scenario turns on the consumption-adjustment dummy and sets `phi = 0.25` from 2024, matching R scenario 10 / paper Figure 3 Sufficiency. On T=80 the R duration window covers the rest of the century.
+      more: |
+        `dummy_con_change` lets `con_change` rise toward `con_change_end`, and `phi` links hours to the unemployment gap. Together they slow consumption and labour demand.
+  - run:
+      id: scenario-7-run
+      title: "Scenario 7: sufficiency"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              dummy_con_change:
+                kind: constant
+                value: 1
+              phi:
+                kind: constant
+                value: 0.25
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s7
+      sourceModelId: define
+  - chart:
+      id: scenario-7-chart
+      title: Scenario 7 sufficiency
+      variables:
+        - con_change
+        - CO_PRI
+        - Y
+        - EMIS_F
+        - TEMP
+        - ur
+      axisMode: separate
+      sourceRunCellId: scenario-7-run
+      more: |
+        Output and emissions fall mainly because demand is lower, not because `theta` jumps.
+  - markdown:
+      id: scenario-8-note
+      title: Green fiscal and financial mix
+      source: This scenario combines green public investment, the medium carbon tax, green QE, DPF and GSF from 2024, matching R scenario 11 / paper Figure 3 Fiscal+Financial.
+      more: |
+        It is the joint climate-policy package without the sufficiency demand shock.
+  - run:
+      id: scenario-8-run
+      title: "Scenario 8: green fiscal and financial mix"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              gov_IG:
+                kind: constant
+                value: 0.008133666656
+              tau_C_dummy_M:
+                kind: constant
+                value: 1
+              s_G:
+                kind: constant
+                value: 0.4
+              w_G_2022:
+                kind: constant
+                value: 0.75
+              w_C_S1_2022:
+                kind: constant
+                value: 1.25
+              w_C_S2_2022:
+                kind: constant
+                value: 1.20375429391
+              w_C_S3_2022:
+                kind: constant
+                value: 1.25
+              w_C_S4_2022:
+                kind: constant
+                value: 1.03993034286
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s8
+      sourceModelId: define
+  - chart:
+      id: scenario-8-chart
+      title: Scenario 8 fiscal and financial mix
+      variables:
+        - theta
+        - EMIS_F
+        - TEMP
+        - Y
+        - IG_GOV
+        - tau_C
+      axisMode: separate
+      sourceRunCellId: scenario-8-run
+      more: |
+        Temperature and the fossil share should fall further than in any single instrument.
+  - markdown:
+      id: scenario-9-note
+      title: Sufficiency plus fiscal and financial mix
+      source: This scenario adds the sufficiency shock to the green fiscal-financial package from 2024, matching R scenario 12 / paper Figure 3 Sufficiency+Fiscal+Financial.
+      more: |
+        R applies the mix for the whole remaining horizon and the sufficiency dummy for `i` in 4..4+duration. With `duration = 77` that is the rest of the 2021-2100 run.
+  - run:
+      id: scenario-9-run
+      title: "Scenario 9: sufficiency plus fiscal and financial mix"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 4
+              - 80
+            variables:
+              gov_IG:
+                kind: constant
+                value: 0.008133666656
+              tau_C_dummy_M:
+                kind: constant
+                value: 1
+              s_G:
+                kind: constant
+                value: 0.4
+              w_G_2022:
+                kind: constant
+                value: 0.75
+              w_C_S1_2022:
+                kind: constant
+                value: 1.25
+              w_C_S2_2022:
+                kind: constant
+                value: 1.20375429391
+              w_C_S3_2022:
+                kind: constant
+                value: 1.25
+              w_C_S4_2022:
+                kind: constant
+                value: 1.03993034286
+              dummy_con_change:
+                kind: constant
+                value: 1
+              phi:
+                kind: constant
+                value: 0.25
+            startPeriodInclusive: 4
+            endPeriodInclusive: 80
+      baselineRunCellId: baseline-run
+      baselineStartPeriod: 1
+      periods: 80
+      resultKey: define_s9
+      sourceModelId: define
+  - chart:
+      id: scenario-9-chart
+      title: Scenario 9 combined package
+      variables:
+        - theta
+        - EMIS_F
+        - TEMP
+        - Y
+        - CO_PRI
+        - g_Y
+      axisMode: separate
+      sourceRunCellId: scenario-9-run
+      more: |
+        This is the strongest decarbonisation path in the August 2022 paper: lower demand plus every green-finance and fiscal lever.

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 
-import { equationOutputVariable, type EquationRole } from "@sfcr/core";
+import { equationOutputVariable } from "@sfcr/core";
 
 import {
   HighlightedFormulaInput,
@@ -9,7 +9,7 @@ import {
   type PinnedTrace,
   type TraceTokenRole
 } from "../../components/EquationGridEditor";
-import { InstantTooltip } from "../../components/InstantTooltip";
+import { FORMULA_TOOLTIP_ATTR } from "../../components/InstantTooltip";
 import { VariableLabel } from "../../components/VariableLabel";
 import { renderVariableMathLabel } from "../../components/VariableMathLabel";
 import { formatNotebookCurrentValue } from "./NotebookCurrentValue";
@@ -87,9 +87,13 @@ function renderHighlightedEquationName(
         currentValues
       });
       parts.push(
-        <InstantTooltip key={`name-token-${index}`} className={tokenClassName} tooltip={tooltip}>
+        <span
+          key={`name-token-${index}`}
+          className={tokenClassName}
+          {...(tooltip ? { [FORMULA_TOOLTIP_ATTR]: tooltip } : {})}
+        >
           {renderVariableMathLabel(token)}
-        </InstantTooltip>
+        </span>
       );
     } else {
       parts.push(token);
@@ -312,49 +316,7 @@ function EquationRowInlineEditor({
   );
 }
 
-export function NotebookEquationReadRow({
-  activeTraceTokenStates,
-  currentValues,
-  laggedCurrentValues,
-  laggedPeriodLabel,
-  displayTokens,
-  equation,
-  equationIndex,
-  formatRoleLabel,
-  highlightedVariable = null,
-  hoveredRowId,
-  isEditing,
-  issueMessage,
-  onContextMenu,
-  rowDraft,
-  rowEditFocus,
-  rowValidationError,
-  rowValidationWarning = null,
-  parameterNames,
-  traceRole,
-  variableDescriptions,
-  variableUnitMetadata,
-  onApplyRow,
-  onBeginRowEdit,
-  onCancelRow,
-  onDraftExpressionChange,
-  onDraftNameChange,
-  onInspectVariable,
-  onRowClick,
-  onRowMouseEnter,
-  onRowMouseLeave,
-  onSelectVariableInExpression,
-  onAskAi,
-  askAiActive = false,
-  initialValueText = null,
-  isEditingInitialValue = false,
-  draftInitialValueText = "",
-  initialValueValidationError = null,
-  onApplyInitialValue,
-  onBeginInitialValueEdit,
-  onCancelInitialValueEdit,
-  onDraftInitialValueTextChange
-}: {
+export type NotebookEquationReadRowProps = {
   activeTraceTokenStates?: Map<string, TraceTokenRole>;
   currentValues: Record<string, number | undefined>;
   laggedCurrentValues?: Record<string, number | undefined>;
@@ -364,7 +326,7 @@ export function NotebookEquationReadRow({
   equationIndex: number;
   formatRoleLabel(equation: EquationRow): string;
   highlightedVariable?: string | null;
-  hoveredRowId: string | null;
+  isHovered: boolean;
   isEditing: boolean;
   issueMessage?: string;
   onContextMenu?(event: React.MouseEvent<HTMLDivElement>): void;
@@ -396,7 +358,51 @@ export function NotebookEquationReadRow({
   onBeginInitialValueEdit?(): void;
   onCancelInitialValueEdit?(): void;
   onDraftInitialValueTextChange?(value: string): void;
-}) {
+};
+
+function NotebookEquationReadRowComponent({
+  activeTraceTokenStates,
+  currentValues,
+  laggedCurrentValues,
+  laggedPeriodLabel,
+  displayTokens,
+  equation,
+  equationIndex,
+  formatRoleLabel,
+  highlightedVariable = null,
+  isHovered,
+  isEditing,
+  issueMessage,
+  onContextMenu,
+  rowDraft,
+  rowEditFocus,
+  rowValidationError,
+  rowValidationWarning = null,
+  parameterNames,
+  traceRole,
+  variableDescriptions,
+  variableUnitMetadata,
+  onApplyRow,
+  onBeginRowEdit,
+  onCancelRow,
+  onDraftExpressionChange,
+  onDraftNameChange,
+  onInspectVariable,
+  onRowClick,
+  onRowMouseEnter,
+  onRowMouseLeave,
+  onSelectVariableInExpression,
+  onAskAi,
+  askAiActive = false,
+  initialValueText = null,
+  isEditingInitialValue = false,
+  draftInitialValueText = "",
+  initialValueValidationError = null,
+  onApplyInitialValue,
+  onBeginInitialValueEdit,
+  onCancelInitialValueEdit,
+  onDraftInitialValueTextChange
+}: NotebookEquationReadRowProps) {
   const { clearDeferredAction, scheduleDeferredAction } = useDeferredAction();
   const hasDraftChanges =
     rowDraft.name.trim() !== equation.name.trim() ||
@@ -461,7 +467,7 @@ export function NotebookEquationReadRow({
       className={[
         "notebook-model-view-row",
         issueMessage ? "has-issue" : "",
-        hoveredRowId === equation.id ? "is-hovered" : "",
+        isHovered ? "is-hovered" : "",
         traceRole ? `trace-${traceRole}` : ""
       ]
         .filter(Boolean)
@@ -624,6 +630,68 @@ export function NotebookEquationReadRow({
     </div>
   );
 }
+
+function areNotebookEquationReadRowPropsEqual(
+  previous: NotebookEquationReadRowProps,
+  next: NotebookEquationReadRowProps
+): boolean {
+  if (previous.equation !== next.equation || previous.equationIndex !== next.equationIndex) {
+    return false;
+  }
+  if (previous.isHovered !== next.isHovered || previous.isEditing !== next.isEditing) {
+    return false;
+  }
+  if (previous.traceRole !== next.traceRole || previous.activeTraceTokenStates !== next.activeTraceTokenStates) {
+    return false;
+  }
+  if (previous.issueMessage !== next.issueMessage || previous.highlightedVariable !== next.highlightedVariable) {
+    return false;
+  }
+  if (previous.askAiActive !== next.askAiActive || previous.onAskAi !== next.onAskAi) {
+    return false;
+  }
+  if (previous.currentValues !== next.currentValues || previous.laggedCurrentValues !== next.laggedCurrentValues) {
+    return false;
+  }
+  if (previous.laggedPeriodLabel !== next.laggedPeriodLabel || previous.displayTokens !== next.displayTokens) {
+    return false;
+  }
+  if (previous.parameterNames !== next.parameterNames) {
+    return false;
+  }
+  if (
+    previous.variableDescriptions !== next.variableDescriptions ||
+    previous.variableUnitMetadata !== next.variableUnitMetadata
+  ) {
+    return false;
+  }
+  if (
+    previous.initialValueText !== next.initialValueText ||
+    previous.isEditingInitialValue !== next.isEditingInitialValue ||
+    previous.draftInitialValueText !== next.draftInitialValueText ||
+    previous.initialValueValidationError !== next.initialValueValidationError
+  ) {
+    return false;
+  }
+  if (previous.isEditing || next.isEditing) {
+    if (
+      previous.rowDraft.expression !== next.rowDraft.expression ||
+      previous.rowDraft.name !== next.rowDraft.name ||
+      previous.rowEditFocus !== next.rowEditFocus ||
+      previous.rowValidationError !== next.rowValidationError ||
+      previous.rowValidationWarning !== next.rowValidationWarning
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export const NotebookEquationReadRow = memo(
+  NotebookEquationReadRowComponent,
+  areNotebookEquationReadRowPropsEqual
+);
+NotebookEquationReadRow.displayName = "NotebookEquationReadRow";
 
 export function schedulePinnedTraceToggle(
   scheduleDeferredAction: (action: () => void) => void,

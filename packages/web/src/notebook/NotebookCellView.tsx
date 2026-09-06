@@ -1430,7 +1430,8 @@ function NotebookCellViewComponent({
             }
             title={cell.title}
             onVariableInspectRequest={onVariableInspectRequest}
-            highlightedVariable={highlightedVariable            }
+            highlightedVariable={highlightedVariable}
+            viewportRoot={viewportRoot}
           />
         ) : null}
         {isCollapsed ? null : cell.type === "abm-model" ? (
