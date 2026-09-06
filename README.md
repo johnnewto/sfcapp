@@ -3,11 +3,9 @@
 SFCApp is a **browser-first TypeScript application** for building and running stock-flow consistent (SFC) models.
 
 Live app:
+- [https://sfcapp.net/](https://sfcapp.net/)
+- [https://johnnewto.github.io/sfcapp/](https://johnnewto.github.io/sfcapp/)
 
-- GitHub Pages: [https://johnnewto.github.io/sfcapp/](https://johnnewto.github.io/sfcapp/)
-- Cloudflare Pages: [https://sfcapp.pages.dev/](https://sfcapp.pages.dev/)
-
-Legacy URLs still work: `/moneyjs/` on GitHub Pages and `https://moneyjs.pages.dev/` redirect to the names above.
 
 The main product surface lives in:
 
