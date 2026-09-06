@@ -1,0 +1,228 @@
+{
+  "id": "define-simple-notebook",
+  "title": "DEFINE-SIMPLE 1.1",
+  "metadata": { "version": 1, "template": "define-simple" },
+  "cells": [
+    { "id": "intro", "type": "markdown", "title": "Overview", "source": "This notebook ports DEFINE-SIMPLE 1.1 (Dafermos and Nikolaidi 2026). Firms, households and banks interact in a growing global economy whose carbon intensity falls when green capital rises relative to conventional capital. Period 1 is calendar year 2023; the baseline runs through 2100.", "more": "**DEFINE-SIMPLE** is the teaching core of the DEFINE (Dynamic Ecosystem-FINance-Economy)\nframework. It keeps three sectors — households, firms and banks — and one ecological\nchannel: fossil CO2 emissions track output through a carbon intensity that depends on\nthe green-to-conventional capital ratio.\n\nThe executable equations and 2023 calibration come from the Model Builder export in\n`references/define-simple-1.1/DEFINE_SIMPLE.R` (DEFINE-model/SIMPLE-1.1). That script\naccompanies Dafermos Y. and Nikolaidi M. (2026), _Ecological stock-flow consistent\nmodelling: a theoretical and practical guide_, in D'Alessandro, Distefano and Morlin\n(eds.), _Handbook of Ecological Macroeconomics_. The full DEFINE-GLOBAL model adds\nclimate damages, QE and material balances; this notebook stays with SIMPLE 1.1.\n\nDemand is almost recursive inside each year. Consumption and investment use lagged\nincome, deposits, the profit rate and the capital stock, then `Y = CO + I`. Banks\ncreate deposits when they make loans, and the redundant check is `D = D_red` with\n`D_red = L`. Capital does not depreciate: `K_G = lag(K_G) + I_G`.\n\nThe baseline is a balanced-growth path at `g_Y = 0.029`. Because the initial\n`K_G / K_C` already equals `beta / (1 - beta)`, that ratio (and therefore `CI`) stays\nflat until a scenario changes the green investment share.\n" },
+    {
+      "id": "balance-sheet",
+      "type": "matrix",
+      "title": "DEFINE-SIMPLE balance sheet",
+      "sourceRunCellId": "baseline-run",
+      "accountingKind": "balance-sheet",
+      "columns": ["Households", "Firms", "Banks", "Sum"],
+      "sectors": ["Households", "Firms", "Banks", ""],
+      "rows": [
+        { "band": "Deposits", "label": "Deposits", "values": ["+D", "", "-D", "0"] },
+        { "band": "Loans", "label": "Conventional loans", "values": ["", "-L_C", "+L_C", "0"] },
+        { "band": "Loans", "label": "Green loans", "values": ["", "-L_G", "+L_G", "0"] },
+        { "band": "Capital", "label": "Conventional capital", "values": ["", "+K_C", "", "+K_C"] },
+        { "band": "Capital", "label": "Green capital", "values": ["", "+K_G", "", "+K_G"] },
+        { "band": "Wealth", "label": "Net worth", "values": ["-D", "-(K - L)", "-(L - D)", "-K"] },
+        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0"] }
+      ],
+      "description": "Balance-sheet matrix for households, firms and banks.",
+      "note": "Validated against the DEFINE-SIMPLE 1.1 R baseline (D = L).",
+      "more": "Households hold only deposits `D`. Firms own conventional and green capital\n(`K_C`, `K_G`) and owe conventional and green loans (`L_C`, `L_G`). Banks hold\nthose loans as assets and issue deposits, so bank net worth is `L - D`. The hidden\nequation keeps `D = L`, and therefore bank net worth at zero.\n\nFirm net worth is the real capital stock not financed by loans, `K - L`. Household\nwealth equals the deposit stock. Reading assets as positive and liabilities as\nnegative, every financial row sums across sectors to zero; the capital rows are\nthe non-financial assets that net worth has to match.\n"
+    },
+    {
+      "id": "transaction-flow",
+      "type": "matrix",
+      "title": "DEFINE-SIMPLE transactions-flow matrix",
+      "sourceRunCellId": "baseline-run",
+      "accountingKind": "transaction-flow",
+      "columns": ["Households", "Firms curr.", "Firms cap.", "Banks", "Sum"],
+      "sectors": ["Households", "Firms", "Firms", "Banks", ""],
+      "rows": [
+        { "band": "Consumption", "label": "Consumption", "values": ["-CO", "+CO", "", "", "0"] },
+        { "band": "Investment", "label": "Green investment", "values": ["", "+I_G", "-I_G", "", "0"] },
+        { "band": "Investment", "label": "Conventional investment", "values": ["", "+I_C", "-I_C", "", "0"] },
+        { "band": "Wages", "label": "Wages", "values": ["+W", "-W", "", "", "0"] },
+        { "band": "Interest", "label": "Interest on green loans", "values": ["", "-int_G * lag(L_G)", "", "+int_G * lag(L_G)", "0"] },
+        { "band": "Interest", "label": "Interest on conventional loans", "values": ["", "-int_C * lag(L_C)", "", "+int_C * lag(L_C)", "0"] },
+        { "band": "Interest", "label": "Interest on deposits", "values": ["+int_D * lag(D)", "", "", "-int_D * lag(D)", "0"] },
+        { "band": "Profits", "label": "Distributed profits", "values": ["+DP", "-DP", "", "", "0"] },
+        { "band": "Profits", "label": "Retained profits", "values": ["", "-RP", "+RP", "", "0"] },
+        { "band": "Profits", "label": "Bank profits", "values": ["+BP", "", "", "-BP", "0"] },
+        { "band": "Deposits", "label": "Change in deposits", "values": ["-d(D)", "", "", "+d(D)", "0"] },
+        { "band": "Loans", "label": "Change in green loans", "values": ["", "", "+d(L_G)", "-d(L_G)", "0"] },
+        { "band": "Loans", "label": "Change in conventional loans", "values": ["", "", "+d(L_C)", "-d(L_C)", "0"] },
+        { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0", "0"] }
+      ],
+      "description": "Transactions-flow matrix with a split current/capital account for firms.",
+      "note": "Validated against the DEFINE-SIMPLE 1.1 identities.",
+      "more": "Household disposable income is wages plus distributed firm profits plus bank\nprofits plus deposit interest. What is not consumed is added to deposits, so the\nhousehold column is the identity `D = lag(D) + Y_H - CO`.\n\nFirms sell consumption and both green and conventional investment goods, pay\nwages and green/conventional loan interest, and split profits into dividends\n`DP` and retained earnings `RP`. Retained earnings plus new green and\nconventional loans finance capital accumulation:\n`d(L_G) = I_G - beta * RP` and `d(L_C) = I_C - (1 - beta) * RP`. Banks earn\nthe spread between loan and deposit rates and distribute all profits `BP` to\nhouseholds, so they hold no own funds.\n"
+    },
+    { "id": "transaction-flow-sequence", "type": "sequence", "title": "DEFINE-SIMPLE transaction flow sequence", "source": { "kind": "matrix", "matrixCellId": "transaction-flow" }, "description": "Sequence view generated from the transactions-flow matrix at the selected simulation period." },
+    { "id": "ecology-note", "type": "markdown", "title": "Green capital and carbon intensity", "source": "Carbon intensity `CI` is a decreasing function of the lagged green-to-conventional capital ratio. Emissions are `EMIS_F = CI * Y`. In the baseline that ratio is constant, so intensity is flat and emissions grow with output.", "more": "Green investment is a share `beta` of total investment. That share responds to the\nloan-rate differential, `beta = beta_0 - beta_1 * (int_G - int_C)`. A higher\n`K_G / K_C` then lowers carbon intensity through a logistic (Hill) curve between\n`CI_min` and `CI_max`:\n\n`CI = CI_min + (CI_max - CI_min) / (1 + pow((lag(K_G) / lag(K_C)) / c_CI, k_CI))`\n\nThe 2023 calibration sets `K_G / K_C = beta / (1 - beta)`, so both capital stocks\ngrow at the same rate on the baseline and `CI` never moves. The green-investment\nscenario raises `beta` and that is what pulls intensity down.\n" },
+    {
+      "id": "equations",
+      "type": "equations",
+      "title": "DEFINE-SIMPLE 1.1 model",
+      "modelId": "define-simple",
+      "equations": [
+        { "id": "eq-comment-0-Households", "kind": "comment", "text": "Households" },
+        { "id": "eq-1-Y_H", "name": "Y_H", "desc": "Household disposable income.", "expression": "W + DP + BP + int_D * lag(D)", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-2-W", "name": "W", "desc": "Wage income.", "expression": "s_W * Y", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-3-CO", "name": "CO", "desc": "Consumption expenditures.", "expression": "c_1 * lag(Y_H) + c_2 * lag(D)", "role": "behavioral", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-4-D", "name": "D", "desc": "Household deposits (redundant vs D_red).", "expression": "lag(D) + Y_H - CO", "role": "accumulation", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-comment-5-Firms", "kind": "comment", "text": "Firms" },
+        { "id": "eq-6-Y", "name": "Y", "desc": "Output (GDP).", "expression": "CO + I", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-7-TP", "name": "TP", "desc": "Total profits of firms.", "expression": "Y - W - int_C * lag(L_C) - int_G * lag(L_G)", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-8-RP", "name": "RP", "desc": "Retained profits.", "expression": "s_F * TP", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-9-DP", "name": "DP", "desc": "Distributed profits.", "expression": "TP - RP", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-10-r", "name": "r", "desc": "Rate of profit.", "expression": "TP / K", "role": "identity", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "eq-11-I", "name": "I", "desc": "Private investment.", "expression": "(alpha_0 + alpha_1 * lag(r)) * lag(K)", "role": "behavioral", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-12-I_G", "name": "I_G", "desc": "Green investment.", "expression": "beta * I", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-13-beta", "name": "beta", "desc": "Share of green investment.", "expression": "beta_0 - beta_1 * (int_G - int_C)", "role": "behavioral", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "eq-14-I_C", "name": "I_C", "desc": "Conventional investment.", "expression": "I - I_G", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-15-K_G", "name": "K_G", "desc": "Green capital stock.", "expression": "lag(K_G) + I_G", "role": "accumulation", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-16-K_C", "name": "K_C", "desc": "Conventional capital stock.", "expression": "lag(K_C) + I_C", "role": "accumulation", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-17-K", "name": "K", "desc": "Capital stock.", "expression": "K_C + K_G", "role": "identity", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-18-L_G", "name": "L_G", "desc": "Green loans.", "expression": "lag(L_G) + I_G - beta * RP", "role": "accumulation", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-19-L_C", "name": "L_C", "desc": "Conventional loans.", "expression": "lag(L_C) + I_C + I_G - RP - (L_G - lag(L_G))", "role": "accumulation", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-20-L", "name": "L", "desc": "Total loans.", "expression": "L_C + L_G", "role": "identity", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-comment-21-Banks", "kind": "comment", "text": "Banks" },
+        { "id": "eq-22-BP", "name": "BP", "desc": "Bank profits.", "expression": "int_C * lag(L_C) + int_G * lag(L_G) - int_D * lag(D)", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-23-D_red", "name": "D_red", "desc": "Deposit identity (loans create deposits).", "expression": "L", "role": "identity", "unitMeta": { "stockFlow": "stock" } },
+        { "id": "eq-comment-24-Emissions", "kind": "comment", "text": "Emissions" },
+        { "id": "eq-25-CI", "name": "CI", "desc": "Carbon intensity.", "expression": "CI_min + (CI_max - CI_min) / (1 + pow((lag(K_G) / lag(K_C)) / c_CI, k_CI))", "role": "behavioral", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "eq-26-EMIS_F", "name": "EMIS_F", "desc": "Fossil CO2 emissions.", "expression": "CI * Y", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-comment-27-Auxiliary", "kind": "comment", "text": "Auxiliary" },
+        { "id": "eq-28-Y_P", "name": "Y_P", "desc": "Potential output.", "expression": "v * K", "role": "identity", "unitMeta": { "stockFlow": "flow" } },
+        { "id": "eq-29-u", "name": "u", "desc": "Capacity utilisation.", "expression": "Y / Y_P", "role": "identity", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "eq-30-g_Y", "name": "g_Y", "desc": "Growth rate of output.", "expression": "(Y - lag(Y)) / lag(Y)", "role": "identity", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "eq-31-lev", "name": "lev", "desc": "Firm leverage.", "expression": "L / K", "role": "identity", "unitMeta": { "stockFlow": "aux" } }
+      ],
+      "collapsed": false,
+      "more": "Consumption and investment are predetermined from lags, so Gauss–Seidel has little\nsimultaneous work once `Y = CO + I` is known. Green and conventional loans split\nthe financing of investment after retained profits: a share `beta` of retained\nearnings is attributed to green projects.\n\n`D` is the household wealth accumulation identity and is redundant given the bank\nbalance-sheet residual `D_red = L`. The solver checks `D = D_red` rather than\ndropping one of the two equations.\n"
+    },
+    { "id": "solver", "type": "solver", "title": "Solver", "modelId": "define-simple", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "0", "hiddenLeftVariable": "D", "hiddenRightVariable": "D_red", "hiddenToleranceText": "1e-6", "relativeHiddenTolerance": false }, "collapsed": true },
+    {
+      "id": "externals-equations",
+      "type": "externals",
+      "title": "Externals",
+      "modelId": "define-simple",
+      "externals": [
+        { "id": "ext-0-c_1", "name": "c_1", "desc": "Propensity to consume out of disposable income.", "kind": "constant", "valueText": "0.945359266282", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-1-c_2", "name": "c_2", "desc": "Propensity to consume out of deposits.", "kind": "constant", "valueText": "0.04", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "ext-2-int_C", "name": "int_C", "desc": "Interest rate on conventional loans.", "kind": "constant", "valueText": "0.09", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "ext-3-int_G", "name": "int_G", "desc": "Interest rate on green loans.", "kind": "constant", "valueText": "0.09", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "ext-4-int_D", "name": "int_D", "desc": "Interest rate on deposits.", "kind": "constant", "valueText": "0.04", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "ext-5-s_W", "name": "s_W", "desc": "Wage share.", "kind": "constant", "valueText": "0.55", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-6-s_F", "name": "s_F", "desc": "Retention rate of firms.", "kind": "constant", "valueText": "0.631451166469", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-7-alpha_0", "name": "alpha_0", "desc": "Autonomous investment rate.", "kind": "constant", "valueText": "0.0249884928308", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "ext-8-alpha_1", "name": "alpha_1", "desc": "Sensitivity of investment to the profit rate.", "kind": "constant", "valueText": "0.1", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-9-beta_0", "name": "beta_0", "desc": "Autonomous share of green investment.", "kind": "constant", "valueText": "0.0642658207648", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-10-beta_1", "name": "beta_1", "desc": "Sensitivity of green investment share to the loan-rate gap.", "kind": "constant", "valueText": "1", "unitMeta": { "stockFlow": "aux", "signature": { "time": 1 } } },
+        { "id": "ext-11-v", "name": "v", "desc": "Capital productivity.", "kind": "constant", "valueText": "0.149059616291", "unitMeta": { "stockFlow": "aux", "signature": { "time": -1 } } },
+        { "id": "ext-12-c_CI", "name": "c_CI", "desc": "Green-to-conventional ratio at which CI is midway.", "kind": "constant", "valueText": "0.226101737709", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-13-k_CI", "name": "k_CI", "desc": "Steepness of carbon-intensity improvement.", "kind": "constant", "valueText": "0.769001366711", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-14-CI_max", "name": "CI_max", "desc": "Maximum potential carbon intensity.", "kind": "constant", "valueText": "0.424387507013", "unitMeta": { "stockFlow": "aux" } },
+        { "id": "ext-15-CI_min", "name": "CI_min", "desc": "Minimum potential carbon intensity.", "kind": "constant", "valueText": "0.176828127922", "unitMeta": { "stockFlow": "aux" } }
+      ],
+      "collapsed": true,
+      "more": "These values are the 2023 calibration after the R Model Builder has iterated\n`Parameters_InitialValues` to a fixed point. They are frozen numbers, not the\ncircular init formulae. `c_1`, `s_F`, `alpha_0`, `v`, `c_CI` and `k_CI` are\nimplied by World Bank / BIS / Global Carbon Budget stocks for 2023 and the\nassumed balanced-growth rate of 2.9 percent.\n"
+    },
+    {
+      "id": "initial-values-equations",
+      "type": "initial-values",
+      "title": "Initial values",
+      "modelId": "define-simple",
+      "initialValues": [
+        { "id": "init-0-Y", "name": "Y", "desc": "2023 GDP (USD tn).", "valueText": "106.94" },
+        { "id": "init-1-Y_H", "name": "Y_H", "desc": "2023 household disposable income.", "valueText": "82.0454280466" },
+        { "id": "init-2-W", "name": "W", "desc": "2023 wage bill.", "valueText": "58.817" },
+        { "id": "init-3-CO", "name": "CO", "desc": "2023 consumption.", "valueText": "79.24254" },
+        { "id": "init-4-D", "name": "D", "desc": "2023 deposits.", "valueText": "99.4542" },
+        { "id": "init-5-D_red", "name": "D_red", "desc": "2023 deposit identity.", "valueText": "99.4542" },
+        { "id": "init-6-I", "name": "I", "desc": "2023 investment.", "valueText": "27.69746" },
+        { "id": "init-7-I_G", "name": "I_G", "desc": "2023 green investment.", "valueText": "1.78" },
+        { "id": "init-8-I_C", "name": "I_C", "desc": "2023 conventional investment.", "valueText": "25.91746" },
+        { "id": "init-9-beta", "name": "beta", "desc": "2023 green investment share.", "valueText": "0.0642658207648" },
+        { "id": "init-10-K_G", "name": "K_G", "desc": "2023 green capital.", "valueText": "63.1593103448" },
+        { "id": "init-11-K_C", "name": "K_C", "desc": "2023 conventional capital.", "valueText": "919.622977241" },
+        { "id": "init-12-K", "name": "K", "desc": "2023 capital stock.", "valueText": "982.782287586" },
+        { "id": "init-13-L_G", "name": "L_G", "desc": "2023 green loans.", "valueText": "6.39150579151" },
+        { "id": "init-14-L_C", "name": "L_C", "desc": "2023 conventional loans.", "valueText": "93.0626942085" },
+        { "id": "init-15-L", "name": "L", "desc": "2023 total loans.", "valueText": "99.4542" },
+        { "id": "init-16-TP", "name": "TP", "desc": "2023 firm profits.", "valueText": "39.4243819242" },
+        { "id": "init-17-RP", "name": "RP", "desc": "2023 retained profits.", "valueText": "24.8945719534" },
+        { "id": "init-18-DP", "name": "DP", "desc": "2023 distributed profits.", "valueText": "14.5298099708" },
+        { "id": "init-19-BP", "name": "BP", "desc": "2023 bank profits.", "valueText": "4.83256559767" },
+        { "id": "init-20-r", "name": "r", "desc": "2023 profit rate.", "valueText": "0.0401150716921" },
+        { "id": "init-21-CI", "name": "CI", "desc": "2023 carbon intensity.", "valueText": "0.353656255844" },
+        { "id": "init-22-EMIS_F", "name": "EMIS_F", "desc": "2023 fossil emissions (GtCO2).", "valueText": "37.82" },
+        { "id": "init-23-Y_P", "name": "Y_P", "desc": "2023 potential output.", "valueText": "146.493150685" },
+        { "id": "init-24-u", "name": "u", "desc": "2023 utilisation.", "valueText": "0.73" },
+        { "id": "init-25-g_Y", "name": "g_Y", "desc": "2023 output growth.", "valueText": "0.029" },
+        { "id": "init-26-lev", "name": "lev", "desc": "2023 leverage.", "valueText": "0.1011965735" }
+      ],
+      "collapsed": false,
+      "more": "Period 1 (displayed as the first sample point) is the 2023 data-consistent\nsnapshot from R, not a Gauss–Seidel solve of the behavioural equations. From\nperiod 2 the notebook uses the same identities as `Equations()` in\n`DEFINE_SIMPLE.R`. Putting the 2023 stocks here means lags in period 2 are the\ncalibrated 2023 values.\n"
+    },
+    { "id": "baseline-run", "type": "run", "title": "Baseline run", "description": "DEFINE-SIMPLE 1.1 baseline, 2023–2100, with hidden condition D = D_red.", "mode": "baseline", "periods": 78, "resultKey": "define_simple_baseline", "sourceModelId": "define-simple" },
+    {
+      "id": "baseline-macro-chart",
+      "type": "chart",
+      "title": "Baseline output, growth and leverage",
+      "more": "The baseline is balanced growth. Output `Y` starts at `106.94` in 2023 and reaches\nabout `966` by 2100, compounding at `g_Y = 0.029`. Utilisation `u` stays at `0.73`,\nleverage `lev` at about `0.101`, and the profit rate `r` at about `0.040`. Those\nratios are pinned by the 2023 calibration; nothing in the baseline disturbs them.\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": ["Y", "g_Y", "lev", "r", "u"],
+      "axisGroups": [
+        ["Y"],
+        ["g_Y", "lev", "r", "u"]
+      ],
+      "axisSnapTolarance": 0.5
+    },
+    {
+      "id": "baseline-emissions-chart",
+      "type": "chart",
+      "title": "Baseline green share, intensity and emissions",
+      "more": "`beta` is constant because `int_G = int_C`. Carbon intensity `CI` is therefore also\nconstant at about `0.354` GtCO2 per trillion USD. Fossil emissions `EMIS_F` grow in\nlock-step with GDP, from `37.82` Gt in 2023 to about `342` Gt in 2100. That is the\nbusiness-as-usual warning: without a rise in the green capital share, decarbonisation\nnever starts.\n",
+      "sourceRunCellId": "baseline-run",
+      "variables": ["beta", "CI", "EMIS_F"],
+      "axisGroups": [
+        ["beta"],
+        ["CI"],
+        ["EMIS_F"]
+      ],
+      "axisSnapTolarance": 0.5
+    },
+    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "more": "Use the period selector to read 2023 (period 1) against later years. Deposits `D`\nequal loans `L` at every date (the watertightness check). Green capital remains a\nsmall slice of `K` — about `63` against `920` of conventional capital in 2023 —\nwhich is why intensity never falls on this path.\n", "sourceRunCellId": "baseline-run", "variables": ["Y", "CO", "I", "D", "L", "K", "K_G", "K_C", "beta", "CI", "EMIS_F", "g_Y", "lev", "u"] },
+    { "id": "scenario-1-note", "type": "markdown", "title": "Green investment shock", "source": "This scenario cuts the green loan rate to `int_G = 0.06`, raises the conventional loan rate to `int_C = 0.10`, and lifts autonomous green investment to `beta_0 = 0.33`. The R code applies those shocks from 2027 on a path that starts in 2023; this notebook applies them after the 2100 baseline state, which is the SFCR `runScenario` convention.", "more": "In R, scenario 2 keeps 2023 initials and switches parameters at period 5 (2027).\nHere a scenario run starts from the baseline's last period, so the experiment is\n\"from the 2100 BAU state, make green finance cheaper and conventional finance\ndearer.\" The qualitative mechanism is the same: `beta` jumps, `K_G / K_C` starts\nrising, and `CI` falls, which is the SIMPLE story of green investment.\n" },
+    {
+      "id": "scenario-1-run",
+      "type": "run",
+      "title": "Scenario 1: green investment shock",
+      "mode": "scenario",
+      "scenario": {
+        "shocks": [
+          { "variables": { "int_G": { "kind": "constant", "value": 0.06 }, "int_C": { "kind": "constant", "value": 0.1 }, "beta_0": { "kind": "constant", "value": 0.33 } }, "startPeriodInclusive": 1, "endPeriodInclusive": 78 }
+        ]
+      },
+      "baselineRunCellId": "baseline-run",
+      "periods": 78,
+      "resultKey": "define_simple_s1",
+      "sourceModelId": "define-simple"
+    },
+    { "id": "scenario-1-chart", "type": "chart", "title": "Scenario 1 green share, intensity and growth", "more": "Watch `beta` step up immediately (the rate gap `int_G - int_C` is now negative, so\nit adds to `beta_0`). Carbon intensity `CI` then declines as green capital\naccumulates faster than conventional capital. Emissions `EMIS_F` combine that\nintensity path with output; leverage `lev` moves with the new loan mix.\n", "sourceRunCellId": "scenario-1-run", "variables": ["beta", "CI", "EMIS_F", "g_Y", "Y", "lev"], "axisMode": "separate" },
+    { "id": "scenario-2-note", "type": "markdown", "title": "Degrowth shock", "source": "This scenario sets `c_1 = 0.94` and `alpha_0 = 0.02`. As with scenario 1, R applies the shock from 2027 on the 2023 path; the notebook applies it from the 2100 baseline state.", "more": "The degrowth experiment lowers the propensity to consume out of income and the\nautonomous investment rate. The consumption cut is small relative to the calibrated\n`c_1` of about `0.945`; the investment cut is the main brake. Growth `g_Y` and the\nlevel of `Y` fall relative to continued BAU from the same 2100 starting point, and\nemissions fall because output is lower, not because `CI` improves.\n" },
+    {
+      "id": "scenario-2-run",
+      "type": "run",
+      "title": "Scenario 2: degrowth shock",
+      "mode": "scenario",
+      "scenario": {
+        "shocks": [
+          { "variables": { "c_1": { "kind": "constant", "value": 0.94 }, "alpha_0": { "kind": "constant", "value": 0.02 } }, "startPeriodInclusive": 1, "endPeriodInclusive": 78 }
+        ]
+      },
+      "baselineRunCellId": "baseline-run",
+      "periods": 78,
+      "resultKey": "define_simple_s2",
+      "sourceModelId": "define-simple"
+    },
+    { "id": "scenario-2-chart", "type": "chart", "title": "Scenario 2 output, growth and emissions", "more": "Output and investment step down with the lower `alpha_0`. Carbon intensity `CI`\nbarely moves, because `beta` is unchanged, so any emissions reduction is a scale\neffect. Compare that with scenario 1, where the same engine decarbonises through\ncomposition (`K_G / K_C`) rather than through a smaller economy.\n", "sourceRunCellId": "scenario-2-run", "variables": ["Y", "g_Y", "CO", "I", "EMIS_F", "CI"], "axisMode": "separate" }
+  ]
+}

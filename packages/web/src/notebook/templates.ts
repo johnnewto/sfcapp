@@ -4,6 +4,7 @@ import abmSimNotebookYaml from "./templates/abm_sim.notebook.yaml?raw";
 import io3PcNotebookYaml from "./templates/3io-pc.notebook.yaml?raw";
 import bmwNotebookYaml from "./templates/bmw.notebook.yaml?raw";
 import eco3IoPcNotebookYaml from "./templates/eco-3io-pc.notebook.yaml?raw";
+import defineSimpleNotebookYaml from "./templates/define_simple.notebook.yaml?raw";
 import endogenousMoneyNotebookYaml from "./templates/endogenous-money.notebook.yaml?raw";
 import gl2PcNotebookYaml from "./templates/gl2-pc.notebook.yaml?raw";
 import ioPcNotebookYaml from "./templates/io-pc.notebook.yaml?raw";
@@ -28,6 +29,7 @@ export type NotebookTemplateId =
   | "abm-sim"
   | "bmw"
   | "eco-3io-pc"
+  | "define-simple"
   | "endogenous-money"
   | "gl2-pc"
   | "io-pc"
@@ -62,6 +64,7 @@ const NOTEBOOK_TEMPLATE_YAML: Record<NotebookTemplateId, string> = {
   bmw: bmwNotebookYaml,
   "3io-pc": io3PcNotebookYaml,
   "eco-3io-pc": eco3IoPcNotebookYaml,
+  "define-simple": defineSimpleNotebookYaml,
   "endogenous-money": endogenousMoneyNotebookYaml,
   "gl2-pc": gl2PcNotebookYaml,
   "io-pc": ioPcNotebookYaml,
@@ -118,6 +121,12 @@ export const NOTEBOOK_TEMPLATES: Record<NotebookTemplateId, NotebookTemplateDefi
     label: "ECO-3IO-PC",
     description:
       "Florence keynote ECO-3IO-PC notebook with three-industry IO structure, ecological stocks and flows, and a temperature-feedback scenario."
+  },
+  "define-simple": {
+    id: "define-simple",
+    label: "DEFINE-SIMPLE",
+    description:
+      "DEFINE-SIMPLE 1.1 notebook with households, firms and banks, green vs conventional capital, and carbon-intensity scenarios."
   },
   "endogenous-money": {
     id: "endogenous-money",

@@ -7,6 +7,7 @@ import { buildEditorStateForNotebookModel } from "../src/notebook/modelSections"
 import { getNotebookTemplateDocument } from "../src/notebook/templates";
 
 type TemplateId =
+  | "define-simple"
   | "endogenous-money"
   | "interbank-liquidity-risk"
   | "opensimplest"
@@ -25,6 +26,28 @@ interface TemplateSmokeCase {
 }
 
 const TEMPLATE_CASES: TemplateSmokeCase[] = [
+  {
+    templateId: "define-simple",
+    baselineRunCellId: "baseline-run",
+    scenarioRunCellId: "scenario-1-run",
+    baselineExpectations(result) {
+      expect(result.options.periods).toBe(78);
+      expect(result.series.Y.length).toBe(78);
+      expect(result.series.EMIS_F.length).toBe(78);
+      expect(Number.isFinite(result.series.Y.at(-1) ?? NaN)).toBe(true);
+      expect(result.series.Y[0] ?? NaN).toBeCloseTo(106.94, 4);
+      expect(result.series.g_Y.at(-1) ?? NaN).toBeCloseTo(0.029, 5);
+      expect(Math.abs((result.series.D.at(-1) ?? NaN) - (result.series.D_red.at(-1) ?? NaN))).toBeLessThan(
+        1e-6
+      );
+    },
+    scenarioExpectations(result, baselineResult) {
+      expect(result.options.periods).toBe(78);
+      expect(result.series.beta.at(-1) ?? NaN).toBeGreaterThan(baselineResult.series.beta.at(-1) ?? NaN);
+      expect(result.series.CI.at(-1) ?? NaN).toBeLessThan(baselineResult.series.CI.at(-1) ?? NaN);
+      expect(Number.isFinite(result.series.EMIS_F.at(-1) ?? NaN)).toBe(true);
+    }
+  },
   {
     templateId: "endogenous-money",
     baselineRunCellId: "baseline-run",

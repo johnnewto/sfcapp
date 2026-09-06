@@ -435,15 +435,15 @@ cells:
         shocks:
           - rangeInclusive:
               - 10
-              - 50
+              - 90
             variables:
               alpha1:
                 kind: constant
                 value: 0.7
             startPeriodInclusive: 10
-            endPeriodInclusive: 50
+            endPeriodInclusive: 90
       baselineRunCellId: baseline-run
-      periods: 50
+      periods: 90
       resultKey: io_pc_s2
       sourceModelId: io-pc
       baselineStartPeriod: 40

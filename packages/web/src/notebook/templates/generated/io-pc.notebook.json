@@ -3,7 +3,7 @@
   "title": "Model IO-PC Notebook",
   "metadata": { "version": 1, "template": "io-pc" },
   "cells": [
-    { "id": "intro", "type": "markdown", "title": "Overview", "source": "This notebook ports Marco Veronese Passarella's Model IO-PC from the Six Lectures on SFC Models course (`references/six_lectures_on_sfc_models/IOPC_model.R`). It extends Godley and Lavoie Model PC with a two-industry input-output structure, fixed sectoral prices, and an inflation-tax consumption block." },
+    { "id": "intro", "type": "markdown", "title": "Overview", "source": "This notebook ports Marco Veronese Passarella's Model IO-PC from the Six Lectures on  SFC Models course (`references/six_lectures_on_sfc_models/IOPC_model.R`).  It extends Godley and Lavoie Model PC with a two-industry input-output structure,  fixed sectoral prices, and an inflation-tax consumption block.\n", "more": "**Model IO-PC** is the input-output extension of Godley & Lavoie's Model PC\n(_Monetary Economics_, chapter 4). The macro skeleton — households choosing\nbetween cash and government bills, a government that taxes and issues bills, and\na central bank — is exactly Model PC. What IO-PC adds is a **production\nstructure**: the single \"firms\" sector is split into **two industries** whose\noutputs are used both for final demand and as **intermediate inputs** to each\nother.\n\nFollowing the _Six Lectures_ section 3 and the Florence keynote (Model 3IO-PC,\nhere reduced to two industries), the extra assumptions are:\n\n- two industries, each producing one good with one fixed technique;\n- only **circulating capital** (intermediate inputs), no fixed capital;\n- **fixed technical coefficients** collected in the matrix `A`;\n- **fixed unit prices** `p1`, `p2` (set exogenously rather than by reproduction);\n- the composition of consumption (`beta1_c`, `beta2_c`) and of government\n  spending (`beta1_g`, `beta2_g`) is exogenous.\n\nBecause the chosen prices make the consumer price index `p_c = 1`, the aggregate\npath of IO-PC (`y`, `yd`, `cons`, `v`) reproduces Model PC's, while the new\ninput-output block lets us see **how that GDP is produced** — the cross-industry\ndemands for inputs that a purely aggregate model hides.\n" },
     {
       "id": "balance-sheet",
       "type": "matrix",
@@ -19,7 +19,8 @@
         { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0", "0"] }
       ],
       "description": "Balance-sheet matrix for the IO-PC macro structure.",
-      "note": "Validated against the baseline simulation in the Six Lectures R fixture."
+      "note": "Validated against the baseline simulation in the Six Lectures R fixture.",
+      "more": "The **balance sheet** is identical to Model PC's: splitting firms into industries\nchanges _production_, not the _financial_ structure. Households hold their wealth\n`v` as cash `h_h` and bills `b_h`; the government owes the bill stock `b_s`; the\ncentral bank holds bills `b_cb` against the cash it has issued `h_s`.\n\nFirms carry no balance-sheet entry — they own no fixed capital and hold no\nfinancial assets (all income is distributed). Reading across each row sums to\nzero, and each column closes on net worth. This is why the Florence keynote\nnotes that \"the macro-accounting structure of Model 3IO-PC is identical to that\nof Model PC\": the industry detail lives in the input-output table, not here.\n"
     },
     {
       "id": "transaction-flow",
@@ -41,7 +42,8 @@
         { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0", "0"] }
       ],
       "description": "Transactions-flow matrix for the IO-PC macro structure.",
-      "note": "Validated against the baseline simulation in the Six Lectures R fixture."
+      "note": "Validated against the baseline simulation in the Six Lectures R fixture.",
+      "more": "The **transactions-flow matrix** is also the Model PC matrix. Every row is a\npayment out of one sector (minus) and a receipt into another (plus), so rows and\ncolumns each sum to zero.\n\nNote that consumption and government spending appear here in **nominal** terms,\n`cons * p_c` and `g * p_g`: the real quantities `cons` and `g` are valued at the\naverage prices implied by their industry composition. The Florence note explains\nwhy intermediate flows are _not_ shown here — intermediate consumption is an\ninternal exchange within the firm sector, so the inter-industry entries would\ncancel at the level of sectoral balances. Cross-industry interdependence is\ntherefore presented separately, in the **input-output table** below.\n"
     },
     { "id": "transaction-flow-sequence", "type": "sequence", "title": "IO-PC transaction flow sequence", "source": { "kind": "matrix", "matrixCellId": "transaction-flow" }, "description": "Sequence view generated from the transactions-flow matrix at the selected simulation period." },
     {
@@ -70,9 +72,10 @@
         { "id": "eq-17-k1", "name": "k1", "desc": "Industry 1 inputs used in production.", "expression": "a11 * x1 + a12 * x2", "role": "identity", "unitMeta": { "stockFlow": "flow", "signature": { "items": 1, "time": -1 } } },
         { "id": "eq-18-k2", "name": "k2", "desc": "Industry 2 inputs used in production.", "expression": "a21 * x1 + a22 * x2", "role": "identity", "unitMeta": { "stockFlow": "flow", "signature": { "items": 1, "time": -1 } } }
       ],
-      "collapsed": false
+      "collapsed": false,
+      "more": "The equations layer Model PC's monetary block under a new input-output block.\nThe genuinely new pieces (Six Lectures equations 12–20, Florence equations\n13–19) are:\n\n- **Final demand by industry** (eq. 17): `d1 = beta1_c * cons + beta1_g * g` and\n  likewise `d2`. Real consumption and government spending are split across the\n  two goods by the fixed composition shares.\n- **Gross output** (eq. 18): `x = A * x + d`, i.e.\n  `x1 = a11 * x1 + a12 * x2 + d1` and `x2 = a21 * x1 + a22 * x2 + d2`. Each\n  industry must produce enough to cover both final demand and the inputs other\n  industries need — the Leontief inverse `inv(I - A)` solved implicitly by the\n  Gauss–Seidel iteration.\n- **Nominal GDP** (eq. 1.A, replacing PC's `Y = C + G`):\n  `y = p1 * d1 + p2 * d2` — GDP is the value of **final** demand, not gross\n  output.\n- **Price indices** (eqs. 15–16): `p_c = p1 * beta1_c + p2 * beta2_c` and\n  `p_g = p1 * beta1_g + p2 * beta2_g`.\n- **Real consumption without monetary illusion** (eq. 19):\n  `cons = alpha1 * ((yd / p_c) - infl) + alpha2 * lag(v) / lag(p_c)`, where the\n  inflation tax `infl = (d(p_c) / lag(p_c)) * (lag(v) / p_c)` protects real\n  wealth (Godley & Lavoie §9.3.1).\n- **Input use** (for the IO table and Figures 4–7): `k1 = a11 * x1 + a12 * x2`\n  and `k2 = a21 * x1 + a22 * x2` are the total amounts of each industry's product\n  absorbed as intermediate inputs.\n\nEverything else (`yd`, `v`, `h_h`, `b_h`, `t`, `b_s`, `h_s`, `b_cb`) is Model PC\nunchanged.\n"
     },
-    { "id": "solver", "type": "solver", "title": "Solver", "modelId": "io-pc", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "0", "hiddenLeftVariable": "h_h", "hiddenRightVariable": "h_s", "hiddenToleranceText": "1e-6", "relativeHiddenTolerance": false }, "collapsed": true },
+    { "id": "solver", "type": "solver", "title": "Solver", "modelId": "io-pc", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "0", "hiddenLeftVariable": "h_h", "hiddenRightVariable": "h_s", "hiddenToleranceText": "1e-6", "relativeHiddenTolerance": false }, "collapsed": true, "more": "IO-PC is solved period by period with **Gauss–Seidel** iteration: within each\nperiod the simultaneous block (output, demand, consumption, portfolio) is\niterated to convergence, using lagged stocks from the previous period. The\nimplicit `x = A * x + d` system is resolved the same way the R fixture resolves\nit by repeated iteration rather than an explicit matrix inverse.\n\nThe **hidden (redundant) equation** is `h_h = h_s` — the cash households hold\nequals the cash the central bank has supplied. As in Model PC it is never imposed\non the solver; it is checked each period to tolerance `1e-6`. That it holds is\nthe numerical proof that the IO extension has not broken stock-flow consistency\n(the R code's \"Good news! The model is watertight!\").\n" },
     {
       "id": "externals-equations",
       "type": "externals",
@@ -98,7 +101,8 @@
         { "id": "ext-16-a21", "name": "a21", "desc": "Industry 1 input per unit of industry 2 output.", "kind": "constant", "valueText": "0.21", "unitMeta": { "stockFlow": "aux" } },
         { "id": "ext-17-a22", "name": "a22", "desc": "Industry 2 input per unit of industry 2 output.", "kind": "constant", "valueText": "0.22", "unitMeta": { "stockFlow": "aux" } }
       ],
-      "collapsed": true
+      "collapsed": true,
+      "more": "These are the exogenous parameters, matching `IOPC_model.R`:\n\n- Monetary block (as in Model PC): `r = 0.025`, `g = 20`, `alpha1 = 0.6`,\n  `alpha2 = 0.4`, `theta = 0.2`, `lambda0 = 0.635`, `lambda1 = 5`,\n  `lambda2 = 0.01`.\n- **Prices**: `p1 = 1.02`, `p2 = 0.98`. These straddle 1, and with the symmetric\n  consumption shares give `p_c = 1` exactly.\n- **Composition shares**: consumption is split evenly\n  (`beta1_c = beta2_c = 0.5`); government leans slightly to industry 2\n  (`beta1_g = 0.48`, `beta2_g = 0.52`), so `p_g = 0.9992 ≈ 1`.\n- **Technical coefficients** `A`: `a11 = 0.11`, `a12 = 0.12`, `a21 = 0.21`,\n  `a22 = 0.22`. Industry 2's product is used more intensively as an input\n  (column sums `a11 + a21 = 0.32`, `a12 + a22 = 0.34`), which is why industry 2\n  ends up the larger producer despite similar final demand.\n"
     },
     {
       "id": "initial-values-equations",
@@ -115,12 +119,30 @@
         { "id": "init-6-p_c", "name": "p_c", "desc": "Initial consumer price index.", "valueText": "1" },
         { "id": "init-7-p_g", "name": "p_g", "desc": "Initial government purchase price index.", "valueText": "1" }
       ],
-      "collapsed": false
+      "collapsed": false,
+      "more": "The model starts essentially **at** its Model PC stationary state: wealth\n`v = 86.49` already split into bills `b_h = 64.87` and cash `h_h = 21.62`, with\nthe government bill stock `b_s = 86.49` held partly by the central bank\n(`b_cb = 21.62`). Prices start at `p_c = p_g = 1`. Because the economy begins in\nbalance, the **baseline is essentially flat** — it is the reference against which\nthe interest-rate and consumption shocks are read.\n"
     },
     { "id": "baseline-run", "type": "run", "title": "Baseline run", "description": "Baseline IO-PC simulation with hidden-equation condition h_h = h_s.", "mode": "baseline", "periods": 90, "resultKey": "io_pc_baseline", "sourceModelId": "io-pc" },
-    { "id": "baseline-chart", "type": "chart", "title": "Baseline macro and IO variables", "sourceRunCellId": "baseline-run", "variables": ["y", "yd", "cons", "v", "p_c", "x1", "x2"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "sourceRunCellId": "baseline-run", "variables": ["y", "yd", "cons", "v", "b_h", "h_h", "p_c", "p1", "p2", "x1", "x2", "d1", "d2"] },
-    { "id": "scenario-1-note", "type": "markdown", "title": "Interest-rate scenario", "source": "This scenario raises the bills rate `r` from `0.025` to `0.035` from period 10 onward, matching the first experiment in `IOPC_model.R` (R scenario 2). The notebook uses `runScenario` from the baseline terminal state." },
+    { "id": "baseline-chart", "type": "chart", "title": "Baseline macro and IO variables", "more": "In the baseline every aggregate is stationary. GDP settles at `y ≈ 106.4`,\ndisposable income and consumption at `yd ≈ cons ≈ 86.4`, and wealth at\n`v ≈ 86.4` — the same numbers as Model PC's steady state (Six Lectures reports\nGDP ≈ 106.5), because with `p_c = 1` the price layer is transparent to the\naggregate block.\n\nWhat is _new_ is the pair `x1` and `x2`: gross outputs sit at `x1 ≈ 71.2` and\n`x2 ≈ 87.9`, **above** their final demands (`d1 ≈ 52.8`, `d2 ≈ 53.6`) by exactly\nthe intermediate inputs each industry must supply. The gap between gross output\nand final demand is the input-output content the aggregate model cannot show.\n", "sourceRunCellId": "baseline-run", "variables": ["y", "yd", "cons", "v", "p_c", "x1", "x2"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "more": "The table lists the monetary aggregates alongside the industry variables. Two\nchecks worth making against the references:\n\n- `y = p1 * d1 + p2 * d2`: GDP is the **value of final demand**, ≈ 106.4.\n- Gross output exceeds final demand: `x1 > d1` and `x2 > d2`, with the\n  differences equal to the intermediate uses `k1` and `k2`.\n\nThe prices `p1`, `p2` and the average index `p_c` stay fixed, confirming the\nfixed-price assumption.\n", "sourceRunCellId": "baseline-run", "variables": ["y", "yd", "cons", "v", "b_h", "h_h", "p_c", "p1", "p2", "x1", "x2", "d1", "d2"] },
+    {
+      "id": "io-table",
+      "type": "matrix",
+      "title": "Input-output table",
+      "sourceRunCellId": "baseline-run",
+      "columns": ["Industry 1", "Industry 2", "Final demand", "Output"],
+      "sectors": ["Industry 1", "Industry 2", "", ""],
+      "rows": [
+        { "band": "out1", "label": "Industry 1 output", "values": ["+p1 * a11 * x1", "+p1 * a12 * x2", "+p1 * d1", "+p1 * x1"] },
+        { "band": "out2", "label": "Industry 2 output", "values": ["+p2 * a21 * x1", "+p2 * a22 * x2", "+p2 * d2", "+p2 * x2"] },
+        { "band": "va", "label": "Value added", "values": ["p1 * x1 - p1 * a11 * x1 - p2 * a21 * x1", "p2 * x2 - p1 * a12 * x2 - p2 * a22 * x2", "+y", ""] },
+        { "band": "output", "label": "Output", "values": ["+p1 * x1", "+p2 * x2", "", "+y"] }
+      ],
+      "description": "Nominal input-output table for the two-industry economy, following Table 3 of the Florence 2025 keynote (`keynote_speech_Florence`) and the detailed IO visualisation mentioned in Six Lectures section 3.",
+      "note": "Each producing-industry row splits its output into intermediate sales to each industry (`p_i * a_ij * x_j`), final demand (`p_i * d_i`), and total output (`p_i * x_i`). Column totals (intermediate inputs plus value added) equal each industry's output; total value added equals nominal GDP `y`.",
+      "more": "This is the **input-output table** of the economy — Table 3 of the Florence\nkeynote (reduced to two industries) and the \"more detailed visualisation\" the\nSix Lectures section 3 refers to. It is evaluated at the selected period and read\nas follows.\n\nEach **producing-industry row** splits that industry's output three ways: sales\nof its product as an intermediate input to industry 1 (`p_i * a_i1 * x1`), to\nindustry 2 (`p_i * a_i2 * x2`), and to **final demand** (`p_i * d_i`); the last\ncolumn is total nominal output `p_i * x_i`. At the baseline steady state:\n\n- **Industry 1 output (`72.61`)** = `7.99` (to industry 1) + `10.76`\n  (to industry 2) + `53.86` (final demand).\n- **Industry 2 output (`86.14`)** = `14.65` + `18.95` + `52.54`.\n\nReading **down a column** gives the cost structure of each industry: intermediate\ninputs plus **value added** equal that industry's output. Value added is the\nresidual `output - intermediate inputs` (here there are no taxes on products, and\nin the fuller Florence table it splits further into wages and profits):\n\n- `VA1 = 49.97`, `VA2 = 56.43`, and **`VA1 + VA2 = 106.40 = y`** — total value\n  added equals nominal GDP, the fundamental IO identity.\n\nTotal **gross output** is `72.61 + 86.14 = 158.75`, of which `52.35` is\nintermediate consumption circulating _within_ the firm sector; only the `106.40`\nof value added / final demand counts as GDP. This is precisely the distinction\nbetween gross output and net product that the IO extension makes visible.\n"
+    },
+    { "id": "scenario-1-note", "type": "markdown", "title": "Interest-rate scenario", "source": "This scenario raises the bills rate `r` from `0.025` to `0.035` from period 10 onward, matching the first experiment in `IOPC_model.R` (R scenario 2). The notebook uses `runScenario` from the baseline terminal state.", "more": "Scenario 1 reproduces the first experiment in `IOPC_model.R` (R scenario 2): the\nbills rate `r` is raised permanently from `0.025` to `0.035` from period 10. As\nin Model PC, a higher rate makes bills more attractive and reshuffles household\nportfolios, while the extra interest income from the government works its way\ninto demand.\n" },
     {
       "id": "scenario-1-run",
       "type": "run",
@@ -134,21 +156,23 @@
       "baselineRunCellId": "baseline-run",
       "periods": 90,
       "resultKey": "io_pc_s1",
-      "sourceModelId": "io-pc"
+      "sourceModelId": "io-pc",
+      "baselineStartPeriod": 40
     },
-    { "id": "scenario-1-chart", "type": "chart", "title": "Scenario 1 portfolio and macro adjustment", "sourceRunCellId": "scenario-1-run", "variables": ["yd", "cons", "b_h", "h_h"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
     {
       "id": "scenario-1-figure-1",
       "type": "chart",
       "title": "Figure 1: portfolio shares after rate rise",
       "description": "Money and bill shares of household wealth (`100 * h_h / v`, `100 * b_h / v`) following the interest-rate shock in scenario 1, matching Figure 1 in IOPC_model.R.",
+      "more": "**Figure 1** tracks the portfolio response: the share of money balances\n`100 * h_h / v` and the share of bills `100 * b_h / v`. With `lambda1 = 5`, the\nhigher rate pulls households toward **bills** and out of **cash** — the bill\nshare steps up by roughly one percentage point (the \"100 basis-point\" move of the\nR figure) and the money share falls by the same, then both settle at their new\nlevels. The two shares always sum to 100% because `h_h + b_h = v` by the cash\nidentity.\n",
       "sourceRunCellId": "scenario-1-run",
       "series": [
         { "expression": "100 * h_h / v", "label": "Share of money balances" },
         { "expression": "100 * b_h / v", "label": "Share of bills" }
       ],
-      "axisMode": "separate",
+      "axisMode": "shared",
       "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
       "timeRangeInclusive": [2, 25]
     },
     {
@@ -156,6 +180,7 @@
       "type": "chart",
       "title": "Figure 2: disposable income and consumption after rate rise",
       "description": "Disposable income and real consumption following the interest-rate shock (R scenario 2, periods 2–45), matching Figure 2 in IOPC_model.R.",
+      "more": "**Figure 2** shows disposable income `yd` and consumption `cons` after the rate\nrise. The higher rate raises government interest payments on the larger desired\nbill stock, which lifts household disposable income; consumption follows it up\ntoward a **higher** stationary state. This is the Model PC result — a higher\ninterest rate is ultimately expansionary here because it channels more interest\nincome to households — now carried through unchanged by the IO layer.\n",
       "sourceRunCellId": "scenario-1-run",
       "series": [
         { "expression": "yd", "label": "Disposable income" },
@@ -163,9 +188,10 @@
       ],
       "axisMode": "shared",
       "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
       "timeRangeInclusive": [2, 45]
     },
-    { "id": "scenario-2-note", "type": "markdown", "title": "Consumption propensity scenario", "source": "This scenario raises `alpha1` from `0.6` to `0.7` from period 10 onward, matching the second experiment in `IOPC_model.R` (R scenario 3)." },
+    { "id": "scenario-2-note", "type": "markdown", "title": "Consumption propensity scenario", "source": "This scenario raises `alpha1` from `0.6` to `0.7` from period 10 onward, matching the second experiment in `IOPC_model.R` (R scenario 3).", "more": "Scenario 2 reproduces the second experiment in `IOPC_model.R` (R scenario 3): the\npropensity to consume out of income `alpha1` is raised from `0.6` to `0.7` from\nperiod 10. This is the experiment that drives the input-output figures below,\nbecause changing aggregate demand changes the whole production structure.\n" },
     {
       "id": "scenario-2-run",
       "type": "run",
@@ -179,23 +205,25 @@
       "baselineRunCellId": "baseline-run",
       "periods": 90,
       "resultKey": "io_pc_s2",
-      "sourceModelId": "io-pc"
+      "sourceModelId": "io-pc",
+      "baselineStartPeriod": 40
     },
-    { "id": "scenario-2-chart", "type": "chart", "title": "Scenario 2 GDP and IO response", "sourceRunCellId": "scenario-2-run", "variables": ["y", "cons", "x1", "x2"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
     {
       "id": "scenario-2-figure-3",
       "type": "chart",
       "title": "Figure 3: GDP after higher propensity to consume",
       "description": "Nominal GDP `y` following the consumption-propensity shock (R scenario 3, periods 2–60). R also draws pre- and post-shock steady-state reference lines; use the early and late portions of the path for comparison.",
+      "more": "**Figure 3** plots nominal GDP `y` after the rise in `alpha1`. Higher consumption\ndemand raises GDP on impact, then the economy transitions to a **new, higher**\nstationary state — in the R run, GDP climbs from roughly `106` toward the mid-\n`120`s. The early and late portions of the path correspond to the old and new\nsteady-state reference lines drawn in the R figure.\n",
       "sourceRunCellId": "scenario-2-run",
       "series": [
         { "expression": "y", "label": "National income" }
       ],
       "axisMode": "shared",
       "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
       "timeRangeInclusive": [2, 60]
     },
-    { "id": "figures-4-5-note", "type": "markdown", "title": "Figures 4 and 5", "source": "Figures 4 and 5 in `IOPC_model.R` overlay industry input demand at sector prices for the rate shock (R scenario 2) and the consumption shock (R scenario 3). Each figure is split into two charts here (`k1 * p1` for industry 1, `k2 * p2` for industry 2) because chart cells read a single run at a time." },
+    { "id": "figures-4-5-note", "type": "markdown", "title": "Figures 4 and 5", "source": "Figures 4 and 5 in `IOPC_model.R` overlay industry input demand at sector prices for the rate shock (R scenario 2) and the consumption shock (R scenario 3). Each figure is split into two charts here (`k1 * p1` for industry 1, `k2 * p2` for industry 2) because chart cells read a single run at a time.", "more": "Figures 4 and 5 (`IOPC_model.R`) follow the **intermediate input demand** of each\nindustry after each shock: `k1 * p1` for industry 1 and `k2 * p2` for industry 2,\nwhere `k1`, `k2` are the total amounts of each product used as inputs. Each figure\nis split here into a rate-shock version (from Scenario 1) and a consumption-shock\nversion (from Scenario 2), because a chart cell reads a single run. The\nconsumption shock moves input demand much more than the rate shock, since it acts\ndirectly on the scale of production.\n" },
     {
       "id": "figure-4-rate-shock",
       "type": "chart",
@@ -207,6 +235,7 @@
       ],
       "axisMode": "shared",
       "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
       "timeRangeInclusive": [2, 45]
     },
     {
@@ -220,6 +249,7 @@
       ],
       "axisMode": "shared",
       "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
       "timeRangeInclusive": [2, 45]
     },
     {
@@ -233,6 +263,7 @@
       ],
       "axisMode": "shared",
       "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
       "timeRangeInclusive": [2, 45]
     },
     {
@@ -246,6 +277,40 @@
       ],
       "axisMode": "shared",
       "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
+      "timeRangeInclusive": [2, 45]
+    },
+    { "id": "figures-6-7-note", "type": "markdown", "title": "Figures 6 and 7", "source": "Figures 6 and 7 in `IOPC_model.R` decompose each industry's nominal output into intermediate sales to industry 1, intermediate sales to industry 2, and final demand, following the consumption-propensity shock (R scenario 3). R draws these as stacked bars; here each component is a separate line on a shared axis, and the three lines sum to total nominal output (`p1 * x1` for industry 1, `p2 * x2` for industry 2).", "more": "Figures 6 and 7 open up _where each industry's output goes_ under the consumption\nshock (R scenario 3) — the disaggregated counterpart of Figure 3. They mirror the\n**rows** of the input-output table: industry 1's output decomposes into inputs\nsold to industry 1, inputs sold to industry 2, and final demand, and likewise for\nindustry 2. R stacks these as bars summing to total output; here each component is\na separate line and the three add up to `p1 * x1` (Figure 6) or `p2 * x2`\n(Figure 7). After the shock, the **final-demand** component rises most, but the\n**intermediate** components also grow because higher output of each good requires\nmore of both inputs — the cross-industry multiplier the IO structure adds to\nModel PC.\n" },
+    {
+      "id": "figure-6-production-1",
+      "type": "chart",
+      "title": "Figure 6: industry 1 output decomposition (consumption shock)",
+      "description": "Nominal industry 1 output split into intermediate sales to industry 1 (`p1 * a11 * x1`), intermediate sales to industry 2 (`p1 * a12 * x2`), and final demand (`p1 * d1`) under the consumption-propensity scenario (R scenario 3, periods 2–45).",
+      "sourceRunCellId": "scenario-2-run",
+      "series": [
+        { "expression": "p1 * a11 * x1", "label": "Inputs for industry 1" },
+        { "expression": "p1 * a12 * x2", "label": "Inputs for industry 2" },
+        { "expression": "p1 * d1", "label": "Final demand for product 1" }
+      ],
+      "axisMode": "shared",
+      "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
+      "timeRangeInclusive": [2, 45]
+    },
+    {
+      "id": "figure-7-production-2",
+      "type": "chart",
+      "title": "Figure 7: industry 2 output decomposition (consumption shock)",
+      "description": "Nominal industry 2 output split into intermediate sales to industry 1 (`p2 * a21 * x1`), intermediate sales to industry 2 (`p2 * a22 * x2`), and final demand (`p2 * d2`) under the consumption-propensity scenario (R scenario 3, periods 2–45).",
+      "sourceRunCellId": "scenario-2-run",
+      "series": [
+        { "expression": "p2 * a21 * x1", "label": "Inputs for industry 1" },
+        { "expression": "p2 * a22 * x2", "label": "Inputs for industry 2" },
+        { "expression": "p2 * d2", "label": "Final demand for product 2" }
+      ],
+      "axisMode": "shared",
+      "axisSnapTolarance": 0.5,
+      "referenceTrace": "baseline",
       "timeRangeInclusive": [2, 45]
     }
   ]

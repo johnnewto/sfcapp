@@ -15,15 +15,18 @@ import { formatNotebookCurrentValue } from "./NotebookCurrentValue";
 
 type EquationRow = [string, string] | [string, string, string];
 
-type InspectableNameProps = {
+type InspectableNameSharedProps = {
   currentValues?: Record<string, number | undefined>;
   forceTokenClass?: string;
   highlightedVariable?: string | null;
-  name: string;
   onInspect?: (variableName: string) => void;
   parameterNames: Set<string>;
   variableDescriptions: VariableDescriptions;
   variableUnitMetadata: VariableUnitMetadata;
+};
+
+type InspectableNameProps = InspectableNameSharedProps & {
+  name: string;
 };
 
 function asEquationRows(value: unknown): EquationRow[] {
@@ -62,7 +65,7 @@ function tickEquations(tick: Record<string, unknown>): EquationRow[] {
   return [];
 }
 
-function renderTickLabel(tick: unknown, nameProps: InspectableNameProps): ReactNode {
+function renderTickLabel(tick: unknown, nameProps: InspectableNameSharedProps): ReactNode {
   if (tick == null || typeof tick !== "object") {
     return "(invalid tick)";
   }
@@ -300,14 +303,7 @@ function SeriesRow({
   currentValues: Record<string, number | undefined>;
   description?: string;
   name: string;
-  nameProps: {
-    currentValues?: Record<string, number | undefined>;
-    highlightedVariable?: string | null;
-    onInspect?: (variableName: string) => void;
-    parameterNames: Set<string>;
-    variableDescriptions: VariableDescriptions;
-    variableUnitMetadata: VariableUnitMetadata;
-  };
+  nameProps: InspectableNameSharedProps;
   variableDescriptions: VariableDescriptions;
   variableUnitMetadata: VariableUnitMetadata;
 }) {
@@ -467,7 +463,7 @@ export function AbmModelCellView({
     ? (selectedVariable: string) => onVariableInspectRequest({ selectedVariable })
     : undefined;
 
-  const nameProps = {
+  const nameProps: InspectableNameSharedProps = {
     currentValues,
     highlightedVariable,
     onInspect: handleInspect,

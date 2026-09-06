@@ -1,0 +1,416 @@
+format: sfcr-notebook-yaml
+formatVersion: 1
+id: define-simple-notebook
+title: DEFINE-SIMPLE 1.1
+metadata:
+  version: 1
+  template: define-simple
+cells:
+  - markdown:
+      id: intro
+      title: Overview
+      source: This notebook ports DEFINE-SIMPLE 1.1 (Dafermos and Nikolaidi 2026). Firms, households and banks interact in a growing global economy whose carbon intensity falls when green capital rises relative to conventional capital. Period 1 is calendar year 2023; the baseline runs through 2100.
+      more: |
+        **DEFINE-SIMPLE** is the teaching core of the DEFINE (Dynamic Ecosystem-FINance-Economy)
+        framework. It keeps three sectors — households, firms and banks — and one ecological
+        channel: fossil CO2 emissions track output through a carbon intensity that depends on
+        the green-to-conventional capital ratio.
+
+        The executable equations and 2023 calibration come from the Model Builder export in
+        `references/define-simple-1.1/DEFINE_SIMPLE.R` (DEFINE-model/SIMPLE-1.1). That script
+        accompanies Dafermos Y. and Nikolaidi M. (2026), _Ecological stock-flow consistent
+        modelling: a theoretical and practical guide_, in D'Alessandro, Distefano and Morlin
+        (eds.), _Handbook of Ecological Macroeconomics_. The full DEFINE-GLOBAL model adds
+        climate damages, QE and material balances; this notebook stays with SIMPLE 1.1.
+
+        Demand is almost recursive inside each year. Consumption and investment use lagged
+        income, deposits, the profit rate and the capital stock, then `Y = CO + I`. Banks
+        create deposits when they make loans, and the redundant check is `D = D_red` with
+        `D_red = L`. Capital does not depreciate: `K_G = lag(K_G) + I_G`.
+
+        The baseline is a balanced-growth path at `g_Y = 0.029`. Because the initial
+        `K_G / K_C` already equals `beta / (1 - beta)`, that ratio (and therefore `CI`) stays
+        flat until a scenario changes the green investment share.
+  - matrix:
+      id: balance-sheet
+      sourceRunCellId: baseline-run
+      title: DEFINE-SIMPLE balance sheet
+      description: Balance-sheet matrix for households, firms and banks.
+      note: Validated against the DEFINE-SIMPLE 1.1 R baseline (D = L).
+      columns: [Households, Firms, Banks, Sum]
+      sectors: [Households, Firms, Banks, ""]
+      accountingKind: balance-sheet
+      rows:
+        - [Deposits, Deposits, +D, "", -D, "0"]
+        - [Loans, Conventional loans, "", -L_C, +L_C, "0"]
+        - [Loans, Green loans, "", -L_G, +L_G, "0"]
+        - [Capital, Conventional capital, "", +K_C, "", +K_C]
+        - [Capital, Green capital, "", +K_G, "", +K_G]
+        - [Wealth, Net worth, -D, "-(K - L)", "-(L - D)", -K]
+        - [Sum, Sum, "0", "0", "0", "0"]
+      more: |
+        Households hold only deposits `D`. Firms own conventional and green capital
+        (`K_C`, `K_G`) and owe conventional and green loans (`L_C`, `L_G`). Banks hold
+        those loans as assets and issue deposits, so bank net worth is `L - D`. The hidden
+        equation keeps `D = L`, and therefore bank net worth at zero.
+
+        Firm net worth is the real capital stock not financed by loans, `K - L`. Household
+        wealth equals the deposit stock. Reading assets as positive and liabilities as
+        negative, every financial row sums across sectors to zero; the capital rows are
+        the non-financial assets that net worth has to match.
+  - matrix:
+      id: transaction-flow
+      sourceRunCellId: baseline-run
+      title: DEFINE-SIMPLE transactions-flow matrix
+      description: Transactions-flow matrix with a split current/capital account for firms.
+      note: Validated against the DEFINE-SIMPLE 1.1 identities.
+      columns: [Households, Firms curr., Firms cap., Banks, Sum]
+      sectors: [Households, Firms, Firms, Banks, ""]
+      accountingKind: transaction-flow
+      rows:
+        - [Consumption, Consumption, -CO, +CO, "", "", "0"]
+        - [Investment, Green investment, "", +I_G, -I_G, "", "0"]
+        - [Investment, Conventional investment, "", +I_C, -I_C, "", "0"]
+        - [Wages, Wages, +W, -W, "", "", "0"]
+        - [Interest, Interest on green loans, "", "-int_G * lag(L_G)", "", "+int_G * lag(L_G)", "0"]
+        - [Interest, Interest on conventional loans, "", "-int_C * lag(L_C)", "", "+int_C * lag(L_C)", "0"]
+        - [Interest, Interest on deposits, "+int_D * lag(D)", "", "", "-int_D * lag(D)", "0"]
+        - [Profits, Distributed profits, +DP, -DP, "", "", "0"]
+        - [Profits, Retained profits, "", -RP, +RP, "", "0"]
+        - [Profits, Bank profits, +BP, "", "", -BP, "0"]
+        - [Deposits, Change in deposits, "-d(D)", "", "", "+d(D)", "0"]
+        - [Loans, Change in green loans, "", "", "+d(L_G)", "-d(L_G)", "0"]
+        - [Loans, Change in conventional loans, "", "", "+d(L_C)", "-d(L_C)", "0"]
+        - [Sum, Sum, "0", "0", "0", "0", "0"]
+      more: |
+        Household disposable income is wages plus distributed firm profits plus bank
+        profits plus deposit interest. What is not consumed is added to deposits, so the
+        household column is the identity `D = lag(D) + Y_H - CO`.
+
+        Firms sell consumption and both green and conventional investment goods, pay
+        wages and green/conventional loan interest, and split profits into dividends
+        `DP` and retained earnings `RP`. Retained earnings plus new green and
+        conventional loans finance capital accumulation:
+        `d(L_G) = I_G - beta * RP` and `d(L_C) = I_C - (1 - beta) * RP`. Banks earn
+        the spread between loan and deposit rates and distribute all profits `BP` to
+        households, so they hold no own funds.
+  - sequence:
+      id: transaction-flow-sequence
+      title: DEFINE-SIMPLE transaction flow sequence
+      source:
+        kind: matrix
+        matrixCellId: transaction-flow
+      description: Sequence view generated from the transactions-flow matrix at the selected simulation period.
+  - markdown:
+      id: ecology-note
+      title: Green capital and carbon intensity
+      source: Carbon intensity `CI` is a decreasing function of the lagged green-to-conventional capital ratio. Emissions are `EMIS_F = CI * Y`. In the baseline that ratio is constant, so intensity is flat and emissions grow with output.
+      more: |
+        Green investment is a share `beta` of total investment. That share responds to the
+        loan-rate differential, `beta = beta_0 - beta_1 * (int_G - int_C)`. A higher
+        `K_G / K_C` then lowers carbon intensity through a logistic (Hill) curve between
+        `CI_min` and `CI_max`:
+
+        `CI = CI_min + (CI_max - CI_min) / (1 + pow((lag(K_G) / lag(K_C)) / c_CI, k_CI))`
+
+        The 2023 calibration sets `K_G / K_C = beta / (1 - beta)`, so both capital stocks
+        grow at the same rate on the baseline and `CI` never moves. The green-investment
+        scenario raises `beta` and that is what pulls intensity down.
+  - equations:
+      id: equations
+      title: DEFINE-SIMPLE 1.1 model
+      modelId: define-simple
+      collapsed: false
+      rows:
+        - "Households"
+        - [Y_H, W + DP + BP + int_D * lag(D), "Household disposable income.", USD tn/year, flow, identity]
+        - [W, s_W * Y, "Wage income.", USD tn/year, flow, identity]
+        - [CO, c_1 * lag(Y_H) + c_2 * lag(D), "Consumption expenditures.", USD tn/year, flow, behavioral]
+        - [D, lag(D) + Y_H - CO, "Household deposits (redundant vs D_red).", USD tn, stock, accumulation]
+        - "Firms"
+        - [Y, CO + I, "Output (GDP).", USD tn/year, flow, identity]
+        - [TP, Y - W - int_C * lag(L_C) - int_G * lag(L_G), "Total profits of firms.", USD tn/year, flow, identity]
+        - [RP, s_F * TP, "Retained profits.", USD tn/year, flow, identity]
+        - [DP, TP - RP, "Distributed profits.", USD tn/year, flow, identity]
+        - [r, TP / K, "Rate of profit.", 1/year, aux, identity]
+        - [I, (alpha_0 + alpha_1 * lag(r)) * lag(K), "Private investment.", USD tn/year, flow, behavioral]
+        - [I_G, beta * I, "Green investment.", USD tn/year, flow, identity]
+        - [beta, beta_0 - beta_1 * (int_G - int_C), "Share of green investment.", "", aux, behavioral]
+        - [I_C, I - I_G, "Conventional investment.", USD tn/year, flow, identity]
+        - [K_G, lag(K_G) + I_G, "Green capital stock.", USD tn, stock, accumulation]
+        - [K_C, lag(K_C) + I_C, "Conventional capital stock.", USD tn, stock, accumulation]
+        - [K, K_C + K_G, "Capital stock.", USD tn, stock, identity]
+        - [L_G, lag(L_G) + I_G - beta * RP, "Green loans.", USD tn, stock, accumulation]
+        - [L_C, lag(L_C) + I_C + I_G - RP - (L_G - lag(L_G)), "Conventional loans.", USD tn, stock, accumulation]
+        - [L, L_C + L_G, "Total loans.", USD tn, stock, identity]
+        - "Banks"
+        - [BP, int_C * lag(L_C) + int_G * lag(L_G) - int_D * lag(D), "Bank profits.", USD tn/year, flow, identity]
+        - [D_red, L, "Deposit identity (loans create deposits).", USD tn, stock, identity]
+        - "Emissions"
+        - [CI, "CI_min + (CI_max - CI_min) / (1 + pow((lag(K_G) / lag(K_C)) / c_CI, k_CI))", "Carbon intensity.", GtCO2 / USD tn, aux, behavioral]
+        - [EMIS_F, CI * Y, "Fossil CO2 emissions.", GtCO2/year, flow, identity]
+        - "Auxiliary"
+        - [Y_P, v * K, "Potential output.", USD tn/year, flow, identity]
+        - [u, Y / Y_P, "Capacity utilisation.", "", aux, identity]
+        - [g_Y, (Y - lag(Y)) / lag(Y), "Growth rate of output.", 1/year, aux, identity]
+        - [lev, L / K, "Firm leverage.", "", aux, identity]
+      more: |
+        Consumption and investment are predetermined from lags, so Gauss–Seidel has little
+        simultaneous work once `Y = CO + I` is known. Green and conventional loans split
+        the financing of investment after retained profits: a share `beta` of retained
+        earnings is attributed to green projects.
+
+        `D` is the household wealth accumulation identity and is redundant given the bank
+        balance-sheet residual `D_red = L`. The solver checks `D = D_red` rather than
+        dropping one of the two equations.
+  - solver:
+      id: solver
+      title: Solver
+      modelId: define-simple
+      collapsed: true
+      method: gauss-seidel
+      tolerance: "1e-10"
+      maxIterations: 200
+      defaultInitialValue: "0"
+      hiddenLeftVariable: D
+      hiddenRightVariable: D_red
+      hiddenTolerance: "1e-6"
+      relativeHiddenTolerance: false
+  - externals:
+      id: externals-equations
+      title: Externals
+      modelId: define-simple
+      collapsed: true
+      rows:
+        - [c_1, 0.945359266282, "Propensity to consume out of disposable income.", "", aux]
+        - [c_2, 0.04, "Propensity to consume out of deposits.", 1/year, aux]
+        - [int_C, 0.09, "Interest rate on conventional loans.", 1/year, aux]
+        - [int_G, 0.09, "Interest rate on green loans.", 1/year, aux]
+        - [int_D, 0.04, "Interest rate on deposits.", 1/year, aux]
+        - [s_W, 0.55, "Wage share.", "", aux]
+        - [s_F, 0.631451166469, "Retention rate of firms.", "", aux]
+        - [alpha_0, 0.0249884928308, "Autonomous investment rate.", 1/year, aux]
+        - [alpha_1, 0.1, "Sensitivity of investment to the profit rate.", "", aux]
+        - [beta_0, 0.0642658207648, "Autonomous share of green investment.", "", aux]
+        - [beta_1, 1, "Sensitivity of green investment share to the loan-rate gap.", year, aux]
+        - [v, 0.149059616291, "Capital productivity.", 1/year, aux]
+        - [c_CI, 0.226101737709, "Green-to-conventional ratio at which CI is midway.", "", aux]
+        - [k_CI, 0.769001366711, "Steepness of carbon-intensity improvement.", "", aux]
+        - [CI_max, 0.424387507013, "Maximum potential carbon intensity.", GtCO2 / USD tn, aux]
+        - [CI_min, 0.176828127922, "Minimum potential carbon intensity.", GtCO2 / USD tn, aux]
+      more: |
+        These values are the 2023 calibration after the R Model Builder has iterated
+        `Parameters_InitialValues` to a fixed point. They are frozen numbers, not the
+        circular init formulae. `c_1`, `s_F`, `alpha_0`, `v`, `c_CI` and `k_CI` are
+        implied by World Bank / BIS / Global Carbon Budget stocks for 2023 and the
+        assumed balanced-growth rate of 2.9 percent.
+  - initial-values:
+      id: initial-values-equations
+      title: Initial values
+      modelId: define-simple
+      collapsed: false
+      rows:
+        - [Y, 106.94, 2023 GDP (USD tn).]
+        - [Y_H, 82.0454280466, 2023 household disposable income.]
+        - [W, 58.817, 2023 wage bill.]
+        - [CO, 79.24254, 2023 consumption.]
+        - [D, 99.4542, 2023 deposits.]
+        - [D_red, 99.4542, 2023 deposit identity.]
+        - [I, 27.69746, 2023 investment.]
+        - [I_G, 1.78, 2023 green investment.]
+        - [I_C, 25.91746, 2023 conventional investment.]
+        - [beta, 0.0642658207648, 2023 green investment share.]
+        - [K_G, 63.1593103448, 2023 green capital.]
+        - [K_C, 919.622977241, 2023 conventional capital.]
+        - [K, 982.782287586, 2023 capital stock.]
+        - [L_G, 6.39150579151, 2023 green loans.]
+        - [L_C, 93.0626942085, 2023 conventional loans.]
+        - [L, 99.4542, 2023 total loans.]
+        - [TP, 39.4243819242, 2023 firm profits.]
+        - [RP, 24.8945719534, 2023 retained profits.]
+        - [DP, 14.5298099708, 2023 distributed profits.]
+        - [BP, 4.83256559767, 2023 bank profits.]
+        - [r, 0.0401150716921, 2023 profit rate.]
+        - [CI, 0.353656255844, 2023 carbon intensity.]
+        - [EMIS_F, 37.82, 2023 fossil emissions (GtCO2).]
+        - [Y_P, 146.493150685, 2023 potential output.]
+        - [u, 0.73, 2023 utilisation.]
+        - [g_Y, 0.029, 2023 output growth.]
+        - [lev, 0.1011965735, 2023 leverage.]
+      more: |
+        Period 1 (displayed as the first sample point) is the 2023 data-consistent
+        snapshot from R, not a Gauss–Seidel solve of the behavioural equations. From
+        period 2 the notebook uses the same identities as `Equations()` in
+        `DEFINE_SIMPLE.R`. Putting the 2023 stocks here means lags in period 2 are the
+        calibrated 2023 values.
+  - run:
+      id: baseline-run
+      title: Baseline run
+      description: DEFINE-SIMPLE 1.1 baseline, 2023–2100, with hidden condition D = D_red.
+      mode: baseline
+      periods: 78
+      resultKey: define_simple_baseline
+      sourceModelId: define-simple
+  - chart:
+      id: baseline-macro-chart
+      title: Baseline output, growth and leverage
+      variables:
+        - Y
+        - g_Y
+        - lev
+        - r
+        - u
+      axisGroups:
+        - [Y]
+        - [g_Y, lev, r, u]
+      axisSnapTolarance: 0.5
+      sourceRunCellId: baseline-run
+      more: |
+        The baseline is balanced growth. Output `Y` starts at `106.94` in 2023 and reaches
+        about `966` by 2100, compounding at `g_Y = 0.029`. Utilisation `u` stays at `0.73`,
+        leverage `lev` at about `0.101`, and the profit rate `r` at about `0.040`. Those
+        ratios are pinned by the 2023 calibration; nothing in the baseline disturbs them.
+  - chart:
+      id: baseline-emissions-chart
+      title: Baseline green share, intensity and emissions
+      variables:
+        - beta
+        - CI
+        - EMIS_F
+      axisGroups:
+        - [beta]
+        - [CI]
+        - [EMIS_F]
+      axisSnapTolarance: 0.5
+      sourceRunCellId: baseline-run
+      more: |
+        `beta` is constant because `int_G = int_C`. Carbon intensity `CI` is therefore also
+        constant at about `0.354` GtCO2 per trillion USD. Fossil emissions `EMIS_F` grow in
+        lock-step with GDP, from `37.82` Gt in 2023 to about `342` Gt in 2100. That is the
+        business-as-usual warning: without a rise in the green capital share, decarbonisation
+        never starts.
+  - table:
+      id: baseline-table
+      title: Baseline variable summary
+      variables:
+        - Y
+        - CO
+        - I
+        - D
+        - L
+        - K
+        - K_G
+        - K_C
+        - beta
+        - CI
+        - EMIS_F
+        - g_Y
+        - lev
+        - u
+      sourceRunCellId: baseline-run
+      more: |
+        Use the period selector to read 2023 (period 1) against later years. Deposits `D`
+        equal loans `L` at every date (the watertightness check). Green capital remains a
+        small slice of `K` — about `63` against `920` of conventional capital in 2023 —
+        which is why intensity never falls on this path.
+  - markdown:
+      id: scenario-1-note
+      title: Green investment shock
+      source: This scenario cuts the green loan rate to `int_G = 0.06`, raises the conventional loan rate to `int_C = 0.10`, and lifts autonomous green investment to `beta_0 = 0.33`. The R code applies those shocks from 2027 on a path that starts in 2023; this notebook applies them after the 2100 baseline state, which is the SFCR `runScenario` convention.
+      more: |
+        In R, scenario 2 keeps 2023 initials and switches parameters at period 5 (2027).
+        Here a scenario run starts from the baseline's last period, so the experiment is
+        "from the 2100 BAU state, make green finance cheaper and conventional finance
+        dearer." The qualitative mechanism is the same: `beta` jumps, `K_G / K_C` starts
+        rising, and `CI` falls, which is the SIMPLE story of green investment.
+  - run:
+      id: scenario-1-run
+      title: "Scenario 1: green investment shock"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 1
+              - 78
+            variables:
+              int_G:
+                kind: constant
+                value: 0.06
+              int_C:
+                kind: constant
+                value: 0.10
+              beta_0:
+                kind: constant
+                value: 0.33
+            startPeriodInclusive: 1
+            endPeriodInclusive: 78
+      baselineRunCellId: baseline-run
+      periods: 78
+      resultKey: define_simple_s1
+      sourceModelId: define-simple
+  - chart:
+      id: scenario-1-chart
+      title: Scenario 1 green share, intensity and growth
+      variables:
+        - beta
+        - CI
+        - EMIS_F
+        - g_Y
+        - Y
+        - lev
+      axisMode: separate
+      sourceRunCellId: scenario-1-run
+      more: |
+        Watch `beta` step up immediately (the rate gap `int_G - int_C` is now negative, so
+        it adds to `beta_0`). Carbon intensity `CI` then declines as green capital
+        accumulates faster than conventional capital. Emissions `EMIS_F` combine that
+        intensity path with output; leverage `lev` moves with the new loan mix.
+  - markdown:
+      id: scenario-2-note
+      title: Degrowth shock
+      source: This scenario sets `c_1 = 0.94` and `alpha_0 = 0.02`. As with scenario 1, R applies the shock from 2027 on the 2023 path; the notebook applies it from the 2100 baseline state.
+      more: |
+        The degrowth experiment lowers the propensity to consume out of income and the
+        autonomous investment rate. The consumption cut is small relative to the calibrated
+        `c_1` of about `0.945`; the investment cut is the main brake. Growth `g_Y` and the
+        level of `Y` fall relative to continued BAU from the same 2100 starting point, and
+        emissions fall because output is lower, not because `CI` improves.
+  - run:
+      id: scenario-2-run
+      title: "Scenario 2: degrowth shock"
+      mode: scenario
+      scenario:
+        shocks:
+          - rangeInclusive:
+              - 1
+              - 78
+            variables:
+              c_1:
+                kind: constant
+                value: 0.94
+              alpha_0:
+                kind: constant
+                value: 0.02
+            startPeriodInclusive: 1
+            endPeriodInclusive: 78
+      baselineRunCellId: baseline-run
+      periods: 78
+      resultKey: define_simple_s2
+      sourceModelId: define-simple
+  - chart:
+      id: scenario-2-chart
+      title: Scenario 2 output, growth and emissions
+      variables:
+        - Y
+        - g_Y
+        - CO
+        - I
+        - EMIS_F
+        - CI
+      axisMode: separate
+      sourceRunCellId: scenario-2-run
+      more: |
+        Output and investment step down with the lower `alpha_0`. Carbon intensity `CI`
+        barely moves, because `beta` is unchanged, so any emissions reduction is a scale
+        effect. Compare that with scenario 1, where the same engine decarbonises through
+        composition (`K_G / K_C`) rather than through a smaller economy.
