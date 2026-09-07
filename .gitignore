@@ -23,3 +23,4 @@ packages/chat-api/.wrangler/cache/cf.json
 
 # R library
 .rlib/
+scripts/__pycache__/
