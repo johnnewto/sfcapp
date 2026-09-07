@@ -1,10 +1,9 @@
 import { externalRowsOnly, parseLenientJsonValue } from "@sfcr/notebook-core";
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { AssistantMarkdown } from "../components/AssistantMarkdown";
 import type { EditorState } from "../lib/editorModel";
-import { applyFixedMenuPosition } from "../lib/clampFixedMenuPosition";
 import { isPartialSimulationResult, partialResultFailurePeriodIndex } from "../lib/partialRunResult";
 import {
   buildVariableDescriptions,
@@ -69,6 +68,7 @@ import {
   NotebookCellPinButton,
   NotebookLinkedEditorHeader
 } from "./components/NotebookCellHeader";
+import { NotebookCellStructureToolsProvider } from "./components/NotebookCellToolsMenu";
 import {
   ExternalsCellView,
   InitialValuesCellView,
@@ -134,17 +134,6 @@ const VIEWPORT_DEFERRED_CELL_TYPES = new Set<NotebookCell["type"]>([
   "sankey"
 ]);
 
-const CELL_INSERT_TYPES: NotebookCellInsertType[] = [
-  "markdown",
-  "run",
-  "chart",
-  "chart-grid",
-  "table",
-  "matrix",
-  "sequence",
-  "sankey"
-];
-
 type SourceLayoutMode = "pretty" | "compact" | "grid" | "run" | "abm";
 
 function defaultSourceLayoutMode(cellType: NotebookCell["type"]): SourceLayoutMode {
@@ -152,43 +141,6 @@ function defaultSourceLayoutMode(cellType: NotebookCell["type"]): SourceLayoutMo
   if (cellType === "run") return "run";
   if (cellType === "abm-model") return "abm";
   return "compact";
-}
-
-function formatCellInsertType(type: NotebookCellInsertType): string {
-  switch (type) {
-    case "markdown":
-      return "Markdown";
-    case "run":
-      return "Run";
-    case "chart":
-      return "Chart";
-    case "chart-grid":
-      return "Chart grid";
-    case "table":
-      return "Table";
-    case "matrix":
-      return "Matrix";
-    case "sequence":
-      return "Sequence";
-    case "sankey":
-      return "Sankey";
-  }
-}
-
-function getInsertDisabledReason(
-  type: NotebookCellInsertType,
-  context: { hasModelSource: boolean; hasRunSource: boolean }
-): string | null {
-  if (type === "run" && !context.hasModelSource) {
-    return "Requires a model cell.";
-  }
-  if (
-    (type === "chart" || type === "chart-grid" || type === "table") &&
-    !context.hasRunSource
-  ) {
-    return "Requires a run cell.";
-  }
-  return null;
 }
 
 function hasRunnableModelSource(cells: NotebookCell[]): boolean {
@@ -351,8 +303,6 @@ function NotebookCellViewComponent({
   const [openSourceMenu, setOpenSourceMenu] = useState<"insert" | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [sourceValidationError, setSourceValidationError] = useState<string | null>(null);
-  const [cellContextMenu, setCellContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [isCellInsertMenuOpen, setIsCellInsertMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMatrixUnitMetaDialogOpen, setIsMatrixUnitMetaDialogOpen] = useState(false);
   const [matrixUnitMetaSelection, setMatrixUnitMetaSelection] = useState<Set<string>>(new Set());
@@ -364,7 +314,6 @@ function NotebookCellViewComponent({
     Record<string, MatrixEntryDisplayMode>
   >({});
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
-  const cellContextMenuRef = useRef<HTMLDivElement | null>(null);
   const deferredBodyRef = useRef<HTMLDivElement | null>(null);
   const [measuredDeferredBodyHeight, setMeasuredDeferredBodyHeight] = useState<number | null>(null);
   const currentSerializedBody = serializeCellBody(cell);
@@ -851,78 +800,34 @@ function NotebookCellViewComponent({
     onSelectedCellIdChange(cell.id);
   }
 
-  function handleCellContextMenu(event: React.MouseEvent<HTMLElement>): void {
-    if (isActivelyEditing) {
-      return;
-    }
-
-    const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest(
-        [
-          "input",
-          "select",
-          "textarea",
-          "[contenteditable='true']",
-          ".chart-legend",
-          ".chart-legend-context-menu",
-          ".result-chart",
-          ".notebook-model-view-row",
-          ".notebook-matrix-table",
-          ".notebook-cell-context-menu"
-        ].join(", ")
-      )
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    onSelectedCellIdChange(cell.id);
-    setCellContextMenu({ x: event.clientX, y: event.clientY });
-  }
-
-  function closeCellContextMenu(): void {
-    setCellContextMenu(null);
-    setIsCellInsertMenuOpen(false);
-  }
-
-  useEffect(() => {
-    if (isActivelyEditing && cellContextMenu != null) {
-      closeCellContextMenu();
-    }
-  }, [cellContextMenu, isActivelyEditing]);
-
-  useLayoutEffect(() => {
-    if (cellContextMenu && cellContextMenuRef.current) {
-      applyFixedMenuPosition(cellContextMenuRef.current, cellContextMenu.x, cellContextMenu.y);
-    }
-  }, [cellContextMenu]);
-
-  useEffect(() => {
-    if (cellContextMenu == null) {
-      return;
-    }
-
-    function handlePointerDown(): void {
-      closeCellContextMenu();
-    }
-
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") {
-        closeCellContextMenu();
+  const structureTools = useMemo(
+    () => ({
+      canMoveDown: canMoveCellDown,
+      canMoveUp: canMoveCellUp,
+      hasModelSource: hasCellInsertModelSource,
+      hasRunSource: hasCellInsertRunSource,
+      onDelete: () => setIsDeleteDialogOpen(true),
+      onInsert: (type: NotebookCellInsertType) => {
+        onInsertCell(cell.id, "below", type);
+      },
+      onMove: (direction: -1 | 1) => {
+        onMoveCell(cell.id, direction);
+      },
+      onSetUrl: () => {
+        onSetCellUrl(cell.id);
       }
-    }
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [cellContextMenu]);
+    }),
+    [
+      canMoveCellDown,
+      canMoveCellUp,
+      cell.id,
+      hasCellInsertModelSource,
+      hasCellInsertRunSource,
+      onInsertCell,
+      onMoveCell,
+      onSetCellUrl
+    ]
+  );
 
   return (
     <NotebookRenderProfiler
@@ -948,10 +853,8 @@ function NotebookCellViewComponent({
         }`}
         onClick={presentation === "canvas" ? handleCellClick : undefined}
       >
-        <div
-          className="notebook-cell-content"
-          onContextMenu={presentation === "canvas" ? handleCellContextMenu : undefined}
-        >
+        <NotebookCellStructureToolsProvider value={structureTools}>
+        <div className="notebook-cell-content">
         <div className="notebook-cell-toolbar">
           <NotebookLinkedEditorHeader
             actions={
@@ -1006,15 +909,10 @@ function NotebookCellViewComponent({
                         }))
                     : null
                 }
+                showTools={!isLinkedModelEditorCell(cell)}
                 title={cell.title}
                 trailingActions={
                   <>
-                    {presentation === "canvas" && onPinCellRequest ? (
-                      <NotebookCellPinButton
-                        isPinnedInPanel={isPinnedInPanel}
-                        onPinCellRequest={() => onPinCellRequest(cell.id)}
-                      />
-                    ) : null}
                     {cell.type === "matrix" && !isEditingSource && cell.collapsed !== true ? (
                       <MatrixEntryDisplayModeToggle
                         mode={matrixEntryDisplayModes[cell.id] ?? "both"}
@@ -1082,6 +980,12 @@ function NotebookCellViewComponent({
                           Reference: {formatChartReferenceTrace(resolveChartReferenceTrace(cell, cells))}
                         </button>
                       </>
+                    ) : null}
+                    {presentation === "canvas" && onPinCellRequest && !isEditingSource ? (
+                      <NotebookCellPinButton
+                        isPinnedInPanel={isPinnedInPanel}
+                        onPinCellRequest={() => onPinCellRequest(cell.id)}
+                      />
                     ) : null}
                     {isSourceEditable(cell) && isEditingSource ? (
                       <>
@@ -1845,120 +1749,6 @@ function NotebookCellViewComponent({
             variableUnitMetadata={variableUnitMetadata}
           />
         ) : null}
-        {cellContextMenu ? (
-          <div
-            ref={cellContextMenuRef}
-            className="notebook-cell-context-menu"
-            role="menu"
-            aria-label={`Cell actions for ${cell.title}`}
-            onClick={(event) => event.stopPropagation()}
-            onContextMenu={(event) => event.preventDefault()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <div
-              className="notebook-cell-context-menu-submenu-wrap"
-              onMouseEnter={() => setIsCellInsertMenuOpen(true)}
-            >
-              <button
-                type="button"
-                role="menuitem"
-                aria-haspopup="menu"
-                onClick={() => setIsCellInsertMenuOpen((current) => !current)}
-                onFocus={() => setIsCellInsertMenuOpen(true)}
-                onMouseEnter={() => setIsCellInsertMenuOpen(true)}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <span>Add cell</span>
-                <span aria-hidden="true">›</span>
-              </button>
-              {isCellInsertMenuOpen ? (
-                <div
-                  className="notebook-cell-context-submenu"
-                  role="menu"
-                  aria-label="Add cell below options"
-                >
-                  {CELL_INSERT_TYPES.map((cellType) => {
-                    const disabledReason = getInsertDisabledReason(cellType, {
-                      hasModelSource: hasCellInsertModelSource,
-                      hasRunSource: hasCellInsertRunSource
-                    });
-                    return (
-                      <button
-                        key={cellType}
-                        type="button"
-                        role="menuitem"
-                        disabled={disabledReason != null}
-                        title={disabledReason ?? undefined}
-                        onClick={() => {
-                          onInsertCell(cell.id, "below", cellType);
-                          closeCellContextMenu();
-                        }}
-                      >
-                        {formatCellInsertType(cellType)}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-            <div className="notebook-cell-context-menu-separator" role="separator" />
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!canMoveCellUp}
-              onClick={() => {
-                onMoveCell(cell.id, -1);
-                closeCellContextMenu();
-              }}
-            >
-              Move up
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!canMoveCellDown}
-              onClick={() => {
-                onMoveCell(cell.id, 1);
-                closeCellContextMenu();
-              }}
-            >
-              Move down
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="is-danger"
-              onClick={() => {
-                setIsDeleteDialogOpen(true);
-                closeCellContextMenu();
-              }}
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onSetCellUrl(cell.id);
-                closeCellContextMenu();
-              }}
-            >
-              URL
-            </button>
-            {onPinCellRequest ? (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  onPinCellRequest(cell.id);
-                  closeCellContextMenu();
-                }}
-              >
-                {isPinnedInPanel ? "Unpin floating panel" : "Pin in floating panel"}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
         <MatrixUnitMetaDialog
           isOpen={isMatrixUnitMetaDialogOpen}
           matrixTitle={draftMatrixUnitMetaContext?.matrixTitle ?? cell.title}
@@ -2015,6 +1805,7 @@ function NotebookCellViewComponent({
             </div>
           </div>
         ) : null}
+        </NotebookCellStructureToolsProvider>
       </article>
     </NotebookRenderProfiler>
   );

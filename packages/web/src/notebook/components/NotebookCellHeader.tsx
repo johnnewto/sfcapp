@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
-import { AssistantMarkdown } from "../../components/AssistantMarkdown";
 import { PinToggleIcon } from "../../components/PinToggleIcon";
-import { useDragScroll } from "../../hooks/useDragScroll";
 import { buildNotebookCellHelpText } from "../sourceEditing";
 import type {
   EquationsCell,
@@ -12,122 +10,7 @@ import type {
   ObservedCell,
   SolverCell
 } from "../types";
-
-function NotebookHelpButton({
-  dialogContent,
-  dialogTitle,
-  onHelpRequest,
-  title,
-  helpText
-}: {
-  dialogContent?: ReactNode;
-  dialogTitle?: string;
-  onHelpRequest?: () => void;
-  title: string;
-  helpText: string;
-}) {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const helpDialogDragScroll = useDragScroll<HTMLDivElement>();
-
-  useEffect(() => {
-    if (!isDialogOpen || !dialogContent) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent): void {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-
-      if (dialogRef.current?.contains(target)) {
-        return;
-      }
-
-      setIsDialogOpen(false);
-    }
-
-    function handleEscape(event: KeyboardEvent): void {
-      if (event.key === "Escape") {
-        setIsDialogOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [dialogContent, isDialogOpen]);
-
-  if (dialogContent) {
-    return (
-      <>
-        <button type="button" className="notebook-run-button" onClick={() => setIsDialogOpen(true)}>
-          Help
-        </button>
-        {isDialogOpen ? (
-          <div
-            className="notebook-help-dialog-backdrop"
-            onClick={() => setIsDialogOpen(false)}
-            role="presentation"
-          >
-            <div
-              aria-label={dialogTitle ?? `Help for ${title}`}
-              aria-modal="true"
-              className="notebook-help-dialog"
-              onClick={(event) => event.stopPropagation()}
-              ref={dialogRef}
-              role="dialog"
-            >
-              <div className="notebook-help-dialog-header">
-                <div>
-                  <p className="panel-subtitle">{title}</p>
-                  <h3>{dialogTitle ?? "Help"}</h3>
-                </div>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  Close
-                </button>
-              </div>
-              <div
-                ref={helpDialogDragScroll.dragScrollRef}
-                className={`notebook-help-dialog-body ${helpDialogDragScroll.dragScrollProps.className}`}
-                onClickCapture={helpDialogDragScroll.dragScrollProps.onClickCapture}
-                onMouseDown={helpDialogDragScroll.dragScrollProps.onMouseDown}
-              >
-                {dialogContent}
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </>
-    );
-  }
-
-  if (onHelpRequest) {
-    return (
-      <button type="button" className="notebook-run-button" onClick={onHelpRequest}>
-        Help
-      </button>
-    );
-  }
-
-  return (
-    <details className="notebook-cell-help">
-      <summary className="notebook-run-button">Help</summary>
-      <div className="notebook-cell-help-panel" role="note" aria-label={`Help for ${title}`}>
-        <AssistantMarkdown text={helpText} />
-      </div>
-    </details>
-  );
-}
+import { NotebookCellToolsButton } from "./NotebookCellToolsMenu";
 
 export function NotebookLinkedEditorHeader({
   actions,
@@ -178,6 +61,7 @@ export function NotebookCellHeaderActions({
   onEditToggle,
   onHelpRequest,
   onToggleCollapsed,
+  showTools = true,
   title,
   trailingActions
 }: {
@@ -190,6 +74,7 @@ export function NotebookCellHeaderActions({
   onEditToggle?: (() => void) | null;
   onHelpRequest?: (() => void) | null;
   onToggleCollapsed: (() => void) | null;
+  showTools?: boolean;
   title: string;
   trailingActions?: ReactNode;
 }) {
@@ -197,32 +82,20 @@ export function NotebookCellHeaderActions({
     <div className="notebook-cell-header-actions">
       {leadingActions ? <div className="notebook-cell-header-leading">{leadingActions}</div> : null}
       <div className="notebook-linked-editor-actions">
-        {!isEditing ? trailingActions ?? null : null}
-        {helpText ? (
-          <NotebookHelpButton
-            dialogContent={helpDialogContent}
-            dialogTitle={helpDialogTitle}
-            onHelpRequest={onHelpRequest ?? undefined}
-            title={title}
+        {trailingActions ?? null}
+        {showTools !== false ? (
+          <NotebookCellToolsButton
+            helpDialogContent={helpDialogContent}
+            helpDialogTitle={helpDialogTitle}
             helpText={helpText}
+            isCollapsed={isCollapsed}
+            isEditing={isEditing}
+            onEditToggle={onEditToggle}
+            onHelpRequest={onHelpRequest}
+            onToggleCollapsed={onToggleCollapsed}
+            title={title}
           />
         ) : null}
-        {!isCollapsed && onEditToggle && !isEditing ? (
-          <button
-            type="button"
-            className="notebook-run-button"
-            aria-pressed="false"
-            onClick={onEditToggle}
-          >
-            Edit
-          </button>
-        ) : null}
-        {onToggleCollapsed ? (
-          <button type="button" className="notebook-run-button" onClick={onToggleCollapsed}>
-            {isCollapsed ? "Show" : "Hide"}
-          </button>
-        ) : null}
-        {isEditing ? trailingActions ?? null : null}
       </div>
     </div>
   );
@@ -299,13 +172,13 @@ export function NotebookLinkedEditorActions({
       title={title}
       trailingActions={
         <>
+          {!isEditing ? extraActions ?? null : null}
           {!isEditing && onPinCellRequest ? (
             <NotebookCellPinButton
               isPinnedInPanel={isPinnedInPanel}
               onPinCellRequest={onPinCellRequest}
             />
           ) : null}
-          {!isEditing ? extraActions ?? null : null}
           {isEditing ? (
             <>
               {editingExtraActions ?? null}

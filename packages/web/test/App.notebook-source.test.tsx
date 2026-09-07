@@ -11,6 +11,7 @@ import {
   openNotebookSourceEditor,
   setNotebookSourceValue,
   setupAppTestEnv,
+  showCollapsedNotebookCell,
   userEvent
 } from "./appTestUtils";
 import { notebookToCompactYaml, notebookToJson } from "../src/notebook/document";
@@ -155,10 +156,7 @@ describe("App notebook source and import workflows", () => {
       throw new Error("Expected BMW equation dependency graph article.");
     }
 
-    const showButton = within(sequenceCell).queryByRole("button", { name: /^show$/i });
-    if (showButton) {
-      await user.click(showButton);
-    }
+    await showCollapsedNotebookCell(user, sequenceCell);
 
     expect(within(sequenceCell).getByRole("button", { name: /show exogenous/i })).toBeInTheDocument();
 

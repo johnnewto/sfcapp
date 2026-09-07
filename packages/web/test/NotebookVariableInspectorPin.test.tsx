@@ -9,6 +9,7 @@ import {
   expectVariableInspectorOpen,
   setSuccessfulNotebookRunner,
   setupAppTestEnv,
+  showCollapsedNotebookCell,
   screen,
   userEvent
 } from "./appTestUtils";
@@ -23,10 +24,8 @@ async function expandCellIfCollapsed(
     return;
   }
 
-  const showButton = within(cell).queryByRole("button", { name: /^show$/i });
-  if (showButton) {
-    await user.click(showButton);
-  } else {
+  const shown = await showCollapsedNotebookCell(user, cell);
+  if (!shown) {
     await user.click(screen.getAllByRole("button", { name: /^expand all$/i })[0]);
   }
 

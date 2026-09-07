@@ -1478,6 +1478,11 @@
 .notebook-cell-context-menu button.is-danger:focus-visible {
   background: rgba(220, 38, 38, 0.1);
 }
+.notebook-cell-tools {
+  display: inline-flex;
+  flex: 0 0 auto;
+  position: relative;
+}
 .notebook-cell-delete-dialog-backdrop {
   align-items: center;
   background: rgba(15, 23, 42, 0.36);

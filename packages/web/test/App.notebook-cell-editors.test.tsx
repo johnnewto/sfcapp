@@ -10,13 +10,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   App,
+  clickCellToolsItem,
   fireEvent,
   getNotebookSourceTextArea,
+  openCellToolsMenu,
   openNotebookCommandsPanel,
   screen,
   setSuccessfulNotebookRunner,
   openNotebookSourceEditor,
   setupAppTestEnv,
+  showCollapsedNotebookCell,
   userEvent
 } from "./appTestUtils";
 
@@ -30,10 +33,8 @@ async function expandEquationsCellIfCollapsed(
     return;
   }
 
-  const showButton = within(cell).queryByRole("button", { name: /^show$/i });
-  if (showButton) {
-    await user.click(showButton);
-  } else {
+  const shown = await showCollapsedNotebookCell(user, cell);
+  if (!shown) {
     await user.click(screen.getAllByRole("button", { name: /^expand all$/i })[0]);
   }
 
@@ -66,7 +67,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected overview cell article.");
     }
 
-    await user.click(within(overviewArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, overviewArticle, /^edit$/i);
 
     const sourceEditor = screen.getByRole("textbox", {
       name: /source editor for overview/i
@@ -112,7 +113,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected run cell article.");
     }
 
-    await user.click(within(runArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, runArticle, /^edit$/i);
 
     const moreEditor = screen.getByRole("textbox", {
       name: /more editor for baseline run with newton/i
@@ -146,7 +147,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected overview cell article.");
     }
 
-    await user.click(within(overviewArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, overviewArticle, /^edit$/i);
 
     const titleEditor = screen.getByRole("textbox", {
       name: /title editor for overview/i
@@ -178,7 +179,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected run cell article.");
     }
 
-    await user.click(within(runArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, runArticle, /^edit$/i);
 
     const titleEditor = screen.getByRole("textbox", {
       name: /title editor for baseline run with newton/i
@@ -202,7 +203,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected run cell article.");
     }
 
-    await user.click(within(runArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, runArticle, /^edit$/i);
     await user.click(within(runArticle).getByRole("radio", { name: /compact/i }));
 
     const titleEditor = screen.getByRole("textbox", {
@@ -237,7 +238,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected BMW balance sheet article.");
     }
 
-    await user.click(within(matrixArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, matrixArticle, /^edit$/i);
     await user.click(within(matrixArticle).getByRole("radio", { name: /compact/i }));
 
     const sourceEditor = within(matrixArticle).getByRole("textbox", {
@@ -273,7 +274,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected baseline chart article.");
     }
 
-    await user.click(within(chartArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, chartArticle, /^edit$/i);
     await user.click(within(chartArticle).getByRole("radio", { name: /compact/i }));
 
     const sourceEditor = within(chartArticle).getByRole("textbox", {
@@ -309,7 +310,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected scenario run cell article.");
     }
 
-    await user.click(within(scenarioArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, scenarioArticle, /^edit$/i);
 
     expect(within(scenarioArticle).getByRole("combobox", { name: /run mode/i })).toHaveValue("scenario");
     expect(
@@ -363,7 +364,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected balance sheet matrix article.");
     }
 
-    await user.click(within(balanceSheetArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, balanceSheetArticle, /^edit$/i);
 
     expect(
       within(balanceSheetArticle).queryByRole("textbox", {
@@ -409,7 +410,7 @@ describe("App per-cell source editors", () => {
     }
 
     await expandEquationsCellIfCollapsed(equationsCell, user);
-    await user.click(within(equationsCell).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, equationsCell, /^edit$/i);
 
     const firstVariableInput = getFirstEquationVariableInput(equationsCell);
     const originalValue = firstVariableInput.value;
@@ -436,7 +437,7 @@ describe("App per-cell source editors", () => {
     }
 
     await expandEquationsCellIfCollapsed(equationsCell, user);
-    await user.click(within(equationsCell).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, equationsCell, /^edit$/i);
 
     const firstVariableInput = getFirstEquationVariableInput(equationsCell);
     const originalValue = firstVariableInput.value;
@@ -445,7 +446,7 @@ describe("App per-cell source editors", () => {
     fireEvent.change(firstVariableInput, { target: { value: draftValue } });
 
     await user.click(within(equationsCell).getByRole("button", { name: /^cancel$/i }));
-    await user.click(within(equationsCell).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, equationsCell, /^edit$/i);
 
     expect(
       getFirstEquationVariableInput(equationsCell).value
@@ -465,7 +466,7 @@ describe("App per-cell source editors", () => {
     }
 
     await expandEquationsCellIfCollapsed(equationsCell, user);
-    await user.click(within(equationsCell).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, equationsCell, /^edit$/i);
 
     const firstVariableInput = getFirstEquationVariableInput(equationsCell);
     const draftValue = `${firstVariableInput.value}Draft`;
@@ -490,7 +491,7 @@ describe("App per-cell source editors", () => {
     }
 
     await expandEquationsCellIfCollapsed(equationsCell, user);
-    await user.click(within(equationsCell).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, equationsCell, /^edit$/i);
 
     const equationVariableInputsBefore = within(equationsCell).getAllByRole("textbox", {
       name: /equation \d+ variable/i
@@ -521,14 +522,16 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected chart cell article.");
     }
 
-    await user.click(within(chartArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, chartArticle, /^edit$/i);
     await user.click(screen.getByText(/^insert$/i));
 
     expect(screen.getByRole("button", { name: /add axismode/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /axis snap/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /shared range/i })).toBeInTheDocument();
     expect(screen.getByText(/live validation: ready to apply/i)).toBeInTheDocument();
-    expect(within(chartArticle).getByRole("button", { name: /^help$/i })).toBeInTheDocument();
+    const chartToolsMenu = await openCellToolsMenu(user, chartArticle);
+    expect(within(chartToolsMenu).getByRole("menuitem", { name: /^help$/i })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
 
     const sourceEditor = screen.getByRole("textbox", {
       name: /source editor for baseline headline variables/i
@@ -573,7 +576,7 @@ describe("App per-cell source editors", () => {
     await user.click(referenceButton);
     expect(within(chartArticle).getByRole("button", { name: /reference: observed/i })).toBeInTheDocument();
 
-    await user.click(within(chartArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, chartArticle, /^edit$/i);
     const sourceEditor = screen.getByRole("textbox", {
       name: /source editor for baseline headline variables/i
     }) as HTMLTextAreaElement;
@@ -595,7 +598,7 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected chart cell article.");
     }
 
-    await user.click(within(chartArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, chartArticle, /^edit$/i);
     await user.click(screen.getByRole("radio", { name: /compact/i }));
 
     const sourceEditor = screen.getByRole("textbox", {
@@ -622,14 +625,14 @@ describe("App per-cell source editors", () => {
       throw new Error("Expected chart cell article.");
     }
 
-    await user.click(within(chartArticle).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, chartArticle, /^edit$/i);
     await user.click(screen.getByRole("button", { name: /^insert$/i }));
     expect(screen.getByLabelText(/source insert actions/i)).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
     expect(screen.queryByLabelText(/source insert actions/i)).not.toBeInTheDocument();
 
-    await user.click(within(chartArticle).getByRole("button", { name: /^help$/i }));
+    await clickCellToolsItem(user, chartArticle, /^help$/i);
     expect(screen.getByText(/required fields:/i)).toBeInTheDocument();
   });
 });

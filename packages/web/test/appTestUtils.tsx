@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { act, cleanup, fireEvent as testingFireEvent, screen as testingScreen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent as testingFireEvent, screen as testingScreen, waitFor, within } from "@testing-library/react";
 import userEventLib from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { runBaseline as runCoreBaseline } from "@sfcr/core";
@@ -184,6 +184,43 @@ export async function openNotebookSourceEditor(
     }
   });
   expect(screen.getByRole("button", { name: /^save yaml$/i })).toBeInTheDocument();
+}
+
+export function getCellToolsButton(cell: HTMLElement): HTMLElement {
+  return within(cell).getByRole("button", { name: /^tools$/i });
+}
+
+export async function openCellToolsMenu(
+  user: { click: (element: Element) => Promise<unknown> },
+  cell: HTMLElement
+): Promise<HTMLElement> {
+  const existing = within(cell).queryByRole("menu", { name: /cell actions/i });
+  if (!existing) {
+    await user.click(getCellToolsButton(cell));
+  }
+  return within(cell).getByRole("menu", { name: /cell actions/i });
+}
+
+export async function clickCellToolsItem(
+  user: { click: (element: Element) => Promise<unknown> },
+  cell: HTMLElement,
+  name: string | RegExp
+): Promise<void> {
+  const menu = await openCellToolsMenu(user, cell);
+  await user.click(within(menu).getByRole("menuitem", { name }));
+}
+
+export async function showCollapsedNotebookCell(
+  user: { click: (element: Element) => Promise<unknown> },
+  cell: HTMLElement
+): Promise<boolean> {
+  const showButton = within(cell).queryByRole("button", { name: /^show$/i });
+  if (showButton) {
+    await user.click(showButton);
+    return true;
+  }
+
+  return false;
 }
 
 export async function expectVariableInspectorOpen(timeout = 3500): Promise<void> {

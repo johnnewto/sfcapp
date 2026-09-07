@@ -9,6 +9,7 @@ import {
   screen,
   setSuccessfulNotebookRunner,
   setupAppTestEnv,
+  showCollapsedNotebookCell,
   userEvent
 } from "./appTestUtils";
 import { EQUATION_ROLE_COLUMN_COLLAPSED_STORAGE_KEY } from "../src/hooks/useEquationValueColumnsCollapse";
@@ -93,10 +94,7 @@ async function expandEquationsCellIfCollapsed(
   if (within(cell).queryByRole("table", { name: /model equations/i })) {
     return;
   }
-  const showButton = within(cell).queryByRole("button", { name: /^show$/i });
-  if (showButton) {
-    await user.click(showButton);
-  }
+  await showCollapsedNotebookCell(user, cell);
   await waitFor(() => {
     expect(within(cell).getByRole("table", { name: /model equations/i })).toBeInTheDocument();
   });

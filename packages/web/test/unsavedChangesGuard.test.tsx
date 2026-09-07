@@ -4,7 +4,7 @@ import { render, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { notebookHasUnsavedChanges, isNotebookNavigationLoadLabel } from "../src/notebook/notebookAppHelpers";
-import { App, screen, setupAppTestEnv, userEvent } from "./appTestUtils";
+import { App, clickCellToolsItem, screen, setupAppTestEnv, userEvent } from "./appTestUtils";
 
 setupAppTestEnv();
 
@@ -99,7 +99,7 @@ describe("unsaved navigation guards", () => {
       throw new Error("Expected equations cell article.");
     }
 
-    await user.click(within(equationsCell).getByRole("button", { name: /^edit$/i }));
+    await clickCellToolsItem(user, equationsCell, /^edit$/i);
 
     const yExpression = within(equationsCell).getByDisplayValue("Cs + Is");
     await user.type(yExpression, " ");

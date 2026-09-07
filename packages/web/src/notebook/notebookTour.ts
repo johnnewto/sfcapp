@@ -39,13 +39,13 @@ function queryFirstEquationsCell(): Element | undefined {
   return queryFirstNotebookCell("equations") ?? queryFirstNotebookCell("model");
 }
 
-function queryCellEditButton(cell: Element | undefined): Element | undefined {
+function queryCellToolsButton(cell: Element | undefined): Element | undefined {
   if (!cell) {
     return undefined;
   }
 
   for (const button of Array.from(cell.querySelectorAll("button"))) {
-    if (button.textContent?.trim() === "Edit") {
+    if (button.textContent?.trim() === "Tools" && button.offsetParent !== null) {
       return button;
     }
   }
@@ -53,14 +53,14 @@ function queryCellEditButton(cell: Element | undefined): Element | undefined {
   return undefined;
 }
 
-function queryFirstCellEditButton(cellType: string): Element | undefined {
-  return queryCellEditButton(queryFirstNotebookCell(cellType));
+function queryFirstCellToolsButton(cellType: string): Element | undefined {
+  return queryCellToolsButton(queryFirstNotebookCell(cellType));
 }
 
-function queryFirstEquationsEditButton(): Element | undefined {
+function queryFirstEquationsToolsButton(): Element | undefined {
   return (
-    queryFirstCellEditButton("equations") ??
-    queryCellEditButton(queryFirstNotebookCell("model"))
+    queryFirstCellToolsButton("equations") ??
+    queryCellToolsButton(queryFirstNotebookCell("model"))
   );
 }
 
@@ -133,7 +133,7 @@ const NOTEBOOK_TOUR_STEP_DEFINITIONS: NotebookTourStepDefinition[] = [
       popover: {
         title: "Overview markdown",
         description:
-          "The opening markdown cell explains the model, assumptions, and workflow. Press Edit to change the narrative, or click variable names after a run to inspect them."
+          "The opening markdown cell explains the model, assumptions, and workflow. Open Tools, then Edit to change the narrative, or click variable names after a run to inspect them."
       }
     })
   },
@@ -186,14 +186,14 @@ const NOTEBOOK_TOUR_STEP_DEFINITIONS: NotebookTourStepDefinition[] = [
     id: "edit-matrix",
     title: "Edit a matrix",
     buildStep: () => ({
-      element: () => queryFirstCellEditButton("matrix") as Element,
+      element: () => queryFirstCellToolsButton("matrix") as Element,
       onHighlightStarted: () => {
-        scrollTourTargetIntoView(queryFirstCellEditButton("matrix"));
+        scrollTourTargetIntoView(queryFirstCellToolsButton("matrix"));
       },
       popover: {
         title: "Edit a matrix",
         description:
-          "Press Edit to open the matrix source editor. Use grid mode for structured edits or JSON mode for bulk changes, then Apply to save."
+          "Open Tools, then Edit to open the matrix source editor. Use grid mode for structured edits or JSON mode for bulk changes, then Apply to save."
       }
     })
   },
@@ -261,14 +261,14 @@ const NOTEBOOK_TOUR_STEP_DEFINITIONS: NotebookTourStepDefinition[] = [
     id: "edit-equations",
     title: "Edit equations",
     buildStep: () => ({
-      element: () => queryFirstEquationsEditButton() as Element,
+      element: () => queryFirstEquationsToolsButton() as Element,
       onHighlightStarted: () => {
-        scrollTourTargetIntoView(queryFirstEquationsEditButton());
+        scrollTourTargetIntoView(queryFirstEquationsToolsButton());
       },
       popover: {
         title: "Edit equations",
         description:
-          "Press Edit to change equations in grid mode or JSON mode. Apply saves the cell; Cancel discards the draft."
+          "Open Tools, then Edit to change equations in grid mode or JSON mode. Apply saves the cell; Cancel discards the draft."
       }
     })
   },
@@ -384,7 +384,7 @@ const NOTEBOOK_TOUR_STEP_DEFINITIONS: NotebookTourStepDefinition[] = [
       popover: {
         title: "Help panel",
         description:
-          "Read help topics here, use More Help to browse the full topic list, or open a cell Help button for context-specific guidance."
+          "Read help topics here, use More Help to browse the full topic list, or open a cell Tools menu and choose Help for context-specific guidance."
       }
     })
   }
