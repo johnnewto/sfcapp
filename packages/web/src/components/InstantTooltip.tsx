@@ -19,6 +19,7 @@ type InstantTooltipProps<T extends ElementType> = {
   as?: T;
   children: ReactNode;
   className?: string;
+  keepVisible?: boolean;
   tooltip?: string;
 } & Omit<ComponentPropsWithoutRef<T>, "as" | "children" | "className">;
 
@@ -31,6 +32,7 @@ export function InstantTooltip<T extends ElementType = "span">({
   as,
   children,
   className,
+  keepVisible = false,
   tooltip,
   ...rest
 }: InstantTooltipProps<T>) {
@@ -38,12 +40,13 @@ export function InstantTooltip<T extends ElementType = "span">({
   const anchorRef = useRef<HTMLElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const tooltipId = useId();
-  const [isVisible, setIsVisible] = useState(false);
+  const [isHoveredOrFocused, setIsHoveredOrFocused] = useState(false);
   const [layout, setLayout] = useState<{ left: number; placement: Placement; top: number }>({
     left: 0,
     placement: "top",
     top: 0
   });
+  const isVisible = Boolean(tooltip) && (isHoveredOrFocused || keepVisible);
 
   const updatePosition = useCallback(() => {
     if (!tooltip || !anchorRef.current || !tooltipRef.current) {
@@ -88,23 +91,23 @@ export function InstantTooltip<T extends ElementType = "span">({
         className={className}
         onBlur={(event: FocusEvent<HTMLElement>) => {
           componentProps.onBlur?.(event);
-          setIsVisible(false);
+          setIsHoveredOrFocused(false);
         }}
         onFocus={(event: FocusEvent<HTMLElement>) => {
           componentProps.onFocus?.(event);
           if (tooltip) {
-            setIsVisible(true);
+            setIsHoveredOrFocused(true);
           }
         }}
         onMouseEnter={(event: MouseEvent<HTMLElement>) => {
           componentProps.onMouseEnter?.(event);
           if (tooltip) {
-            setIsVisible(true);
+            setIsHoveredOrFocused(true);
           }
         }}
         onMouseLeave={(event: MouseEvent<HTMLElement>) => {
           componentProps.onMouseLeave?.(event);
-          setIsVisible(false);
+          setIsHoveredOrFocused(false);
         }}
         ref={(node: HTMLElement | null) => {
           anchorRef.current = node;

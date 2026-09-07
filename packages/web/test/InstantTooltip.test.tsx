@@ -5,7 +5,11 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DelegatedFormulaTooltip, FORMULA_TOOLTIP_ATTR } from "../src/components/InstantTooltip";
+import {
+  DelegatedFormulaTooltip,
+  FORMULA_TOOLTIP_ATTR,
+  InstantTooltip
+} from "../src/components/InstantTooltip";
 import { highlightFormula } from "../src/components/EquationGridEditor";
 
 afterEach(() => {
@@ -28,6 +32,22 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
     }
   } as DOMRect;
 }
+
+describe("InstantTooltip", () => {
+  it("stays visible after pointer leave while keepVisible is set", () => {
+    render(
+      <InstantTooltip keepVisible tooltip="Income = GDP">
+        Y
+      </InstantTooltip>
+    );
+
+    fireEvent.mouseEnter(screen.getByText("Y"));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Income = GDP");
+
+    fireEvent.mouseLeave(screen.getByText("Y"));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Income = GDP");
+  });
+});
 
 describe("DelegatedFormulaTooltip", () => {
   it("keeps the tip beside the token when the pointer moves onto a prime or script", () => {

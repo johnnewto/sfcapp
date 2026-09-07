@@ -1239,14 +1239,13 @@ export function ResultChart({
               >
                 <InstantTooltip
                   className="legend-item-tooltip-anchor"
+                  keepVisible={isLegendMenuOpen}
                   tooltip={
-                    isLegendMenuOpen
-                      ? undefined
-                      : entry.legendTooltip ??
-                        formatVariableTooltip(
-                          variableDescriptions?.get(entry.name),
-                          variableUnitMetadata?.get(entry.name)
-                        )
+                    entry.legendTooltip ??
+                    formatVariableTooltip(
+                      variableDescriptions?.get(entry.name),
+                      variableUnitMetadata?.get(entry.name)
+                    )
                   }
                 >
                 {isHidden ? (

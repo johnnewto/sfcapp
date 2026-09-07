@@ -423,6 +423,44 @@ describe("ResultChart", () => {
     }
   });
 
+  it("keeps the legend variable tooltip while the actions menu is open", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <ResultChart
+          onRemoveVariable={vi.fn()}
+          series={[{ name: "Y", values: [10, 12, 14, 16] }]}
+          variableDescriptions={new Map([["Y", "Income = GDP"]])}
+        />
+      );
+
+      const label = screen.getByRole("button", { name: /^Y chart variable actions$/i });
+      const legendItem = label.closest(".legend-item");
+      if (!legendItem) {
+        throw new Error("Expected Y legend item.");
+      }
+      const tooltipAnchor = legendItem.querySelector(".legend-item-tooltip-anchor");
+      if (!(tooltipAnchor instanceof HTMLElement)) {
+        throw new Error("Expected legend tooltip anchor.");
+      }
+
+      fireEvent.mouseEnter(legendItem);
+      fireEvent.mouseEnter(tooltipAnchor);
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Income = GDP");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LEGEND_MENU_OPEN_DELAY_MS);
+      });
+      expect(screen.getByRole("menu", { name: /Y chart variable actions/i })).toBeInTheDocument();
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Income = GDP");
+
+      fireEvent.mouseLeave(tooltipAnchor);
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Income = GDP");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("removes a series from the legend actions menu", async () => {
     const user = userEvent.setup();
     const handleRemoveVariable = vi.fn();
