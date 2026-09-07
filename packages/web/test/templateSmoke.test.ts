@@ -5,8 +5,10 @@ import { runBaseline, runScenario } from "@sfcr/core";
 import { buildRuntimeConfig } from "../src/lib/editorModel";
 import { buildEditorStateForNotebookModel } from "../src/notebook/modelSections";
 import { getNotebookTemplateDocument } from "../src/notebook/templates";
+import { createScenarioBaselineSnapshot } from "../src/notebook/useNotebookRunner";
 
 type TemplateId =
+  | "define"
   | "define-simple"
   | "endogenous-money"
   | "interbank-liquidity-risk"
@@ -26,6 +28,28 @@ interface TemplateSmokeCase {
 }
 
 const TEMPLATE_CASES: TemplateSmokeCase[] = [
+  {
+    templateId: "define",
+    baselineRunCellId: "baseline-run",
+    scenarioRunCellId: "scenario-1-run",
+    baselineExpectations(result) {
+      expect(result.options.periods).toBe(80);
+      expect(result.series.Y.length).toBe(80);
+      expect(result.series.TEMP.length).toBe(80);
+      expect(result.series.EMIS_F.length).toBe(80);
+      expect(Number.isFinite(result.series.Y.at(-1) ?? NaN)).toBe(true);
+      expect(result.series.Y[0] ?? NaN).toBeCloseTo(96.1, 4);
+      expect(result.series.TEMP[0] ?? NaN).toBeCloseTo(1.21, 4);
+      expect(result.series.TEMP.at(-1) ?? NaN).toBeCloseTo(3.19, 1);
+      expect(Number.isFinite(result.series.TEMP.at(-1) ?? NaN)).toBe(true);
+    },
+    scenarioExpectations(result, baselineResult) {
+      expect(result.options.periods).toBe(80);
+      // Shock starts at period 4 (2024), matching R scenario 6.
+      expect(result.series.IG_GOV[3] ?? NaN).toBeGreaterThan((baselineResult.series.IG_GOV[3] ?? 0) * 2);
+      expect(result.series.TEMP.at(-1) ?? NaN).toBeLessThan(baselineResult.series.TEMP.at(-1) ?? Infinity);
+    }
+  },
   {
     templateId: "define-simple",
     baselineRunCellId: "baseline-run",
@@ -210,7 +234,7 @@ describe("notebook template smoke tests", () => {
           ? scenarioRuntime.options
           : { ...scenarioRuntime.options, periods: scenarioRunCell.periods };
       const scenarioResult = runScenario(
-        baselineResult,
+        createScenarioBaselineSnapshot(baselineResult, scenarioRunCell.baselineStartPeriod),
         scenarioRunCell.scenario ?? { shocks: [] },
         scenarioOptions
       );

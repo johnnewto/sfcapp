@@ -23,6 +23,7 @@ Tolerance: per variable `max(5e-3 absolute, 1e-6 * |expected|)`. The absolute te
 | `gl8-growth.json` | `gl8-growth` | `scripts/generate_notebook_r_fixtures.R` | `notebookTemplateRegression.extended.test.ts` |
 | `3io-pc.json` | `3io-pc` | baseline: `scripts/generate_3io_pc_r_fixture.R`; scenario: TypeScript (see below) | `notebookTemplateRegression.extended.test.ts` |
 | `eco-3io-pc.json` | `eco-3io-pc` | baseline: `scripts/generate_florence_r_fixture.R`; scenario: TypeScript (see below) | `notebookTemplateRegression.extended.test.ts` |
+| `define.json` | `define` | baseline: `scripts/generate_define_r_fixture.R`; scenarios: TypeScript `runScenario` | `notebookTemplateRegression.extended.test.ts` |
 | `define-simple.json` | `define-simple` | baseline: `scripts/generate_define_simple_r_fixture.R`; scenarios: TypeScript `runScenario` | `notebookTemplateRegression.extended.test.ts` |
 | `io-pc.json` | `io-pc` | baseline: `scripts/generate_iopc_r_fixture.R`; scenarios: TypeScript (see below) | `notebookTemplateRegression.extended.test.ts` |
 | `italy-sfc.json` | `italy-sfc` | `scripts/generate_italy_sfc_r_fixture.R` | `notebookTemplateRegression.extended.test.ts` |
@@ -119,6 +120,28 @@ To refresh scenario checkpoints after changing the notebook or scenario definiti
 1. Run the extended regression and note failing `eco-3io-pc:scenario-1-run:…` diffs, or
 2. Run a one-off dump from the TypeScript engine (same imports as `notebookTemplateRegressionHarness.ts`): `runBaseline` on `baseline-run`, then `runScenario` with the `scenario-1-run` cell shocks.
 3. Update `checkpoints.scenario-1-run` in `eco-3io-pc.json` and keep `sourceScenarioScript` accurate.
+
+## Refresh DEFINE 1.1 (August 2022)
+
+Reference code: `references/define-1.1/R DEFINE 1.1-Aug2022 CODE.R` (from [DEFINE-model/VERSION_1.1_AUG2022](https://github.com/DEFINE-model/VERSION_1.1_AUG2022)).
+
+### Baseline checkpoints
+
+Requires R and `jsonlite`. From repo root:
+
+```bash
+Rscript scripts/generate_define_r_fixture.R
+python3 scripts/generate_define_notebook.py
+pnpm --filter @sfcr/web compile:notebook-yaml -- --write define
+```
+
+The R script sources the August 2022 model (figures stripped, one scenario), snapshots baseline scenario 1 at periods 5, 50, and 80, and writes `packages/web/test/fixtures/r-regressions/define.json` plus `scripts/generated/define_1_1_r_dump.json`. The Python script rebuilds `define.notebook.yaml` from that dump and the dynamic equation block.
+
+**Scenario checkpoints are preserved** on re-run.
+
+### Scenario checkpoints
+
+The notebook applies the same shocks from period 4 on a path that starts in 2021 (`baselineStartPeriod: 1`). Deterministic paper experiments (R scenarios 4-12, Figures 1-3) are `scenario-1-run` through `scenario-9-run`. Scenario checkpoints are not in `define.json` yet; `definePaperScenarios.test.ts` checks that each path solves.
 
 ## Refresh DEFINE-SIMPLE 1.1
 
@@ -219,6 +242,7 @@ This template has no scenario cell; the baseline is a pure in-sample reproductio
 - Changed `references/r-sfcr` or Java growth model source → `generate_notebook_r_fixtures.R`.
 - Changed Florence 3IO-PC R model → `generate_3io_pc_r_fixture.R` (baseline only unless you also refresh scenario JSON manually).
 - Changed Florence ECO-3IO-PC R model → `generate_florence_r_fixture.R` (baseline only unless you also refresh scenario JSON manually).
+- Changed DEFINE 1.1 R model → `generate_define_r_fixture.R` then `generate_define_notebook.py` (baseline only unless you also refresh scenario JSON manually).
 - Changed DEFINE-SIMPLE 1.1 R model → `generate_define_simple_r_fixture.R` (baseline only unless you also refresh scenario JSON manually).
 - Changed Six Lectures IO-PC R model → `generate_iopc_r_fixture.R` (baseline only unless you also refresh scenario JSON manually).
 - Changed Italy SFC R model or `Data_Aalborg.csv` → `generate_italy_sfc_r_fixture.R`, then re-embed the regenerated externals/initial values from `scripts/generated/italy_sfc_yaml_fragments.txt` into `italy_sfc.notebook.yaml`.
