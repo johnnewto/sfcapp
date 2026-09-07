@@ -142,8 +142,31 @@ export function DelegatedFormulaTooltip() {
   const anchorRef = useRef<HTMLElement | null>(null);
   const [state, setState] = useState<{
     layout: { left: number; placement: Placement; top: number };
+    revision: number;
     text: string;
   } | null>(null);
+
+  const syncLayout = useCallback(() => {
+    if (!anchorRef.current?.isConnected) {
+      anchorRef.current = null;
+      setState(null);
+      return;
+    }
+    if (!tooltipRef.current) {
+      return;
+    }
+
+    const layout = computeInstantTooltipLayout(anchorRef.current, tooltipRef.current);
+    setState((current) =>
+      current == null
+        ? current
+        : current.layout.left === layout.left &&
+            current.layout.top === layout.top &&
+            current.layout.placement === layout.placement
+          ? current
+          : { ...current, layout }
+    );
+  }, []);
 
   useEffect(() => {
     function resolveToken(node: EventTarget | null): HTMLElement | null {
@@ -162,11 +185,17 @@ export function DelegatedFormulaTooltip() {
       if (!text) {
         return;
       }
+      // pointerover fires again for primes/sub/sup inside the same token. Keep the
+      // measured position instead of resetting to the viewport origin.
+      if (anchorRef.current === token) {
+        return;
+      }
       anchorRef.current = token;
-      setState({
-        layout: { left: 0, placement: "top", top: 0 },
+      setState((current) => ({
+        layout: current?.layout ?? { left: 0, placement: "top", top: 0 },
+        revision: (current?.revision ?? 0) + 1,
         text
-      });
+      }));
     }
 
     function hideTooltip(): void {
@@ -197,54 +226,15 @@ export function DelegatedFormulaTooltip() {
     if (!state) {
       return;
     }
-    if (!anchorRef.current?.isConnected) {
-      anchorRef.current = null;
-      setState(null);
-      return;
-    }
-    if (!tooltipRef.current) {
-      return;
-    }
 
-    const layout = computeInstantTooltipLayout(anchorRef.current, tooltipRef.current);
-    setState((current) =>
-      current == null
-        ? current
-        : current.layout.left === layout.left &&
-            current.layout.top === layout.top &&
-            current.layout.placement === layout.placement
-          ? current
-          : { ...current, layout }
-    );
-
-    function handleViewportChange(): void {
-      if (!anchorRef.current?.isConnected) {
-        anchorRef.current = null;
-        setState(null);
-        return;
-      }
-      if (!tooltipRef.current) {
-        return;
-      }
-      const nextLayout = computeInstantTooltipLayout(anchorRef.current, tooltipRef.current);
-      setState((current) =>
-        current == null
-          ? current
-          : current.layout.left === nextLayout.left &&
-              current.layout.top === nextLayout.top &&
-              current.layout.placement === nextLayout.placement
-            ? current
-            : { ...current, layout: nextLayout }
-      );
-    }
-
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
+    syncLayout();
+    window.addEventListener("resize", syncLayout);
+    window.addEventListener("scroll", syncLayout, true);
     return () => {
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
+      window.removeEventListener("resize", syncLayout);
+      window.removeEventListener("scroll", syncLayout, true);
     };
-  }, [state?.text]);
+  }, [state?.revision, state?.text, syncLayout]);
 
   if (!state) {
     return null;

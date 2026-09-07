@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from define_table5_descriptions import format_equation_desc
+from define_table5_descriptions import format_equation_desc, format_external_desc
 
 ROOT = Path(__file__).resolve().parents[1]
 R_PATH = ROOT / "references/define-1.1/R DEFINE 1.1-Aug2022 CODE.R"
@@ -443,7 +443,7 @@ def main() -> None:
         if name in SERIES_EXTERNALS:
             values = dump["series"][name]
             ext_rows.append(
-                f"        - {{name: {name}, kind: series, desc: {yaml_quote(name)}, valueText: {yaml_quote(series_text(values))}}}"
+                f"        - {{name: {name}, kind: series, desc: {yaml_quote(format_external_desc(name))}, valueText: {yaml_quote(series_text(values))}}}"
             )
             continue
         value = extra_externals.get(name)
@@ -453,7 +453,7 @@ def main() -> None:
             missing.append(name)
             continue
         ext_rows.append(
-            f"        - [{name}, {fmt_num(float(value))}, {yaml_quote(name)}, \"\", aux]"
+            f"        - [{name}, {fmt_num(float(value))}, {yaml_quote(format_external_desc(name))}, \"\", aux]"
         )
 
     init_names = sorted(set(equations) | {"t"})
@@ -752,7 +752,9 @@ cells:
       rows:
 {ext_block}
       more: |
-        Scalar parameters are the period-1 calibration from R after 15 Gauss-Seidel
+        Parameter labels follow Table 6 of the DEFINE 1.1 manual (Dafermos and
+        Nikolaidi, August 2022), the companion to Table 5 used on the equations.
+        Scalar values are the period-1 calibration from R after 15 Gauss-Seidel
         iterations of the 2021 snapshot. Carbon-tax paths are the SSP3 series in
         `_DEFINE_Carbontaxes.csv` (US$/tCO2, converted to US$ tn / GtCO2). Policy
         dummies (`tau_C_dummy_M`, `gov_IG`, `s_G`, `w_G_2022`) are the levers used
