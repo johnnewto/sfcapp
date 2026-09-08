@@ -23,4 +23,6 @@ After schema/core changes: `pnpm typecheck`. After pilot notebook YAML: `pnpm --
 
 Run only the narrow tests that exercise what you changed (rung 1, and rung 2/3 only for the matching area). Do **not** run heavy/broad suites yourself — `pnpm test`, `pnpm web:test:integration`, and `pnpm web:test:templates` are slow and flaky under parallel load; leave those to the operator. State which targeted commands you ran and suggest the operator run the heavy suites.
 
+Do **not** start Vite (`pnpm dev` / `pnpm web:dev`), drive the in-app browser, or otherwise do live UI verification. The operator runs the app and checks behavior. Prove UI changes with focused Vitest (jsdom) tests; if a visual check is still needed, say what to click in the running notebook.
+
 Timeouts in heavy/broad runs are usually load artifacts, not real failures. If a test times out (rather than failing an assertion) in an area unrelated to your change, treat it as a likely load artifact: re-run just that file in isolation to confirm, and don't chase it as a regression.

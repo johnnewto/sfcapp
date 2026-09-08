@@ -18,6 +18,8 @@ Tests live in `packages/web/test/`, not colocated with `src/`. DOM tests: `// @v
 
 `pnpm --filter @sfcr/web test` excludes templates and integration but is broader than `test:fast`; prefer `pnpm web:test:fast` at repo root.
 
+Do **not** start Vite or drive the in-app browser to verify UI. Leave live app checks to the operator; use focused jsdom Vitest instead.
+
 ## Worker testing
 
 - Prefer `handleWorkerRequest` directly (`workerHandler.test.ts`).

@@ -104,11 +104,13 @@ Package-specific: `pnpm --filter @sfcr/core test`, `pnpm --filter @sfcr/chat-api
 
 Run only the narrow tests that exercise what you changed (rung 1, and rung 2/3 only for the matching area). Do **not** run the heavy/broad suites yourself — `pnpm test`, `pnpm web:test:integration`, and `pnpm web:test:templates` are slow and flaky under parallel load. Leave those to the operator: report the targeted commands you ran and suggest the operator run the heavy suites before handoff.
 
+Do **not** start Vite (`pnpm dev` / `pnpm web:dev`), drive the in-app browser, or otherwise do live UI verification. The operator runs the app and checks behavior. Prove UI changes with focused Vitest (jsdom) tests; if a visual check is still needed, say what to click in the running notebook.
+
 Timeouts in heavy/broad runs are usually load artifacts, not real failures. If a test times out (rather than failing an assertion) in an area unrelated to your change, treat it as a likely load artifact: re-run just that file in isolation to confirm, and do not chase it as a regression.
 
 After pilot notebook YAML edits: `pnpm --filter @sfcr/web compile:notebook-yaml -- --write`.
 
-If a task affects browser behavior, prefer validating through the web app path rather than only the references.
+If a task affects browser behavior, prefer proving it in the web package (focused Vitest) rather than only the Java/R references. Leave live Vite/browser checks to the operator.
 
 ## Reference Code
 Use `references/java/` and `references/r-sfcr/` for:

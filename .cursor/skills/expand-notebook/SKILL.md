@@ -34,7 +34,7 @@ For cell-type snippets, YAML shape, and compile commands, also follow
 - [ ] 2. Design the new section (markdown / run / chart / table / matrix as needed)
 - [ ] 3. Insert cells in narrative order; add an inline `more:` panel on each new cell
 - [ ] 4. Compile pilot YAML (below); fix parse / compile errors
-- [ ] 5. Solve in dev or template tests; verify numeric claims in `more:` prose
+- [ ] 5. Verify numeric claims in `more:` prose against solved output or existing template fixtures (operator: running app)
 - [ ] 6. Run targeted tests (validation ladder below)
 ```
 
@@ -96,19 +96,19 @@ pnpm --filter @sfcr/web compile:notebook-yaml -- --write --write-public-examples
 
 **Public example only** (no matching pilot): edit YAML directly; no compile required unless syncing from a pilot.
 
-Preview: `pnpm dev` → open the template from the notebook UI and run baseline + scenario cells.
+Preview is operator-owned: do not start Vite or drive the in-app browser. The operator opens the template in the running notebook and runs baseline + scenario cells.
 
 ## Verification
 
 Ground every numeric claim in `[more]` prose (steady-state values, growth rates, ratios) against solved output and the cited reference.
 
 1. **Compile gate** — `compile:notebook-yaml` must succeed; fix YAML parse errors (often unquoted `*` in `more:` blocks).
-2. **Solve gate** — in `pnpm dev`, baseline and new scenario runs must complete without solver errors.
+2. **Solve gate** — operator: in the running app, baseline and new scenario runs must complete without solver errors. Agents should not start Vite or drive the browser.
 3. **Targeted tests** (repo root, smallest first):
    - `pnpm --filter @sfcr/web exec vitest run test/notebookMoreField.test.ts`
    - `pnpm --filter @sfcr/web exec vitest run test/notebookYamlTemplates.test.ts`
    - Template smoke for the edited id if covered: `pnpm web:test:templates` (operator — slow)
-4. **Economics check** — inspect run results in the UI or existing template regression fixtures; do not assert numbers in `more:` that contradict solved series.
+4. **Economics check** — do not assert numbers in `more:` that contradict solved series; use existing template regression fixtures. Operator: inspect run results in the UI.
 
 ## Boundaries
 
