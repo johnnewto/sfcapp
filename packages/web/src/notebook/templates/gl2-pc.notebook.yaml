@@ -168,6 +168,36 @@ cells:
         interest payments inject purchasing power; consumption and taxes withdraw it; and
         whatever households do not consume is allocated between additional cash and
         additional bills according to the portfolio rule.
+  - hydraulics:
+      id: pc-hydraulics
+      title: PC stock-flow hydraulics
+      source:
+        transactionMatrixCellId: transaction-flow
+        balanceMatrixCellId: balance-sheet
+        sourceRunCellId: baseline-run
+      layout:
+        sectors:
+          - { id: Government, label: Government, x: 6, y: 5 }
+          - { id: Firms, label: Firms, x: 20, y: 4 }
+          - { id: Households, label: Households, x: 34, y: 5 }
+        tanks:
+          - { id: Bs, sectorId: Government, variable: Bs, polarity: liability, color: "#c0392b", x: 6, y: 14 }
+          - { id: Hh, sectorId: Households, variable: Hh, polarity: asset, color: "#2980b9", x: 30, y: 14 }
+          - { id: Bh, sectorId: Households, variable: Bh, polarity: asset, color: "#d4a017", x: 37, y: 14 }
+        pipes:
+          - { id: G, from: { kind: sector, id: Government }, to: { kind: sector, id: Firms }, variable: G }
+          - { id: Y, from: { kind: sector, id: Firms }, to: { kind: sector, id: Households }, variable: Y }
+          - { id: C, from: { kind: sector, id: Households }, to: { kind: sector, id: Firms }, variable: C }
+          - { id: T, from: { kind: sector, id: Households }, to: { kind: sector, id: Government }, variable: TX }
+          - { id: rBh, from: { kind: sector, id: Government }, to: { kind: sector, id: Households }, expression: "lag(r) * lag(Bh)" }
+      description: MONIAC-style tanks and pipes for PC, bound to the baseline run at the selected period.
+      more: |
+        This cell draws the lecture-style PC circuit from the **actual run series**:
+        government spending `G` and income `Y` feed households; consumption `C` and taxes
+        `TX` return purchasing power; interest `lag(r) * lag(Bh)` is the extra PC pipe.
+        Tanks `Bs`, `Hh`, and `Bh` fill from the balance sheet. Unlock the layout to
+        drag boxes, add pipes, and retarget endpoints. Play advances the shared period
+        so matrices, Sankey, charts, and this scene stay in lockstep.
   - equations:
       id: equations
       title: PC model

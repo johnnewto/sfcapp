@@ -13,6 +13,7 @@ import type {
   NotebookCell,
   NotebookDocument,
   RunCell,
+  HydraulicsCell,
   SankeyCell,
   SequenceCell
 } from "./types";
@@ -50,7 +51,8 @@ const CELL_TYPE_SCHEMA_BRANCH: Record<string, number> = {
   matrix: 8,
   sequence: 9,
   sankey: 10,
-  "abm-model": 11
+  "abm-model": 11,
+  hydraulics: 12
 };
 
 function filterSchemaErrors(value: unknown, errors: ErrorObject[]): ErrorObject[] {
@@ -273,6 +275,10 @@ function validateCellReferences(
   if (cell.type === "sankey") {
     validateSankeyCellReferences(cell, context);
   }
+
+  if (cell.type === "hydraulics") {
+    validateHydraulicsCellReferences(cell, context);
+  }
 }
 
 function validateRunCellReferences(
@@ -396,6 +402,35 @@ function validateSankeyCellReferences(
   if (cell.source.kind === "matrix" && !context.matrixCellIds.has(cell.source.matrixCellId)) {
     context.issues.push(
       createNotebookIssue(`Sankey cell '${cell.id}' references missing matrix '${cell.source.matrixCellId}'.`)
+    );
+  }
+}
+
+function validateHydraulicsCellReferences(
+  cell: HydraulicsCell,
+  context: {
+    issues: NotebookValidationIssue[];
+    matrixCellIds: Set<string>;
+    runCellIds: Set<string>;
+  }
+): void {
+  if (!context.matrixCellIds.has(cell.source.transactionMatrixCellId)) {
+    context.issues.push(
+      createNotebookIssue(
+        `Hydraulics cell '${cell.id}' references missing matrix '${cell.source.transactionMatrixCellId}'.`
+      )
+    );
+  }
+  if (cell.source.balanceMatrixCellId && !context.matrixCellIds.has(cell.source.balanceMatrixCellId)) {
+    context.issues.push(
+      createNotebookIssue(
+        `Hydraulics cell '${cell.id}' references missing matrix '${cell.source.balanceMatrixCellId}'.`
+      )
+    );
+  }
+  if (cell.source.sourceRunCellId && !context.runCellIds.has(cell.source.sourceRunCellId)) {
+    context.issues.push(
+      createNotebookIssue(`Hydraulics cell '${cell.id}' references missing run cell '${cell.source.sourceRunCellId}'.`)
     );
   }
 }

@@ -145,7 +145,8 @@ export type NotebookCell =
   | TableCell
   | MatrixCell
   | SequenceCell
-  | SankeyCell;
+  | SankeyCell
+  | HydraulicsCell;
 
 export interface NotebookCellBase {
   collapsed?: boolean;
@@ -392,6 +393,81 @@ export interface SequenceCell extends NotebookCellBase {
 export interface SankeyCell extends NotebookCellBase {
   type: "sankey";
   source: SankeyCellSource;
+}
+
+export type HydraulicsPolarity = "asset" | "liability";
+
+export const HYDRAULICS_PORTS = ["c", "n", "ne", "e", "se", "s", "sw", "w", "nw"] as const;
+export type HydraulicsPort = (typeof HYDRAULICS_PORTS)[number];
+
+export function isHydraulicsPort(value: unknown): value is HydraulicsPort {
+  return typeof value === "string" && (HYDRAULICS_PORTS as readonly string[]).includes(value);
+}
+
+export type HydraulicsAnchor =
+  | { kind: "sector"; id: string; port?: HydraulicsPort }
+  | { kind: "tank"; id: string; port?: HydraulicsPort }
+  | { kind: "point"; x: number; y: number }; // point x/y are grid cells, or legacy (0, 1)
+
+export interface HydraulicsSectorLayout {
+  id: string;
+  label?: string;
+  /** Integer grid cell 0–40, or legacy (0, 1) fraction. */
+  x: number;
+  /** Integer grid cell 0–24, or legacy (0, 1) fraction. */
+  y: number;
+}
+
+export interface HydraulicsTankLayout {
+  id: string;
+  sectorId: string;
+  variable?: string;
+  expression?: string;
+  polarity?: HydraulicsPolarity;
+  color?: string;
+  /** Integer grid cell 0–40, or legacy (0, 1) fraction. */
+  x: number;
+  /** Integer grid cell 0–24, or legacy (0, 1) fraction. */
+  y: number;
+}
+
+export interface HydraulicsPipeLayout {
+  id: string;
+  from: HydraulicsAnchor;
+  to: HydraulicsAnchor;
+  variable?: string;
+  expression?: string;
+  label?: string;
+  waypoints?: Array<{ x: number; y: number }>;
+  color?: string;
+  /** Marker size in viewBox units. `0` hides the arrow. */
+  arrowSize?: number;
+  /** Token travel speed. `0` keeps tokens still. */
+  animationSpeed?: number;
+  /** Multiplier on flow-scaled stroke width. */
+  widthScale?: number;
+  dashed?: boolean;
+  /** Travelling tokens. `0` hides them. */
+  tokenCount?: number;
+  opacity?: number;
+}
+
+export interface HydraulicsLayout {
+  sectors?: HydraulicsSectorLayout[];
+  tanks?: HydraulicsTankLayout[];
+  pipes?: HydraulicsPipeLayout[];
+}
+
+export type HydraulicsCellSource = {
+  transactionMatrixCellId: string;
+  balanceMatrixCellId?: string;
+  sourceRunCellId?: string;
+};
+
+export interface HydraulicsCell extends NotebookCellBase {
+  type: "hydraulics";
+  source: HydraulicsCellSource;
+  layout?: HydraulicsLayout;
 }
 
 export type SankeyCellSource = {

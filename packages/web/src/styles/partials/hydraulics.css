@@ -1,0 +1,164 @@
+/* Hydraulics cell */
+
+.hydraulics-cell-view,
+.publication-hydraulics {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.hydraulics-cell-caption {
+  color: var(--text-secondary, #64748b);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.hydraulics-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.hydraulics-toolbar-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.hydraulics-toolbar-checkbox,
+.hydraulics-speed {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  user-select: none;
+}
+
+.hydraulics-workspace {
+  display: block;
+}
+
+.hydraulics-diagram-canvas {
+  background:
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.18), transparent 28%),
+    linear-gradient(180deg, var(--color-surface-elevated, #fff), rgba(241, 245, 249, 0.94));
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  border-radius: 18px;
+  display: block;
+  max-width: 100%;
+  touch-action: none;
+}
+
+.hydraulics-sector rect {
+  fill: #f8fafc;
+  stroke: #334155;
+  stroke-width: 2;
+}
+
+.hydraulics-sector text {
+  fill: #0f172a;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.hydraulics-sector.is-selected rect,
+.hydraulics-tank.is-selected rect:last-of-type {
+  stroke: #2563eb;
+  stroke-width: 3;
+}
+
+.hydraulics-tank-label,
+.hydraulics-pipe-label {
+  fill: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hydraulics-tank-value {
+  fill: #0f172a;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 3px;
+}
+
+.hydraulics-pipe-overlay.is-animated {
+  animation: hydraulics-pipe-dash 0.5s linear infinite;
+  stroke-dasharray: 5 7;
+  stroke-linecap: round;
+}
+
+@keyframes hydraulics-pipe-dash {
+  from {
+    stroke-dashoffset: 12;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hydraulics-pipe-overlay.is-animated {
+    animation: none;
+  }
+}
+
+.hydraulics-handle {
+  cursor: grab;
+  fill: #fff;
+  stroke: #2563eb;
+  stroke-width: 2;
+}
+
+.hydraulics-port {
+  cursor: crosshair;
+  fill: #fff;
+  stroke: #0f766e;
+  stroke-width: 1.5;
+}
+
+.hydraulics-inspector-popup {
+  width: min(22rem, calc(100vw - 2rem));
+  max-width: min(22rem, calc(100vw - 2rem));
+}
+
+.hydraulics-inspector {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.hydraulics-inspector h4 {
+  margin: 0;
+}
+
+.hydraulics-inspector label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+}
+
+.hydraulics-inspector input,
+.hydraulics-inspector select {
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+}
+
+.hydraulics-inspector-checkbox {
+  align-items: center;
+  display: flex !important;
+  flex-direction: row;
+  gap: 0.4rem;
+  grid-template-columns: none;
+}
+
+.hydraulics-inspector-readout {
+  color: var(--text-secondary, #64748b);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.hydraulics-diagram-errors {
+  color: var(--text-secondary, #64748b);
+  font-size: 0.92rem;
+}

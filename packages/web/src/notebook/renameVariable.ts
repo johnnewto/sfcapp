@@ -10,6 +10,7 @@ import type {
   EquationsCell,
   ExternalsCell,
   InitialValuesCell,
+  HydraulicsCell,
   MatrixCell,
   ModelCell,
   NotebookCell,
@@ -585,6 +586,8 @@ function renameVariableInCell(
       };
     case "sequence":
       return renameSequenceCell(cell, oldName, newName);
+    case "hydraulics":
+      return renameHydraulicsCell(cell, oldName, newName);
     case "markdown":
       return {
         ...cell,
@@ -650,6 +653,53 @@ function renameSequenceCell(cell: SequenceCell, oldName: string, newName: string
       aliases: nextAliases
     }
   };
+}
+
+function renameHydraulicsCell(cell: HydraulicsCell, oldName: string, newName: string): HydraulicsCell {
+  if (!cell.layout) {
+    return cell;
+  }
+
+  return {
+    ...cell,
+    layout: {
+      ...cell.layout,
+      tanks: cell.layout.tanks?.map((tank) => ({
+        ...tank,
+        variable: tank.variable?.trim() === oldName ? newName : tank.variable,
+        expression: tank.expression ? replaceIdentifierInSource(tank.expression, oldName, newName) : tank.expression
+      })),
+      pipes: cell.layout.pipes?.map((pipe) => ({
+        ...pipe,
+        variable: pipe.variable?.trim() === oldName ? newName : pipe.variable,
+        expression: pipe.expression ? replaceIdentifierInSource(pipe.expression, oldName, newName) : pipe.expression
+      }))
+    }
+  };
+}
+
+function countHydraulicsReferences(cell: HydraulicsCell, variable: string): number {
+  if (!cell.layout) {
+    return 0;
+  }
+  const tanks = cell.layout.tanks ?? [];
+  const pipes = cell.layout.pipes ?? [];
+  return (
+    tanks.reduce(
+      (total, tank) =>
+        total +
+        countExactNameMatch(tank.variable ?? "", variable) +
+        countIdentifierOccurrences(tank.expression ?? "", variable),
+      0
+    ) +
+    pipes.reduce(
+      (total, pipe) =>
+        total +
+        countExactNameMatch(pipe.variable ?? "", variable) +
+        countIdentifierOccurrences(pipe.expression ?? "", variable),
+      0
+    )
+  );
 }
 
 function countReferencesInCell(
@@ -761,6 +811,8 @@ function countReferencesInCell(
         (total, aliasVariable) => total + countExactNameMatch(aliasVariable, variable),
         0
       );
+    case "hydraulics":
+      return countHydraulicsReferences(cell, variable);
     case "markdown":
       return countIdentifierOccurrences(cell.source, variable);
     case "abm-model":
@@ -844,6 +896,8 @@ function cellMatchesModelId(cell: NotebookCell, cells: NotebookCell[], modelId: 
         return runCellMatchesModelId(cells, cell.source.sourceRunCellId, modelId);
       }
       return false;
+    case "hydraulics":
+      return runCellMatchesModelId(cells, cell.source.sourceRunCellId, modelId);
     default:
       return false;
   }

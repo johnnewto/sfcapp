@@ -375,6 +375,117 @@
         "includeZeroFlows": { "type": "boolean" }
       }
     },
+    "hydraulicsCoord": {
+      "type": "number",
+      "description": "Integer grid cell (x: 0–40, y: 0–24). Values in (0, 1) are legacy normalized coordinates."
+    },
+    "hydraulicsAnchor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "enum": ["sector", "tank"] },
+            "id": { "type": "string", "minLength": 1 },
+            "port": { "enum": ["c", "n", "ne", "e", "se", "s", "sw", "w", "nw"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "x", "y"],
+          "properties": {
+            "kind": { "const": "point" },
+            "x": { "$ref": "#/$defs/hydraulicsCoord" },
+            "y": { "$ref": "#/$defs/hydraulicsCoord" }
+          }
+        }
+      ]
+    },
+    "hydraulicsSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transactionMatrixCellId"],
+      "properties": {
+        "transactionMatrixCellId": { "type": "string" },
+        "balanceMatrixCellId": { "type": "string" },
+        "sourceRunCellId": { "type": "string" }
+      }
+    },
+    "hydraulicsLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "x", "y"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string" },
+              "x": { "$ref": "#/$defs/hydraulicsCoord" },
+              "y": { "$ref": "#/$defs/hydraulicsCoord" }
+            }
+          }
+        },
+        "tanks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "sectorId", "x", "y"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "sectorId": { "type": "string" },
+              "variable": { "type": "string" },
+              "expression": { "type": "string" },
+              "polarity": { "enum": ["asset", "liability"] },
+              "color": { "type": "string" },
+              "x": { "$ref": "#/$defs/hydraulicsCoord" },
+              "y": { "$ref": "#/$defs/hydraulicsCoord" }
+            }
+          }
+        },
+        "pipes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "from", "to"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "from": { "$ref": "#/$defs/hydraulicsAnchor" },
+              "to": { "$ref": "#/$defs/hydraulicsAnchor" },
+              "variable": { "type": "string" },
+              "expression": { "type": "string" },
+              "label": { "type": "string" },
+              "color": { "type": "string" },
+              "arrowSize": { "type": "number", "minimum": 0 },
+              "animationSpeed": { "type": "number", "minimum": 0 },
+              "widthScale": { "type": "number", "minimum": 0 },
+              "dashed": { "type": "boolean" },
+              "tokenCount": { "type": "integer", "minimum": 0 },
+              "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+              "waypoints": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["x", "y"],
+                  "properties": {
+                    "x": { "$ref": "#/$defs/hydraulicsCoord" },
+                    "y": { "$ref": "#/$defs/hydraulicsCoord" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "cell": {
       "type": "object",
       "additionalProperties": false,
@@ -396,7 +507,8 @@
             "table",
             "matrix",
             "sequence",
-            "sankey"
+            "sankey",
+            "hydraulics"
           ]
         },
         "title": { "type": "string", "minLength": 1 },
@@ -408,6 +520,7 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "layout": { "$ref": "#/$defs/hydraulicsLayout" },
         "source": {},
         "modelId": { "type": "string" },
         "equations": {
@@ -673,6 +786,13 @@
           "then": {
             "required": ["source"],
             "properties": { "source": { "$ref": "#/$defs/sankeySource" } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hydraulics" } } },
+          "then": {
+            "required": ["source"],
+            "properties": { "source": { "$ref": "#/$defs/hydraulicsSource" } }
           }
         }
       ]

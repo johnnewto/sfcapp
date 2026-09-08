@@ -63,6 +63,8 @@ Supported wrapped cell keys include:
 - `markdown`
 - `matrix`
 - `sequence`
+- `sankey`
+- `hydraulics`
 - `equations`
 - `solver`
 - `externals`

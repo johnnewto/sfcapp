@@ -33,6 +33,7 @@ import type {
   ModelCell,
   NotebookCell,
   RunCell,
+  HydraulicsCell,
   SankeyCell,
   SequenceCell,
   SolverCell,
@@ -418,6 +419,15 @@ export function buildSourceHelperActions(
         { label: "Include zero flows", insert: '"includeZeroFlows": true' },
         { label: "Collapsed true", insert: '"collapsed": true' }
       ];
+    case "hydraulics":
+      return [
+        {
+          label: "Matrix source",
+          insert:
+            '"source": {\n  "transactionMatrixCellId": "transaction-flow",\n  "balanceMatrixCellId": "balance-sheet"\n}'
+        },
+        { label: "Collapsed true", insert: '"collapsed": true' }
+      ];
     case "equations":
       return [
         { label: "Model id", insert: '"modelId": "main"' },
@@ -745,6 +755,22 @@ Optional:
 Behavior:
 - Transaction-flow matrices use the sfcr_sankey sector outflow → flow → sector inflow layout.
 - Input-output matrices (accountingKind: input-output) use output → market → inputs / final demand.`;
+    case "hydraulics":
+      return `Required fields:
+- title
+- id
+- type: "hydraulics"
+- source: { "transactionMatrixCellId": "transaction-flow" }
+
+Optional:
+- source.balanceMatrixCellId
+- source.sourceRunCellId
+- layout.sectors / tanks / pipes with integer grid coordinates (x: 0–40, y: 0–24); (0, 1) fractions still read as legacy normalized
+- pipe color, arrowSize (0 = none), animationSpeed (0 = still), widthScale, dashed, opacity
+- animationSpeed > 0 draws a marching-dash overlay on a solid (or statically dashed) pipe
+- pipe from.port / to.port: c, n, ne, e, se, s, sw, w, nw (omit for nearest edge)
+
+Empty layout seeds sectors from the transactions-flow matrix, tanks from the balance sheet, and pipes from inferred flows.`;
     case "model":
       return "";
     case "abm-model":
@@ -785,7 +811,7 @@ export function getNotebookHelpTopicIdForCell(cell: NotebookCell): NotebookHelpT
     return "chart";
   }
 
-  if (cell.type === "sankey") {
+  if (cell.type === "sankey" || cell.type === "hydraulics") {
     return "sequence";
   }
 
@@ -1248,6 +1274,14 @@ function validateCellSourceShape(
       }
       if (typeof (parsed as SankeyCell).source.matrixCellId !== "string") {
         throw new Error("Sankey matrix sources require matrixCellId.");
+      }
+      return;
+    case "hydraulics":
+      if (!(parsed as HydraulicsCell).source || typeof (parsed as HydraulicsCell).source !== "object") {
+        throw new Error("Hydraulics cells require a source object.");
+      }
+      if (typeof (parsed as HydraulicsCell).source.transactionMatrixCellId !== "string") {
+        throw new Error("Hydraulics cells require source.transactionMatrixCellId.");
       }
       return;
     case "markdown":

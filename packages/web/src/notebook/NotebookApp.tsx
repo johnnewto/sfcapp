@@ -634,6 +634,27 @@ function createNotebookCellForInsert(
         }
       };
     }
+    case "hydraulics": {
+      const matrixCell = resolveDefaultMatrixCell(cells, anchorIndex);
+      const companion = matrixCell
+        ? cells.find(
+            (entry): entry is MatrixCell =>
+              entry.type === "matrix" &&
+              entry.id !== matrixCell.id &&
+              /balance/i.test(`${entry.id} ${entry.title}`)
+          )
+        : null;
+      return {
+        id: createUniqueNotebookCellId(cells, "hydraulics"),
+        type: "hydraulics",
+        title: "New hydraulics",
+        source: {
+          transactionMatrixCellId: matrixCell?.id ?? "matrix",
+          ...(companion ? { balanceMatrixCellId: companion.id } : {}),
+          ...(matrixCell?.sourceRunCellId ? { sourceRunCellId: matrixCell.sourceRunCellId } : {})
+        }
+      };
+    }
   }
 }
 
@@ -2338,7 +2359,7 @@ export function NotebookApp() {
           ? "externals"
           : args.cellType === "chart-grid"
             ? "chart"
-            : args.cellType === "sankey"
+            : args.cellType === "sankey" || args.cellType === "hydraulics"
               ? "sequence"
               : args.cellType === "abm-model"
                 ? "abm-model"

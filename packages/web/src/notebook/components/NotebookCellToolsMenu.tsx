@@ -20,7 +20,8 @@ export const CELL_INSERT_TYPES: NotebookCellInsertType[] = [
   "table",
   "matrix",
   "sequence",
-  "sankey"
+  "sankey",
+  "hydraulics"
 ];
 
 export function formatCellInsertType(type: NotebookCellInsertType): string {
@@ -41,6 +42,8 @@ export function formatCellInsertType(type: NotebookCellInsertType): string {
       return "Sequence";
     case "sankey":
       return "Sankey";
+    case "hydraulics":
+      return "Hydraulics";
   }
 }
 

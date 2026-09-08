@@ -4,5 +4,5 @@ export * from "@sfcr/notebook-core";
 
 export type NotebookCellInsertType = Extract<
 	NotebookCell["type"],
-	"chart" | "chart-grid" | "markdown" | "matrix" | "run" | "sankey" | "sequence" | "table"
+	"chart" | "chart-grid" | "markdown" | "matrix" | "run" | "sankey" | "hydraulics" | "sequence" | "table"
 >;

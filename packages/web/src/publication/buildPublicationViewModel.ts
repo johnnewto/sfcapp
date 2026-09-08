@@ -12,6 +12,7 @@ type PublicationSectionKind =
   | "table"
   | "sequence"
   | "sankey"
+  | "hydraulics"
   | "run"
   | "appendix";
 
@@ -93,6 +94,8 @@ function classifyCellPlacement(cell: NotebookCell): "body" | "appendix" | "skip"
       return cell.source.kind === "matrix" ? "body" : "skip";
     case "sankey":
       return cell.source.kind === "matrix" ? "body" : "skip";
+    case "hydraulics":
+      return "body";
     default:
       return "skip";
   }
@@ -118,6 +121,8 @@ function resolveSectionKind(cell: NotebookCell): PublicationSectionKind {
       return "sequence";
     case "sankey":
       return "sankey";
+    case "hydraulics":
+      return "hydraulics";
     case "run":
       return "run";
     default:

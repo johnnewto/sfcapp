@@ -3,7 +3,7 @@
   "title": "GL2 PC Notebook",
   "metadata": { "version": 1, "template": "gl2-pc" },
   "cells": [
-    { "id": "intro", "type": "markdown", "title": "Overview", "source": "This notebook adapts `gl2-pc.Rmd` into executable browser cells. It includes the PC balance-sheet, transactions-flow, and account-transactions matrices, the baseline portfolio-choice model, the interest-rate scenario from the article, a deterministic `PCEX1` random-shock section with a stored `Ra` sequence, the `PCEX2` adaptive-expectations variant, and the `PCEX3` interest-sensitive propensity-to-consume extension." },
+    { "id": "intro", "type": "markdown", "title": "Overview", "source": "This notebook adapts `gl2-pc.Rmd` into executable browser cells.  It includes the PC balance-sheet, transactions-flow, and account-transactions matrices,  the baseline portfolio-choice model, the interest-rate scenario from the article,  a deterministic `PCEX1` random-shock section with a stored `Ra` sequence,  the `PCEX2` adaptive-expectations variant, and the `PCEX3` interest-sensitive  propensity-to-consume extension.\n", "more": "**Model PC** — Godley & Lavoie's _\"portfolio choice\"_ model (_Monetary\nEconomics_, 2007, chapter 4) — is the first model in the book where households\nhold **more than one financial asset**. Where model SIM (chapter 3) had a single\nform of money, PC splits household wealth between two government liabilities:\nnon-interest-bearing **cash** (`Hh`) and interest-bearing **bills** (`Bh`). The\nletters \"PC\" stand for _portfolio choice_: the central new behaviour is how\nhouseholds divide their wealth between the two.\n\nThe economy still has the SIM sectors — **households**, **production firms** and\n**government** — but adds a **central bank** that buys whatever bills households\ndo not want (`Bcb`) and issues cash against them. The new ingredients relative to\nSIM are:\n\n- **bills paying interest** at the policy rate `r`, so households now receive\n  interest income `lag(r) * lag(Bh)`;\n- a **portfolio (liquidity-preference) decision**: the share of wealth held as\n  bills rises with the interest rate and falls with the income-to-wealth ratio\n  (Tobin-style);\n- a **central bank** that fixes `r` and accommodates household portfolio choices,\n  so the interest rate is a _policy instrument_, not a market price.\n\nThis notebook adapts `gl2-pc.Rmd` into executable cells. It builds up the PC\nbalance-sheet, transactions-flow and account-transaction matrices, the baseline\nmodel, the chapter-4 experiments (a higher interest rate; a higher propensity to\nconsume), and three extensions: `PCEX1` (the role of mistaken expectations with a\nstored random-shock sequence), `PCEX2` (adaptive expectations), and `PCEX3` (an\ninterest-sensitive propensity to consume).\n" },
     {
       "id": "balance-sheet",
       "type": "matrix",
@@ -19,7 +19,8 @@
         { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0", "0"] }
       ],
       "description": "Balance-sheet matrix for model PC following the article structure.",
-      "note": "Validated against the baseline simulation from the source vignette."
+      "note": "Validated against the baseline simulation from the source vignette.",
+      "more": "This is the PC **balance sheet** (Table 4.1 in Godley & Lavoie). Compared with\nSIM there are now two assets and a fourth sector:\n\n- **Households** hold their wealth `V` as cash `+Hh` and bills `+Bh`.\n- **Government** owes the whole bill stock `-Bs`.\n- The **central bank** holds bills `+Bcb` as the asset backing the cash it issues\n  `-Hs`, so its net worth is zero.\n- **Firms** own nothing and owe nothing — all income is distributed, exactly as\n  in SIM.\n\nThe accounting conventions are unchanged: **assets are positive, liabilities\nnegative**, every row sums across sectors to zero, and the net-worth (balance)\nrow closes each column. Households' wealth `V` is the mirror image of the\ngovernment's net debt (`V = Bs - Bcb + Hh - ...`), and in the solved baseline it\nsettles at `V ≈ 85.34`, split into `Bh ≈ 53.45` of bills and `Hh ≈ 31.90` of\ncash.\n"
     },
     {
       "id": "transaction-flow",
@@ -41,7 +42,8 @@
         { "band": "Sum", "label": "Sum", "values": ["0", "0", "0", "0", "0", "0"] }
       ],
       "description": "Transactions-flow matrix for model PC following the article structure.",
-      "note": "Validated against the baseline simulation from the source vignette."
+      "note": "Validated against the baseline simulation from the source vignette.",
+      "more": "The **transactions-flow matrix** (Table 4.2 in Godley & Lavoie) is the heart of\nthe SFC method. Every cell is a payment _out of_ one sector (a minus) that is\nsimultaneously a receipt _into_ another (a plus), so **every row and every column\nsums to zero** — Godley's quadruple-entry principle.\n\nPC adds two features SIM did not have:\n\n- **Interest flows.** The row `lag(r) * lag(Bh)` pays interest on last period's\n  bills from the government to households, while the central bank rebates the\n  interest it earns on its own bills (`lag(r) * lag(Bcb)`) back to the government\n  as _central-bank profits_. The central bank therefore makes zero net income.\n- **A capital (flow-of-funds) account split** for the central bank, separating\n  its current account (interest in, profits out) from its capital account (the\n  change in its bill holdings funding the change in cash).\n\nThe bottom stock-change rows are where flows meet stocks: household saving is\nallocated between the change in cash `-(Hh - lag(Hh))` and the change in bills\n`-(Bh - lag(Bh))`, mirrored by the issuers. That mirroring is the model's\nconsistency check (see the solver note).\n"
     },
     {
       "id": "account-transactions",
@@ -49,25 +51,53 @@
       "title": "PC account transactions",
       "sourceRunCellId": "baseline-run",
       "accountingKind": "account-transactions",
-      "columns": ["Money (Hh)", "Net_worth (V)", "Current", "Bills (Bs)", "Current", "Capital", "Gov.Bills", "HH.Bills", "CB.Bills", "Sum"],
-      "columnBadges": ["asset", "equity", "asset", "liability", "liability", "asset", "liability", "asset", "asset", ""],
-      "sectors": ["Households (HH)", "Households (HH)", "Firms", "Government (Govt)", "Central bank (CB)", "Central bank (CB)", "Government (Govt)", "Households (HH)", "Central bank (CB)", ""],
+      "columns": ["Deposits", "Bills", "Equity", "Current", "Equity", "Current", "Bills (Bs)", "Equity", "Current", "Bills", "Equity", "Sum"],
+      "columnBadges": ["asset", "asset", "equity", "asset", "equity", "asset", "liability", "equity", "liability", "asset", "equity", ""],
+      "sectors": ["Households (HH)", "Households (HH)", "Households (HH)", "Firms", "Firms", "Government (Govt)", "Government (Govt)", "Government (Govt)", "Central_bank (CB)", "Central_bank (CB)", "Central_bank (CB)", ""],
       "rows": [
-        { "band": "Consumption", "label": "Consumption", "values": ["-C", "-C", "+C", "", "", "", "", "", "", "0"] },
-        { "label": "Govt. expenditures", "values": ["", "", "+G", "-G", "", "", "-G", "", "", "0"] },
-        { "band": "Income", "label": "Income", "values": ["+Y", "+Y", "-Y", "", "", "", "", "", "", "0"] },
-        { "band": "Interest", "label": "Interest payments", "values": ["+lag(r) * lag(Bh)", "+lag(r) * lag(Bh)", "", "-lag(r) * lag(Bs)", "", "+lag(r) * lag(Bcb)", "-lag(r) * lag(Bs)", "+lag(r) * lag(Bh)", "+lag(r) * lag(Bcb)", "0"] },
-        { "band": "Profits", "label": "CB profits", "values": ["", "", "", "+lag(r) * lag(Bcb)", "-lag(r) * lag(Bcb)", "", "", "", "", "0"] },
-        { "band": "Taxes", "label": "Taxes", "values": ["-TX", "-TX", "", "+TX", "", "", "+TX", "", "", "0"] },
-        { "band": "Money", "label": "Change money", "values": ["-d(Hh)", "-d(Hh)", "", "", "", "+d(Hs)", "", "", "", "0"] },
-        { "band": "Bills", "label": "Change bills", "values": ["-d(Bh)", "-d(Bh)", "", "+d(Bs)", "", "-d(Bcb)", "+d(Bs)", "-d(Bh)", "-d(Bcb)", "0"] },
-        { "band": "Sum", "label": "Sum", "values": ["Hh", "V", "", "Bs", "", "Hs", "", "Bh", "Bcb", "0"] }
+        { "band": "Consumption", "label": "Consumption", "values": ["-C", "", "-C", "+C", "+C", "", "", "", "", "", "", "0"] },
+        { "band": "Govt", "label": "Govt. expenditures", "values": ["", "", "", "+G", "+G", "-G", "", "-G", "", "", "", "0"] },
+        { "band": "Income", "label": "Income", "values": ["+Y", "", "+Y", "-Y", "-Y", "", "", "", "", "", "", "0"] },
+        { "band": "Interest", "label": "Interest payments", "values": ["+lag(r) * lag(Bh)", "", "+r'•Bh'", "", "", "-lag(r) * lag(Bs)", "", "-r'•Bs'", "+r'•Bcb'", "", "+r'•Bcb'", "0"] },
+        { "band": "Profits", "label": "CB profits", "values": ["", "", "", "", "", "+r'*Bcb", "", "+r'•Bcb", "-r'*Bcb'", "", "-r'•Bcb'", "0"] },
+        { "band": "Taxes", "label": "Taxes", "values": ["-TX", "", "-TX", "", "", "+TX", "", "+TX", "", "", "", "0"] },
+        { "band": "Money", "label": "Change money", "values": ["", "", "", "", "", "", "", "", "", "", "", "0"] },
+        { "band": "Bills", "label": "Change bills", "values": ["-d(Bh)", "+d(Bh)", "", "", "", "+d(Bs)", "-d(Bs)", "", "-d(Bcb)", "+d(Bcb)", "", "0"] },
+        { "band": "Sum", "label": "Sum", "values": ["Mh", "Bh", "HH_eq", "", "", "", "Deficit", "", "", "Hs", "", "0"] }
       ],
       "collapsed": false,
       "description": "Account-level transaction matrix for PC with hierarchical sector and account columns.",
-      "note": "Columns group balance-sheet accounts by sector. Use Expand all / Collapse all or click sector headers to show or hide account columns."
+      "note": "Columns group balance-sheet accounts by sector. Use Expand all / Collapse all or click sector headers to show or hide account columns.",
+      "more": "This is the same period's transactions expanded to the **account level**:\nbalance-sheet accounts (deposits/cash, bills, equity) are grouped under each\nsector, so you can trace a single transaction across the specific accounts it\ntouches. Use **Expand all / Collapse all**, or click a sector header, to show or\nhide the account columns under each sector.\n\nIt is the most granular view of the quadruple-entry structure: every row still\nsums to zero across accounts, and the closing **Sum** row reports the\nend-of-period stocks (household cash `Mh`, bills `Bh`, the government deficit, and\nissued cash `Hs`) that carry into the next period.\n"
     },
-    { "id": "transaction-flow-sequence", "type": "sequence", "title": "PC transaction flow sequence", "source": { "kind": "matrix", "matrixCellId": "transaction-flow" }, "description": "Sequence view generated from the PC transactions-flow matrix at the selected simulation period." },
+    { "id": "transaction-flow-sequence", "type": "sequence", "title": "PC transaction flow sequence", "source": { "kind": "matrix", "matrixCellId": "transaction-flow" }, "description": "Sequence view generated from the PC transactions-flow matrix at the selected simulation period.", "more": "This reads the transactions-flow matrix **column by column** at the selected\nperiod, as each sector's budget identity. Following the columns shows the\n_circuit_ of money and bills within a single period: government spending and\ninterest payments inject purchasing power; consumption and taxes withdraw it; and\nwhatever households do not consume is allocated between additional cash and\nadditional bills according to the portfolio rule.\n" },
+    {
+      "id": "pc-hydraulics",
+      "type": "hydraulics",
+      "title": "PC stock-flow hydraulics",
+      "source": { "transactionMatrixCellId": "transaction-flow", "balanceMatrixCellId": "balance-sheet", "sourceRunCellId": "baseline-run" },
+      "layout": {
+        "sectors": [
+          { "id": "Government", "label": "Government", "x": 6, "y": 5 },
+          { "id": "Firms", "label": "Firms", "x": 20, "y": 4 },
+          { "id": "Households", "label": "Households", "x": 34, "y": 5 }
+        ],
+        "tanks": [
+          { "id": "Bs", "sectorId": "Government", "variable": "Bs", "polarity": "liability", "color": "#c0392b", "x": 6, "y": 14 },
+          { "id": "Hh", "sectorId": "Households", "variable": "Hh", "polarity": "asset", "color": "#2980b9", "x": 30, "y": 14 },
+          { "id": "Bh", "sectorId": "Households", "variable": "Bh", "polarity": "asset", "color": "#d4a017", "x": 37, "y": 14 }
+        ],
+        "pipes": [
+          { "id": "G", "from": { "kind": "sector", "id": "Government" }, "to": { "kind": "sector", "id": "Firms" }, "variable": "G" },
+          { "id": "Y", "from": { "kind": "sector", "id": "Firms" }, "to": { "kind": "sector", "id": "Households" }, "variable": "Y" },
+          { "id": "C", "from": { "kind": "sector", "id": "Households" }, "to": { "kind": "sector", "id": "Firms" }, "variable": "C" },
+          { "id": "T", "from": { "kind": "sector", "id": "Households" }, "to": { "kind": "sector", "id": "Government" }, "variable": "TX" },
+          { "id": "rBh", "from": { "kind": "sector", "id": "Government" }, "to": { "kind": "sector", "id": "Households" }, "expression": "lag(r) * lag(Bh)" }
+        ]
+      },
+      "description": "MONIAC-style tanks and pipes for PC, bound to the baseline run at the selected period.",
+      "more": "This cell draws the lecture-style PC circuit from the **actual run series**:\ngovernment spending `G` and income `Y` feed households; consumption `C` and taxes\n`TX` return purchasing power; interest `lag(r) * lag(Bh)` is the extra PC pipe.\nTanks `Bs`, `Hh`, and `Bh` fill from the balance sheet. Unlock the layout to\ndrag boxes, add pipes, and retarget endpoints. Play advances the shared period\nso matrices, Sankey, charts, and this scene stay in lockstep.\n"
+    },
     {
       "id": "equations",
       "type": "equations",
@@ -80,15 +110,19 @@
         { "id": "eq-3-V", "name": "V", "desc": "Household wealth.", "expression": "I(YD - C)", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
         { "id": "eq-4-C", "name": "C", "desc": "Consumption depends on disposable income and lagged wealth.", "expression": "alpha1 * YD + alpha2 * lag(V)", "role": "identity", "unitMeta": { "stockFlow": "flow", "signature": { "money": 1, "time": -1 } } },
         { "id": "eq-5-Hh", "name": "Hh", "desc": "Household money holdings.", "expression": "V - Bh", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
-        { "id": "eq-6-Hh1", "name": "Hh1", "desc": "Alternative portfolio-choice definition for money holdings.", "expression": "V * ((1 - lambda0) - lambda1 * r + lambda2 * (YD / V))", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
+        { "id": "eq-6-Hh1", "name": "Hh_Tobin", "desc": "Alternative Tobin's portfolio-choice definition for money holdings.", "expression": "V * ((1 - lambda0) - lambda1 * r + lambda2 * (YD / V))", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
         { "id": "eq-7-Bh", "name": "Bh", "desc": "Household bill holdings.", "expression": "V * (lambda0 + lambda1 * r - lambda2 * (YD / V))", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
         { "id": "eq-8-Bs", "name": "Bs", "desc": "Government bill supply.", "expression": "I(G + lag(r) * lag(Bs) - TX - lag(r) * lag(Bcb))", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
         { "id": "eq-9-Hs", "name": "Hs", "desc": "High-powered money supplied by the central bank.", "expression": "I(d(Bcb))", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
-        { "id": "eq-10-Bcb", "name": "Bcb", "desc": "Central-bank bill holdings.", "expression": "Bs - Bh", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } }
+        { "id": "eq-10-Bcb", "name": "Bcb", "desc": "Central-bank bill holdings.", "expression": "Bs - Bh", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
+        { "id": "eq-cddd7630-9e5a-44fb-aeaf-f95ecd2a071c", "name": "Mh", "expression": "I(Households.Deposits)" },
+        { "id": "eq-786f7c2b-e729-4710-9109-79e5787910a9", "name": "BGs", "expression": "BGs' + Government.Bills * dt" },
+        { "id": "eq-a50bd039-4cea-42e2-b9c0-f6a08dacb824", "name": "Bcbs", "expression": "I(Central_bank.Bills)" }
       ],
-      "collapsed": true
+      "collapsed": false,
+      "more": "These are the equations of model PC, following Godley & Lavoie chapter 4\n(eqs. 4.1–4.11). They fall into natural groups:\n\n- **Output and income.** `Y = C + G` (eq. 4.1); disposable income now _includes\n  interest on bills_, `YD = Y - TX + lag(r) * lag(Bh)` (eq. 4.2); taxes fall on\n  income _and_ interest receipts, `TX = theta * (Y + lag(r) * lag(Bh))`\n  (eq. 4.3).\n- **The behavioural core.** Consumption `C = alpha1 * YD + alpha2 * lag(V)`\n  (eq. 4.5) is the SIM consumption function with _wealth_ `V` replacing money;\n  wealth accumulates as `V = lag(V) + (YD - C)` (eq. 4.4).\n- **The portfolio choice (the new content of chapter 4).**\n  `Bh = V * (lambda0 + lambda1 * r - lambda2 * (YD / V))` (eq. 4.7) is the\n  Tobinesque bill-demand function: the _share_ of wealth held as bills rises with\n  the interest rate `r` and falls with the income-to-wealth ratio `YD / V`. Cash\n  is the residual, `Hh = V - Bh` (eq. 4.6) — money is what is left after the\n  portfolio decision.\n- **Government and central bank.** Bill supply grows with the deficit,\n  `Bs = lag(Bs) + (G + lag(r) * lag(Bs)) - (TX + lag(r) * lag(Bcb))` (eq. 4.8);\n  the central bank takes up the residual bills `Bcb = Bs - Bh` (eq. 4.10) and\n  issues cash to match, `Hs = lag(Hs) + d(Bcb)` (eq. 4.9).\n- **`Hh_Tobin`** is the _alternative_ expression for cash from the full Tobin\n  system, `V * ((1 - lambda0) - lambda1 * r + lambda2 * (YD / V))`. It is shown\n  to demonstrate the adding-up constraint: the money and bill shares must sum to\n  one, so this equals `V - Bh`.\n\n**The redundant equation.** As in SIM, the system has one equation more than it\nneeds. The redundant relation is `Hh = Hs`: the cash households end up holding\nequals the cash the central bank has issued. It is never imposed on the solver —\nit _emerges_, and checking it holds is how we know the accounting is watertight.\n"
     },
-    { "id": "solver", "type": "solver", "title": "Solver", "modelId": "pc-baseline", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "1e-15", "hiddenLeftVariable": "Hh", "hiddenRightVariable": "Hs", "hiddenToleranceText": "0.00001", "relativeHiddenTolerance": false }, "collapsed": true },
+    { "id": "solver", "type": "solver", "title": "Solver", "modelId": "pc-baseline", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "1e-15", "hiddenLeftVariable": "Hh", "hiddenRightVariable": "Hs", "hiddenToleranceText": "0.00001", "relativeHiddenTolerance": false }, "collapsed": true, "more": "PC is solved period by period with **Gauss–Seidel** iteration: lagged stocks\n(`lag(V)`, `lag(Bh)`, `lag(Bcb)`, …) are known from the previous period, and the\nwithin-period equations are iterated to convergence for the current flows and\nend-of-period stocks.\n\nThe solver's **hidden variables** `Hh` and `Hs` implement the redundant-equation\ncheck. Because one equation is redundant, the equality `Hh = Hs` is _not_ used to\nfind the solution — the solver instead verifies, to tolerance `hiddenTolerance`,\nthat the independently computed household cash and central-bank cash agree every\nperiod. If they ever diverged, money would be leaking somewhere. This is the\nnumerical embodiment of Godley & Lavoie's \"watertight\" claim.\n" },
     {
       "id": "externals-equations",
       "type": "externals",
@@ -104,13 +138,14 @@
         { "id": "ext-6-lambda1", "name": "lambda1", "desc": "Interest sensitivity of bill demand.", "kind": "constant", "valueText": "0.05", "unitMeta": { "stockFlow": "aux", "signature": { "time": 1 } } },
         { "id": "ext-7-lambda2", "name": "lambda2", "desc": "Income sensitivity of bill demand.", "kind": "constant", "valueText": "0.01", "unitMeta": { "stockFlow": "aux", "signature": { "time": 1 } } }
       ],
-      "collapsed": true
+      "collapsed": true,
+      "more": "These are the exogenous parameters and policy levers of model PC:\n\n- `r` = 0.025 — the bills rate, set by the central bank as a **policy\n  instrument** (the variable shocked in Scenario 1).\n- `G` = 20 — government expenditure.\n- `alpha1` = 0.6, `alpha2` = 0.4 — propensities to consume out of disposable\n  income and out of lagged wealth.\n- `theta` = 0.2 — the tax rate.\n- `lambda0` = 0.635, `lambda1` = 0.05, `lambda2` = 0.01 — the portfolio\n  parameters: the autonomous bill share, its sensitivity to the interest rate,\n  and its sensitivity to the income/wealth ratio.\n\n**A parameter caveat.** Godley & Lavoie (and the R fixture) use `lambda1 = 5`,\nwhich makes the portfolio strongly interest-sensitive; this notebook uses\n`lambda1 = 0.05`. With the small value the steady-state bill share is\n`lambda0 + lambda1 * r - lambda2 * (YD / V) ≈ 0.635 + 0.00125 - 0.01 ≈ 0.626`,\nmatching the solved `Bh / V ≈ 0.626`. The consequence — visible in Scenario 1 — is\nthat a change in `r` barely moves the _composition_ of the portfolio here, so the\ninterest-income channel dominates.\n"
     },
     { "id": "initial-values-equations", "type": "initial-values", "title": "Initial values", "modelId": "pc-baseline", "initialValues": [], "collapsed": true },
-    { "id": "baseline-run", "type": "run", "title": "Baseline run", "description": "Baseline PC simulation with the hidden-equation condition Hh = Hs.", "mode": "baseline", "periods": 70, "resultKey": "gl2_pc_baseline", "sourceModelId": "pc-baseline" },
-    { "id": "baseline-chart", "type": "chart", "title": "Baseline headline variables", "sourceRunCellId": "baseline-run", "variables": ["Y", "YD", "C", "V", "Bh", "Hh"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "sourceRunCellId": "baseline-run", "variables": ["Y", "YD", "TX", "C", "V", "Bh", "Hh", "Bcb"] },
-    { "id": "scenario-1-note", "type": "markdown", "title": "Interest-rate scenario", "source": "This scenario raises the bills rate `r` from `0.025` to `0.035` between periods 5 and 60, matching the first deterministic experiment in the vignette." },
+    { "id": "baseline-run", "type": "run", "title": "Baseline run", "description": "Baseline PC simulation with the hidden-equation condition Hh = Hs.", "mode": "baseline", "periods": 70, "resultKey": "gl2_pc_baseline", "sourceModelId": "pc-baseline", "more": "The baseline integrates model PC forward for 70 periods, starting from low\nstocks, with the bills rate `r` held at `0.025` and `G` at `20`. With little\nwealth inherited from the past the economy starts well below its stationary state\nand climbs toward it, converging to a state in which stocks stop growing and the\ngovernment budget (inclusive of interest) is balanced. This run also supplies the\n\"last-period\" state that every scenario below starts from.\n" },
+    { "id": "baseline-chart", "type": "chart", "title": "Baseline headline variables", "more": "In the baseline, `r` and `G` are constant and every aggregate converges to a\n**stationary state**. The solved values are:\n\n- output `Y ≈ 105.34`;\n- disposable income, consumption and wealth all `≈ 85.34` (`YD = C = V` in the\n  stationary state, because `V` stops changing only when `YD = C`);\n- bills `Bh ≈ 53.45` and cash `Hh ≈ 31.90`, a bill share of about `62.6%`.\n\nOutput exceeds SIM's `Y* = 100` because households now earn **interest income** on\ntheir bills, which adds to disposable income and hence to demand. The portfolio\nsplit (`Bh ≈ 53.45`, `Hh ≈ 31.90`) is the visible signature of chapter 4: wealth\nis no longer held as a single asset.\n", "sourceRunCellId": "baseline-run", "variables": ["Y", "YD", "C", "V", "Bh", "Hh"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "baseline-table", "type": "table", "title": "Baseline variable summary", "more": "The table makes the convergence concrete. Watch `V`, `Bh` and `Hh` flatten as the\nincrements `YD - C` shrink toward zero. Two identities to check against the\naccounting:\n\n- `Hh = Bcb = Hs` in every row (here all `≈ 31.90` at the stationary state) —\n  this is the redundant equation `Hh = Hs` holding period by period, together with\n  the central bank's `Bcb = Hs`.\n- `Bh + Bcb = Bs` — household plus central-bank bill holdings exhaust the\n  government's bill supply (`53.45 + 31.90 ≈ 85.34`).\n", "sourceRunCellId": "baseline-run", "variables": ["Y", "YD", "TX", "C", "V", "Bh", "Hh", "Bcb"] },
+    { "id": "scenario-1-note", "type": "markdown", "title": "Interest-rate scenario", "source": "This scenario raises the bills rate `r` from `0.025` to `0.035` between periods 5 and 60, matching the first deterministic experiment in the vignette.", "more": "Scenario 1 reproduces Godley & Lavoie's first chapter-4 experiment (R scenario 2):\na permanent **increase in the bills rate** `r` from `0.025` to `0.035`, applied\nfrom period 5. It is the experiment behind the book's Figures 4.3–4.4 on the\nevolution of portfolio shares and of income.\n" },
     {
       "id": "scenario-1-run",
       "type": "run",
@@ -126,8 +161,25 @@
       "resultKey": "gl2_pc_s1",
       "sourceModelId": "pc-baseline"
     },
-    { "id": "scenario-1-chart", "type": "chart", "title": "Scenario 1 portfolio adjustment", "sourceRunCellId": "scenario-1-run", "variables": ["Y", "YD", "C", "Bh", "Hh"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "pcex1-note", "type": "markdown", "title": "PCEX1", "source": "This section mirrors the random-shock experiment from `gl2-pc.Rmd`, but uses a fixed stored `Ra` sequence instead of runtime randomness so that browser regressions remain deterministic." },
+    { "id": "scenario-1-chart", "type": "chart", "title": "Scenario 1 portfolio adjustment", "more": "After the rate rise the economy moves to a **higher** stationary state: output\nclimbs from `Y ≈ 105.34` to `≈ 107.69`, with disposable income and consumption\nrising in step to `≈ 87.69`. This is Godley & Lavoie's initially _puzzling_\nresult — a higher interest rate is **expansionary** here, because the extra\ninterest the government pays on bills is income to households, which they partly\nspend.\n\nThe _portfolio_ response, by contrast, is barely visible in this notebook: the\nbill share moves only from about `62.62%` to `62.67%`. In the book (with\n`lambda1 = 5`) the same experiment shifts the bill share by roughly a full\npercentage point — the headline of Figure 4.3. Here the small `lambda1 = 0.05`\nmutes the composition effect, so what you see is almost entirely the\ninterest-income channel. (Raise `lambda1` toward `5` to recover the textbook-sized\nportfolio swing.)\n", "sourceRunCellId": "scenario-1-run", "variables": ["Y", "YD", "C", "Bh", "Hh"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "scenario-2-note", "type": "markdown", "title": "Higher propensity to consume", "source": "This scenario raises the propensity to consume out of income `alpha1` from `0.6` to `0.7` between periods 5 and 60 on the baseline PC model, reproducing Godley & Lavoie's third chapter-4 experiment on the model without expectations.", "more": "Scenario 2 reproduces Godley & Lavoie's other chapter-4 experiment (R scenario 3):\na permanent rise in the **propensity to consume out of income** `alpha1` from\n`0.6` to `0.7`, applied to the baseline PC model from period 5. Unlike the\nadaptive run further down, this is the _plain_ model with within-period\nexpectations, so it isolates the pure dynamics of a thriftiness shock.\n" },
+    {
+      "id": "scenario-2-run",
+      "type": "run",
+      "title": "Scenario 2: higher propensity to consume",
+      "mode": "scenario",
+      "scenario": {
+        "shocks": [
+          { "variables": { "alpha1": { "kind": "constant", "value": 0.7 } }, "startPeriodInclusive": 5, "endPeriodInclusive": 60 }
+        ]
+      },
+      "baselineRunCellId": "baseline-run",
+      "periods": 60,
+      "resultKey": "gl2_pc_s2",
+      "sourceModelId": "pc-baseline"
+    },
+    { "id": "scenario-2-chart", "type": "chart", "title": "Scenario 2 income and wealth", "more": "This experiment shows the **two-speed** nature of the consumption multiplier and a\ngenuine _paradox of thrift in reverse_:\n\n- **Short run.** Spending more out of income gives an immediate boom — output\n  spikes to a peak of `Y ≈ 124.7` (around period 4), with consumption and\n  disposable income jumping with it. This matches the rise toward `≈ 125` shown in\n  the book's GDP figure for this experiment.\n- **Long run.** Consuming more means _saving_ less, so wealth `V` is run down —\n  from `≈ 85.34` to `≈ 62.94`. Lower wealth means fewer bills and therefore _less_\n  interest income, which drags demand back. The economy settles at a stationary\n  output of `Y ≈ 103.92`, **below** the original baseline `105.34`.\n\nSo a higher propensity to consume buys a transitory boom at the cost of a\npermanently smaller stock of wealth and a slightly lower long-run income — the\nmirror image of the result that _more_ thrift would raise long-run wealth and\ninterest income.\n", "sourceRunCellId": "scenario-2-run", "variables": ["Y", "C", "YD", "V"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "pcex1-note", "type": "markdown", "title": "PCEX1", "source": "This section mirrors the random-shock experiment from `gl2-pc.Rmd`, but uses a fixed stored `Ra` sequence instead of runtime randomness so that browser regressions remain deterministic.", "more": "This section mirrors the **role of expectations** in Godley & Lavoie chapter 4\n(model PCEX). Households must decide their portfolio _before_ they know their\nactual disposable income, so they act on **expected** disposable income `YDE`.\nThe book draws `YDE` from a random process; to keep the browser results\nreproducible, this notebook feeds a **fixed stored shock series** `Ra` instead of\nlive randomness, with `YDE = YD * (1 + Ra)`.\n" },
     {
       "id": "pcex1-equations",
       "type": "equations",
@@ -150,7 +202,8 @@
         { "id": "p1-eq-13-Bd", "name": "Bd", "desc": "Desired household bill holdings.", "expression": "VE * (lambda0 + lambda1 * r - lambda2 * (YDE / VE))", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
         { "id": "p1-eq-14-YDE", "name": "YDE", "desc": "Expected disposable income with the fixed shock sequence.", "expression": "YD * (1 + Ra)", "role": "identity", "unitMeta": { "stockFlow": "flow", "signature": { "money": 1, "time": -1 } } }
       ],
-      "collapsed": true
+      "collapsed": true,
+      "more": "PCEX1 rewrites the portfolio block in terms of **expected** magnitudes, which is\nthe substance of Godley & Lavoie's expectations discussion:\n\n- Consumption is driven by _expected_ income, `C = alpha1 * YDE + alpha2 * lag(V)`.\n- Households plan their wealth and holdings on expectations: expected wealth\n  `VE = lag(V) + (YDE - C) * dt`, **desired** bills\n  `Bd = VE * (lambda0 + lambda1 * r - lambda2 * (YDE / VE))`, and **desired** cash\n  `Hd = VE - Bd`.\n- The key behavioural assumption: **bills are acquired as planned**, `Bh = Bd`,\n  so _all_ the surprise in realised income lands on **cash**. Realised cash is the\n  residual `Hh = V - Bh`.\n- `YDE = YD * (1 + Ra)` injects the stored expectation error each period.\n\nThe economic point is that **money is the buffer**: because bills are fixed at\ntheir desired level, unexpected income is absorbed entirely by money balances.\n"
     },
     { "id": "pcex1-solver", "type": "solver", "title": "Solver", "modelId": "pc-pcex1", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "1e-15", "hiddenLeftVariable": "Hh", "hiddenRightVariable": "Hs", "hiddenToleranceText": "0.00001", "relativeHiddenTolerance": false }, "collapsed": true },
     {
@@ -173,9 +226,9 @@
     },
     { "id": "pcex1-initial-values", "type": "initial-values", "title": "Initial values", "modelId": "pc-pcex1", "initialValues": [], "collapsed": true },
     { "id": "pcex1-baseline-run", "type": "run", "title": "PCEX1 baseline run", "mode": "baseline", "periods": 60, "resultKey": "gl2_pc_pcex1_baseline", "description": "PCEX1 with a stored `Ra` shock series and the hidden-equation condition Hh = Hs.", "sourceModelId": "pc-pcex1" },
-    { "id": "pcex1-baseline-chart", "type": "chart", "title": "PCEX1 stocks and desired holdings", "sourceRunCellId": "pcex1-baseline-run", "variables": ["Hh", "Hd", "Bh", "Bd", "YDE"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "pcex1-baseline-table", "type": "table", "title": "PCEX1 variable summary", "sourceRunCellId": "pcex1-baseline-run", "variables": ["Y", "YD", "YDE", "C", "V", "Hh", "Hd", "Bh", "Bd"] },
-    { "id": "adaptive-note", "type": "markdown", "title": "Adaptive expectations", "source": "The next model follows the adaptive-expectations section of `gl2-pc.Rmd`. Expected disposable income is set to `lag(YD)`, and the wealth-allocation equations are rewritten in terms of desired bills `Bd` and expected wealth `VE`." },
+    { "id": "pcex1-baseline-chart", "type": "chart", "title": "PCEX1 stocks and desired holdings", "more": "The chart contrasts **realised** holdings (`Hh`, `Bh`) with **desired** holdings\n(`Hd`, `Bd`) as the stored `Ra` shocks buffet expected income `YDE`. Two features\nreproduce the chapter's message:\n\n- `Bh` tracks `Bd` exactly — bills are always acquired as planned.\n- `Hh` and `Hd` come apart: realised cash diverges from desired cash by as much as\n  `≈ 10.4` over the run. That gap **is** the accumulated expectation error,\n  absorbed by money as the residual asset.\n\nWhen expectations happen to be correct (`Ra = 0`), `Hh` and `Hd` coincide; every\ndeviation is the model showing money doing its buffer-stock job.\n", "sourceRunCellId": "pcex1-baseline-run", "variables": ["Hh", "Hd", "Bh", "Bd", "YDE"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "pcex1-baseline-table", "type": "table", "title": "PCEX1 variable summary", "more": "The table lets you line up `YD` against `YDE` and `Hh` against `Hd` period by\nperiod. Where `YDE > YD` (households over-estimated income) they planned to hold\nmore bills than warranted and end up with _less_ cash than desired; where\n`YDE < YD` the reverse. Bills (`Bh = Bd`) never carry the error — confirming the\nbuffer role of money numerically.\n", "sourceRunCellId": "pcex1-baseline-run", "variables": ["Y", "YD", "YDE", "C", "V", "Hh", "Hd", "Bh", "Bd"] },
+    { "id": "adaptive-note", "type": "markdown", "title": "Adaptive expectations", "source": "The next model follows the adaptive-expectations section of `gl2-pc.Rmd`. Expected disposable income is set to `lag(YD)`, and the wealth-allocation equations are rewritten in terms of desired bills `Bd` and expected wealth `VE`.", "more": "This model follows the **adaptive-expectations** variant (PCEX2). Instead of a\nrandom draw, expected disposable income is simply **last period's actual income**,\n`YDE = lag(YD)`. The portfolio block is otherwise the PCEX1 block (desired bills\n`Bd`, expected wealth `VE`, cash as residual), so money still buffers expectation\nerrors — but now the errors are systematic lags rather than random noise.\n" },
     {
       "id": "adaptive-equations",
       "type": "equations",
@@ -198,7 +251,8 @@
         { "id": "ad-eq-13-Bd", "name": "Bd", "desc": "Desired household bill holdings.", "expression": "VE * (lambda0 + lambda1 * r - lambda2 * (YDE / VE))", "role": "accumulation", "unitMeta": { "stockFlow": "stock", "signature": { "money": 1 } } },
         { "id": "ad-eq-14-YDE", "name": "YDE", "desc": "Expected disposable income formed adaptively.", "expression": "lag(YD)", "role": "identity", "unitMeta": { "stockFlow": "flow", "signature": { "money": 1, "time": -1 } } }
       ],
-      "collapsed": true
+      "collapsed": true,
+      "more": "The equations are the PCEX1 block with one change: `YDE = lag(YD)` replaces the\nrandom-shock rule. Because expectations equal last period's outcome, in any\n**stationary** state `YDE = YD` and the model collapses to ordinary PC — which is\nwhy the adaptive baseline converges to the same `Y ≈ 105.34` steady state as the\nplain model. The adaptive structure matters only _out of_ steady state, during\ntransitions, where it slows and smooths the response.\n"
     },
     { "id": "adaptive-solver", "type": "solver", "title": "Solver", "modelId": "pc-adaptive", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "1e-15", "hiddenLeftVariable": "", "hiddenRightVariable": "", "hiddenToleranceText": "0.00001", "relativeHiddenTolerance": false }, "collapsed": true },
     {
@@ -220,8 +274,8 @@
     },
     { "id": "adaptive-initial-values", "type": "initial-values", "title": "Initial values", "modelId": "pc-adaptive", "initialValues": [], "collapsed": true },
     { "id": "adaptive-baseline-run", "type": "run", "title": "Adaptive baseline run", "mode": "baseline", "periods": 60, "resultKey": "gl2_pc_adaptive_baseline", "description": "Adaptive-expectations PC model with expected disposable income set to lagged income.", "sourceModelId": "pc-adaptive" },
-    { "id": "adaptive-baseline-chart", "type": "chart", "title": "Adaptive baseline headline variables", "sourceRunCellId": "adaptive-baseline-run", "variables": ["Y", "YDE", "C", "V", "Bd", "Hd"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "adaptive-scenario-note", "type": "markdown", "title": "Paradox of thrift experiment", "source": "This scenario raises `alpha1` from `0.6` to `0.7` between periods 5 and 60, matching the thrift experiment in the adaptive-expectations section." },
+    { "id": "adaptive-baseline-chart", "type": "chart", "title": "Adaptive baseline headline variables", "more": "The adaptive baseline converges to the **same stationary state** as the plain PC\nmodel — `Y ≈ 105.34`, `YDE = C = V ≈ 85.34`, desired bills `Bd ≈ 53.45`, desired\ncash `Hd ≈ 31.90` — because once income stops changing, `lag(YD) = YD` and\nexpectations are correct. The interest of this model is purely dynamic: it is the\nbaseline against which the adaptive _thrift_ scenario below is read.\n", "sourceRunCellId": "adaptive-baseline-run", "variables": ["Y", "YDE", "C", "V", "Bd", "Hd"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "adaptive-scenario-note", "type": "markdown", "title": "Paradox of thrift experiment", "source": "This scenario raises `alpha1` from `0.6` to `0.7` between periods 5 and 60, matching the thrift experiment in the adaptive-expectations section.", "more": "This scenario raises `alpha1` from `0.6` to `0.7` between periods 5 and 60 on the\n**adaptive** model — the same thriftiness shock as Scenario 2, but now filtered\nthrough `YDE = lag(YD)`. Comparing the two shows how adaptive expectations damp\nthe impact multiplier.\n" },
     {
       "id": "adaptive-scenario-run",
       "type": "run",
@@ -237,8 +291,8 @@
       "resultKey": "gl2_pc_adaptive_s1",
       "sourceModelId": "pc-adaptive"
     },
-    { "id": "adaptive-scenario-chart", "type": "chart", "title": "Adaptive scenario income and wealth", "sourceRunCellId": "adaptive-scenario-run", "variables": ["Y", "C", "YDE", "V"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "interest-sensitive-note", "type": "markdown", "title": "Interest-sensitive consumption", "source": "The final model follows the vignette extension where the propensity to consume is endogenous: `alpha1 = alpha10 - iota * lag(r)`." },
+    { "id": "adaptive-scenario-chart", "type": "chart", "title": "Adaptive scenario income and wealth", "more": "The qualitative story matches Scenario 2 — a short-run boom followed by a lower\nlong-run state — but the **adaptive lag softens the peak**: output rises to a peak\nof `Y ≈ 119.1` (around period 6) rather than the `≈ 124.7` spike of the plain\nmodel, because consumption responds to _last_ period's income rather than the\ncontemporaneous jump. The long-run landing point is identical: `Y ≈ 103.92` and\nwealth `V ≈ 62.94`, since in the stationary state expectations are correct and the\nadaptive model reduces to PC. The lesson is that the _expectations rule_ changes\nthe transition path, not the steady state.\n", "sourceRunCellId": "adaptive-scenario-run", "variables": ["Y", "C", "YDE", "V"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "interest-sensitive-note", "type": "markdown", "title": "Interest-sensitive consumption", "source": "The final model follows the vignette extension where the propensity to consume is endogenous: `alpha1 = alpha10 - iota * lag(r)`.", "more": "The final model (PCEX3) follows the chapter-4 extension in which the **propensity\nto consume itself depends on the interest rate**: `alpha1 = alpha10 - iota *\nlag(r)`. A higher rate now discourages consumption directly (a positive interest\n_elasticity of saving_), on top of its portfolio and interest-income effects.\n" },
     {
       "id": "interest-sensitive-equations",
       "type": "equations",
@@ -262,7 +316,8 @@
         { "id": "is-eq-14-YDE", "name": "YDE", "desc": "Expected disposable income formed adaptively.", "expression": "lag(YD)", "role": "identity", "unitMeta": { "stockFlow": "flow", "signature": { "money": 1, "time": -1 } } },
         { "id": "is-eq-15-alpha1", "name": "alpha1", "desc": "Propensity to consume responds negatively to the lagged bills rate.", "expression": "alpha10 - iota * lag(r)", "unitMeta": { "stockFlow": "aux" } }
       ],
-      "collapsed": true
+      "collapsed": true,
+      "more": "This is the adaptive model plus one extra equation,\n`alpha1 = alpha10 - iota * lag(r)`, with `alpha10 = 0.7` and `iota = 4`. At the\nbaseline rate `r = 0.025` this delivers `alpha1 = 0.7 - 4 * 0.025 = 0.6`, exactly\nthe value used everywhere else — so the **baseline is unchanged** (`Y ≈ 105.34`).\nThe endogenous `alpha1` only bites when the rate moves, which is the point of the\nscenario.\n"
     },
     { "id": "interest-sensitive-solver", "type": "solver", "title": "Solver", "modelId": "pc-interest-sensitive", "options": { "solverMethod": "GAUSS_SEIDEL", "toleranceText": "1e-10", "maxIterations": 200, "defaultInitialValueText": "1e-15", "hiddenLeftVariable": "", "hiddenRightVariable": "", "hiddenToleranceText": "0.00001", "relativeHiddenTolerance": false }, "collapsed": true },
     {
@@ -285,8 +340,8 @@
     },
     { "id": "interest-sensitive-initial-values", "type": "initial-values", "title": "Initial values", "modelId": "pc-interest-sensitive", "initialValues": [], "collapsed": true },
     { "id": "interest-sensitive-baseline-run", "type": "run", "title": "Interest-sensitive baseline run", "mode": "baseline", "periods": 60, "resultKey": "gl2_pc_interest_baseline", "description": "Adaptive-expectations PC model with endogenous alpha1.", "sourceModelId": "pc-interest-sensitive" },
-    { "id": "interest-sensitive-baseline-chart", "type": "chart", "title": "Interest-sensitive baseline headline variables", "sourceRunCellId": "interest-sensitive-baseline-run", "variables": ["alpha1", "Y", "YDE", "C", "V"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "interest-sensitive-scenario-note", "type": "markdown", "title": "Bills-rate shock revisited", "source": "This scenario reapplies the bills-rate increase to the interest-sensitive model, raising `r` from `0.025` to `0.035` between periods 5 and 60." },
+    { "id": "interest-sensitive-baseline-chart", "type": "chart", "title": "Interest-sensitive baseline headline variables", "more": "With `r` fixed at `0.025`, the endogenous rule pins `alpha1` at exactly `0.6`, so\nthis baseline is indistinguishable from the plain and adaptive baselines:\n`Y ≈ 105.34`, `YDE = C = V ≈ 85.34`. The chart includes `alpha1` so you can see it\nsitting flat at `0.6` — confirming that the extension is calibrated to nest the\nstandard model at the baseline rate.\n", "sourceRunCellId": "interest-sensitive-baseline-run", "variables": ["alpha1", "Y", "YDE", "C", "V"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "interest-sensitive-scenario-note", "type": "markdown", "title": "Bills-rate shock revisited", "source": "This scenario reapplies the bills-rate increase to the interest-sensitive model, raising `r` from `0.025` to `0.035` between periods 5 and 60.", "more": "This scenario reapplies the bills-rate increase (`r`: `0.025` → `0.035`, periods\n5–60) to the interest-sensitive model. Now the rate rise does _three_ things at\nonce: it raises interest income (expansionary), nudges the portfolio toward bills\n(small here), and **lowers** the propensity to consume via\n`alpha1 = alpha10 - iota * lag(r)` (contractionary on impact, but saving-building\nin the long run).\n" },
     {
       "id": "interest-sensitive-scenario-run",
       "type": "run",
@@ -302,7 +357,7 @@
       "resultKey": "gl2_pc_interest_s1",
       "sourceModelId": "pc-interest-sensitive"
     },
-    { "id": "interest-sensitive-scenario-chart", "type": "chart", "title": "Interest-sensitive scenario output and public finances", "sourceRunCellId": "interest-sensitive-scenario-run", "variables": ["alpha1", "Y", "YD", "C", "TX"], "axisMode": "separate", "axisSnapTolarance": 0.5 },
-    { "id": "equation-dependency-graph", "type": "sequence", "title": "PC  dependency graph", "source": { "kind": "dependency", "modelId": "pc-baseline", "showAccountingStrips": true, "showExogenous": false }, "description": "Dependency view of the pc equations organized by sector strips and accounting bands.", "note": "", "collapsed": true }
+    { "id": "interest-sensitive-scenario-chart", "type": "chart", "title": "Interest-sensitive scenario output and public finances", "more": "The endogenous propensity falls from `alpha1 = 0.6` to\n`0.7 - 4 * 0.035 = 0.56`. The combined long-run effect is **more** expansionary\nthan the plain interest-rate experiment: output settles at `Y ≈ 108.56`, above\nScenario 1's `≈ 107.69`. The reason is that the lower `alpha1` means households\nsave more, building a larger stock of wealth and bills, which earns _more_\ninterest income — reinforcing the direct interest-income channel. Disposable\nincome rises to `≈ 88.56` and taxes to `≈ 22.14` as the larger tax base feeds the\ngovernment's accounts.\n", "sourceRunCellId": "interest-sensitive-scenario-run", "variables": ["alpha1", "Y", "YD", "C", "TX"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    { "id": "equation-dependency-graph", "type": "sequence", "title": "PC  dependency graph", "source": { "kind": "dependency", "modelId": "pc-baseline", "showAccountingStrips": true, "showExogenous": false }, "description": "Dependency view of the pc equations organized by sector strips and accounting bands.", "note": "", "collapsed": true, "more": "This is the **dependency graph** of the baseline PC equations, organised by\nsector strips and accounting bands. It shows the _order of determination_ within a\nperiod: output and income are pinned down first, then taxes and wealth, then the\nportfolio split (`Bh`, `Hh`), and finally the government and central-bank residual\nidentities (`Bs`, `Bcb`, `Hs`). Following the arrows is a quick way to see why the\nsystem is simultaneous — `C` depends on `YD`, which depends on `Y`, which depends\nback on `C` — and hence why it is solved iteratively rather than by substitution.\n" }
   ]
 }

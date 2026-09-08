@@ -104,6 +104,7 @@ import {
 } from "./components/ModelEquationViews";
 import { SequenceCellView } from "./components/SequenceCellView";
 import { SankeyCellView } from "./components/SankeyCellView";
+import { HydraulicsCellView } from "./components/HydraulicsCellView";
 import { TableCellView } from "./components/TableCellView";
 import type {
   ChartCell,
@@ -131,7 +132,8 @@ const VIEWPORT_DEFERRED_CELL_TYPES = new Set<NotebookCell["type"]>([
   "table",
   "matrix",
   "sequence",
-  "sankey"
+  "sankey",
+  "hydraulics"
 ]);
 
 type SourceLayoutMode = "pretty" | "compact" | "grid" | "run" | "abm";
@@ -1705,6 +1707,17 @@ function NotebookCellViewComponent({
                 selectedPeriodIndex={selectedPeriodIndex}
               />
             ) : null}
+            {cell.type === "hydraulics" ? (
+              <HydraulicsCellView
+                cell={cell}
+                cells={cells}
+                maxPeriodIndex={maxPeriodIndex}
+                onCellChange={onCellChange}
+                onSelectedPeriodIndexChange={onSelectedPeriodIndexChange}
+                runner={runner}
+                selectedPeriodIndex={selectedPeriodIndex}
+              />
+            ) : null}
           </div>
         ) : null}
         </div>
@@ -1999,6 +2012,8 @@ function getViewportDeferredPlaceholderHeight(cell: NotebookCell): number {
       return 360;
     case "sankey":
       return 360;
+    case "hydraulics":
+      return 420;
     case "table":
       return 240;
     default:
@@ -2032,6 +2047,8 @@ function getViewportDeferredPlaceholderLabel(cell: NotebookCell): string {
       return "Sequence diagram";
     case "sankey":
       return "Sankey diagram";
+    case "hydraulics":
+      return "Hydraulics diagram";
     case "table":
       return "Table";
     default:
