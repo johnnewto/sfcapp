@@ -208,15 +208,14 @@ This repository deploys the browser app to both:
 - [https://johnnewto.github.io/sfcapp/](https://johnnewto.github.io/sfcapp/) (`VITE_BASE_PATH=/sfcapp/`)
 - [https://sfcapp.pages.dev/](https://sfcapp.pages.dev/) (`VITE_BASE_PATH=/`)
 
-Legacy hostnames redirect:
+The old GitHub Pages path still redirects:
 
 - `https://johnnewto.github.io/moneyjs/…` → `https://johnnewto.github.io/sfcapp/…` (separate `moneyjs` GitHub Pages repo; source in `redirects/moneyjs-github-pages/`)
-- `https://moneyjs.pages.dev/…` → `https://sfcapp.pages.dev/…` (Cloudflare Pages project `moneyjs`; source in `redirects/moneyjs-cloudflare/`)
 
 Both workflows run on pushes to `main` (and `workflow_dispatch`):
 
 - `.github/workflows/deploy-pages.yml` — GitHub Pages
-- `.github/workflows/deploy-cloudflare-pages.yml` — Cloudflare Pages project `sfcapp`, plus the `moneyjs` redirect project
+- `.github/workflows/deploy-cloudflare-pages.yml` — Cloudflare Pages project `sfcapp`
 
 If the GitHub repository name changes, update the `VITE_BASE_PATH` value in the GitHub Pages workflow so it matches the new Pages path.
 Also update `packages/web/public/404.html`; GitHub Pages uses that file to redirect direct deep links such as `/sfcapp/notebook/sim` or `/sfcapp/publish/italy-sfc` back into the browser app (as `/#/notebook/...` or `/#/publish/...`, which the client restores to real pathnames).
@@ -229,7 +228,7 @@ Cloudflare Pages uses `packages/web/public/_redirects` (`/* → /index.html` wit
 2. Add GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 3. Set repository variable `VITE_NOTEBOOK_ASSISTANT_API_URL` (or `VITE_CHAT_BUILDER_API_URL`) to the Worker ask URL — both static deploy workflows read these vars.
 4. After updating Worker allowlists, redeploy the Worker: `pnpm --filter @sfcr/chat-api run deploy`.
-5. Wrangler no longer creates a Pages project on first deploy. The Cloudflare Pages workflow creates project `sfcapp` if it is missing, then deploys to `https://sfcapp.pages.dev/`. The same workflow keeps `moneyjs.pages.dev` as a redirect to that host. You can also create it once locally with `pnpm dlx wrangler pages project create sfcapp --production-branch=main`.
+5. Wrangler no longer creates a Pages project on first deploy. The Cloudflare Pages workflow creates project `sfcapp` if it is missing, then deploys to `https://sfcapp.pages.dev/`. You can also create it once locally with `pnpm dlx wrangler pages project create sfcapp --production-branch=main`.
 
 ### Chat API
 
@@ -274,7 +273,7 @@ Point both static-host builds at the Worker (repository variable or workflow env
 VITE_NOTEBOOK_ASSISTANT_API_URL=https://sfcr-chat-api.<account>.workers.dev/v1/notebook-assistant/ask
 ```
 
-The Worker streams OpenAI Responses API events to the browser, caps each response with `MAX_OUTPUT_TOKENS`, and accepts only allowlisted origins and models. Configure `ALLOWED_ORIGINS`, `MAX_OUTPUT_TOKENS`, and `OPENAI_MODEL_ALLOWLIST` in `packages/chat-api/wrangler.toml` or Cloudflare. Production allowlists include `https://johnnewto.github.io`, `https://sfcapp.pages.dev`, and `https://moneyjs.pages.dev` (legacy redirect). `wrangler.toml` also defines a Cloudflare Workers Rate Limiting binding for 10 requests per minute per rate-limit key, plus the `SHARE_LINKS` KV binding used by notebook share shortening.
+The Worker streams OpenAI Responses API events to the browser, caps each response with `MAX_OUTPUT_TOKENS`, and accepts only allowlisted origins and models. Configure `ALLOWED_ORIGINS`, `MAX_OUTPUT_TOKENS`, and `OPENAI_MODEL_ALLOWLIST` in `packages/chat-api/wrangler.toml` or Cloudflare. Production allowlists include `https://johnnewto.github.io`, `https://sfcapp.pages.dev`, and `https://sfcapp.net`. `wrangler.toml` also defines a Cloudflare Workers Rate Limiting binding for 10 requests per minute per rate-limit key, plus the `SHARE_LINKS` KV binding used by notebook share shortening.
 ### AI Discovery Endpoints
 
 The browser app publishes AI-facing notebook authoring resources for browser-based tools such as ChatGPT or Claude.

@@ -84,8 +84,7 @@ const DEFAULT_DISCOVERY_ALLOWED_ORIGINS = [
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
   "https://johnnewto.github.io",
-  "https://sfcapp.pages.dev",
-  "https://moneyjs.pages.dev"
+  "https://sfcapp.pages.dev"
 ];
 const DEFAULT_MAX_OUTPUT_TOKENS = 8000;
 const DISCOVERY_CACHE_TTL_SECONDS = 600;

@@ -62,6 +62,3 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         run: pnpm dlx wrangler pages deploy packages/web/dist --project-name=sfcapp --branch=main
-
-      - name: Deploy moneyjs.pages.dev redirect
-        run: pnpm dlx wrangler pages deploy redirects/moneyjs-cloudflare --project-name=moneyjs --branch=main
