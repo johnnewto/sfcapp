@@ -5,6 +5,7 @@ export * from "./matrixColumnTree";
 export * from "./document/index";
 export * from "./diagnostics";
 export * from "./types";
+export * from "./hydraulicsPorts";
 export * from "./abmModelCell";
 export * from "./validation";
 export * from "./jsonFormat";

@@ -44,7 +44,12 @@ export function PublicationHydraulics({
           Bound to matrix <strong>{sourceMatrix.title}</strong> at period {selectedPeriodIndex + 1}.
         </p>
       ) : null}
-      <HydraulicsCanvas interactive={false} layoutLocked prefersReducedMotion scene={scene} />
+      <HydraulicsCanvas
+        interactive={false}
+        interactionEpoch={selectedPeriodIndex + 1}
+        layoutLocked
+        scene={scene}
+      />
     </div>
   );
 }

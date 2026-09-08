@@ -40,6 +40,10 @@
   display: block;
 }
 
+.hydraulics-flow-animation-shell {
+  width: 100%;
+}
+
 .hydraulics-diagram-canvas {
   background:
     radial-gradient(circle at top left, rgba(125, 211, 252, 0.18), transparent 28%),
@@ -52,8 +56,6 @@
 }
 
 .hydraulics-sector rect {
-  fill: #f8fafc;
-  stroke: #334155;
   stroke-width: 2;
 }
 
@@ -64,16 +66,27 @@
 }
 
 .hydraulics-sector.is-selected rect,
-.hydraulics-tank.is-selected rect:last-of-type {
-  stroke: #2563eb;
+.hydraulics-tank.is-selected rect:last-of-type,
+.hydraulics-box.is-selected rect {
   stroke-width: 3;
 }
 
+.hydraulics-box-label,
 .hydraulics-tank-label,
 .hydraulics-pipe-label {
   fill: #334155;
   font-size: 13px;
   font-weight: 600;
+}
+
+.hydraulics-pipe-label.is-editable,
+.hydraulics-box-label.is-editable,
+.hydraulics-tank-label.is-editable,
+.hydraulics-sector text.is-editable {
+  cursor: grab;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 3px;
 }
 
 .hydraulics-tank-value {
@@ -86,10 +99,27 @@
   stroke-width: 3px;
 }
 
-.hydraulics-pipe-overlay.is-animated {
-  animation: hydraulics-pipe-dash 0.5s linear infinite;
+.hydraulics-pipe-value {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  opacity: 0.9;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 3px;
+}
+
+.hydraulics-pipe-overlay {
   stroke-dasharray: 5 7;
   stroke-linecap: round;
+}
+
+.hydraulics-pipe-overlay.is-animated {
+  animation: hydraulics-pipe-dash 0.5s linear infinite;
+}
+
+.hydraulics-pipe-overlay.is-animated.is-reversed {
+  animation-direction: reverse;
 }
 
 @keyframes hydraulics-pipe-dash {
@@ -111,6 +141,38 @@
   stroke-width: 2;
 }
 
+.hydraulics-box-handle-n {
+  cursor: n-resize;
+}
+
+.hydraulics-box-handle-ne {
+  cursor: ne-resize;
+}
+
+.hydraulics-box-handle-e {
+  cursor: e-resize;
+}
+
+.hydraulics-box-handle-se {
+  cursor: se-resize;
+}
+
+.hydraulics-box-handle-s {
+  cursor: s-resize;
+}
+
+.hydraulics-box-handle-sw {
+  cursor: sw-resize;
+}
+
+.hydraulics-box-handle-w {
+  cursor: w-resize;
+}
+
+.hydraulics-box-handle-nw {
+  cursor: nw-resize;
+}
+
 .hydraulics-port {
   cursor: crosshair;
   fill: #fff;
@@ -119,6 +181,7 @@
 }
 
 .hydraulics-inspector-popup {
+  overflow-anchor: none;
   width: min(22rem, calc(100vw - 2rem));
   max-width: min(22rem, calc(100vw - 2rem));
 }

@@ -397,25 +397,92 @@ export interface SankeyCell extends NotebookCellBase {
 
 export type HydraulicsPolarity = "asset" | "liability";
 
-export const HYDRAULICS_PORTS = ["c", "n", "ne", "e", "se", "s", "sw", "w", "nw"] as const;
+export const HYDRAULICS_PORTS = [
+  "c",
+  "n",
+  "nne",
+  "ne",
+  "ene",
+  "e",
+  "ese",
+  "se",
+  "sse",
+  "s",
+  "ssw",
+  "sw",
+  "wsw",
+  "w",
+  "wnw",
+  "nw",
+  "nnw"
+] as const;
 export type HydraulicsPort = (typeof HYDRAULICS_PORTS)[number];
+
+/** Rim extras sit on the long (north/south) sides of a sector. */
+export const HYDRAULICS_SECTOR_PORTS = [
+  "c",
+  "n",
+  "nne",
+  "ne",
+  "e",
+  "se",
+  "sse",
+  "s",
+  "ssw",
+  "sw",
+  "w",
+  "nw",
+  "nnw"
+] as const satisfies readonly HydraulicsPort[];
+
+/** Rim extras sit on the long (east/west) sides of a tank. */
+export const HYDRAULICS_TANK_PORTS = [
+  "c",
+  "n",
+  "ne",
+  "ene",
+  "e",
+  "ese",
+  "se",
+  "s",
+  "sw",
+  "wsw",
+  "w",
+  "wnw",
+  "nw"
+] as const satisfies readonly HydraulicsPort[];
 
 export function isHydraulicsPort(value: unknown): value is HydraulicsPort {
   return typeof value === "string" && (HYDRAULICS_PORTS as readonly string[]).includes(value);
 }
 
+export function hydraulicsPortsForKind(kind: "sector" | "tank"): readonly HydraulicsPort[] {
+  return kind === "tank" ? HYDRAULICS_TANK_PORTS : HYDRAULICS_SECTOR_PORTS;
+}
+
 export type HydraulicsAnchor =
   | { kind: "sector"; id: string; port?: HydraulicsPort }
   | { kind: "tank"; id: string; port?: HydraulicsPort }
+  | { kind: "box"; id: string; port?: string }
   | { kind: "point"; x: number; y: number }; // point x/y are grid cells, or legacy (0, 1)
 
 export interface HydraulicsSectorLayout {
   id: string;
   label?: string;
+  /** Fill color. */
+  fill?: string;
+  /** Border color. */
+  stroke?: string;
+  /** Sector body opacity 0–1. */
+  opacity?: number;
   /** Integer grid cell 0–40, or legacy (0, 1) fraction. */
   x: number;
   /** Integer grid cell 0–24, or legacy (0, 1) fraction. */
   y: number;
+  /** Label offset from the default position, in half-cell steps. Omitted until moved. */
+  labelOffsetX?: number;
+  /** Label offset from the default position, in half-cell steps. Omitted until moved. */
+  labelOffsetY?: number;
 }
 
 export interface HydraulicsTankLayout {
@@ -425,10 +492,16 @@ export interface HydraulicsTankLayout {
   expression?: string;
   polarity?: HydraulicsPolarity;
   color?: string;
+  /** Absolute fill ceiling. Omit to scale against the run max of the bound series. */
+  maxLevel?: number;
   /** Integer grid cell 0–40, or legacy (0, 1) fraction. */
   x: number;
   /** Integer grid cell 0–24, or legacy (0, 1) fraction. */
   y: number;
+  /** Label offset from the default position, in half-cell steps. Omitted until moved. */
+  labelOffsetX?: number;
+  /** Label offset from the default position, in half-cell steps. Omitted until moved. */
+  labelOffsetY?: number;
 }
 
 export interface HydraulicsPipeLayout {
@@ -438,12 +511,15 @@ export interface HydraulicsPipeLayout {
   variable?: string;
   expression?: string;
   label?: string;
+  /** Spline guide points. The pipe is a cubic curve that passes through these. */
   waypoints?: Array<{ x: number; y: number }>;
+  /** Authored 0–1 position along the pipe. Omitted until the label is moved. */
+  labelT?: number;
+  /** Authored perpendicular offset in half-cell steps. Omitted until the label is moved. */
+  labelOffset?: number;
   color?: string;
   /** Marker size in viewBox units. `0` hides the arrow. */
   arrowSize?: number;
-  /** Token travel speed. `0` keeps tokens still. */
-  animationSpeed?: number;
   /** Multiplier on flow-scaled stroke width. */
   widthScale?: number;
   dashed?: boolean;
@@ -452,10 +528,34 @@ export interface HydraulicsPipeLayout {
   opacity?: number;
 }
 
+export interface HydraulicsBoxLayout {
+  id: string;
+  label?: string;
+  /** Center x, integer grid cell 0–40, or legacy (0, 1) fraction. */
+  x: number;
+  /** Center y, integer grid cell 0–24, or legacy (0, 1) fraction. */
+  y: number;
+  /** Width in grid cells. */
+  width: number;
+  /** Height in grid cells. */
+  height: number;
+  /** Fill color. Omit or empty for no fill. */
+  fill?: string;
+  /** Fill alpha 0–1. `0` is fully transparent. */
+  fillOpacity?: number;
+  stroke?: string;
+  dashed?: boolean;
+  /** Label offset from the default position, in half-cell steps. Omitted until moved. */
+  labelOffsetX?: number;
+  /** Label offset from the default position, in half-cell steps. Omitted until moved. */
+  labelOffsetY?: number;
+}
+
 export interface HydraulicsLayout {
   sectors?: HydraulicsSectorLayout[];
   tanks?: HydraulicsTankLayout[];
   pipes?: HydraulicsPipeLayout[];
+  boxes?: HydraulicsBoxLayout[];
 }
 
 export type HydraulicsCellSource = {

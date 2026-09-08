@@ -79,4 +79,15 @@ describe("VariableMathLabel", () => {
 
     expect(screen.getByText("DeltaK")).toBeInTheDocument();
   });
+
+  it("renders lag() and [-1] as a primed variable and * as a bullet", () => {
+    render(<VariableMathLabel name="lag(r^F) * B[-1]" />);
+
+    const label = document.querySelector(".variable-math-label");
+    expect(label?.textContent).toContain("•");
+    expect(label?.textContent).not.toContain("lag");
+    expect(label?.textContent).not.toContain("*");
+    expect(screen.getByText("F", { selector: "sup" })).toBeInTheDocument();
+    expect(screen.getAllByText("'", { selector: "sup" })).toHaveLength(2);
+  });
 });

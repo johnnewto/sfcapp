@@ -1716,6 +1716,7 @@ function NotebookCellViewComponent({
                 onSelectedPeriodIndexChange={onSelectedPeriodIndexChange}
                 runner={runner}
                 selectedPeriodIndex={selectedPeriodIndex}
+                viewportRoot={viewportRoot}
               />
             ) : null}
           </div>

@@ -765,10 +765,18 @@ Behavior:
 Optional:
 - source.balanceMatrixCellId
 - source.sourceRunCellId
-- layout.sectors / tanks / pipes with integer grid coordinates (x: 0–40, y: 0–24); (0, 1) fractions still read as legacy normalized
-- pipe color, arrowSize (0 = none), animationSpeed (0 = still), widthScale, dashed, opacity
-- animationSpeed > 0 draws a marching-dash overlay on a solid (or statically dashed) pipe
-- pipe from.port / to.port: c, n, ne, e, se, s, sw, w, nw (omit for nearest edge)
+- layout.sectors / tanks / pipes / boxes with integer grid coordinates (x: 0–40, y: 0–24); (0, 1) fractions still read as legacy normalized
+- boxes sit behind other items; width/height are grid cells; fill + fillOpacity (0 = transparent), stroke, dashed
+- sectors accept fill, stroke, and opacity (0–1); defaults match the light slate sector look
+- tank maxLevel sets the fill denominator; omit or blank to use the run max of the bound series
+- pipe color, arrowSize (0 = none), widthScale, dashed, opacity
+- pipe from.port / to.port: c plus 12 rim ports (omit for nearest mid-side). Sectors add nne/nnw/sse/ssw on the long north/south sides; tanks add ene/ese/wnw/wsw on the long east/west sides. Compass names n, ne, e, se, s, sw, w, nw still work.
+- box pipe ports use n / e / s / w, corners ne/se/sw/nw, and n+2 / e-2 / … every 2 grid cells from the side midpoint (east and south are positive)
+- pipe waypoints are spline guide points the curve passes through (cubic Catmull-Rom)
+- pipe variable / expression set flow magnitude (width + dash speed); label stays independent; no binding or ~0 magnitude is still
+- negative flow magnitude marches the dash overlay backwards (arrow still follows from → to)
+- pipe labelT (0–1) and labelOffset (half-cell steps) persist after the label is dragged; omit them for auto placement
+- sector / tank / box labelOffsetX and labelOffsetY (half-cell steps) persist after the label is dragged; omit them for auto placement
 
 Empty layout seeds sectors from the transactions-flow matrix, tanks from the balance sheet, and pipes from inferred flows.`;
     case "model":

@@ -379,6 +379,13 @@
       "type": "number",
       "description": "Integer grid cell (x: 0–40, y: 0–24). Values in (0, 1) are legacy normalized coordinates."
     },
+    "hydraulicsLabelOffset": {
+      "type": "number",
+      "minimum": -12,
+      "maximum": 12,
+      "multipleOf": 0.5,
+      "description": "Label offset from the default position, in half-cell steps."
+    },
     "hydraulicsAnchor": {
       "oneOf": [
         {
@@ -388,7 +395,40 @@
           "properties": {
             "kind": { "enum": ["sector", "tank"] },
             "id": { "type": "string", "minLength": 1 },
-            "port": { "enum": ["c", "n", "ne", "e", "se", "s", "sw", "w", "nw"] }
+            "port": {
+              "enum": [
+                "c",
+                "n",
+                "nne",
+                "ne",
+                "ene",
+                "e",
+                "ese",
+                "se",
+                "sse",
+                "s",
+                "ssw",
+                "sw",
+                "wsw",
+                "w",
+                "wnw",
+                "nw",
+                "nnw"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "const": "box" },
+            "id": { "type": "string", "minLength": 1 },
+            "port": {
+              "type": "string",
+              "pattern": "^(c|ne|se|sw|nw|n|e|s|w|[nesw][+-](?:[2468]|[1-9][0-9]*[02468]))$"
+            }
           }
         },
         {
@@ -426,8 +466,13 @@
             "properties": {
               "id": { "type": "string", "minLength": 1 },
               "label": { "type": "string" },
+              "fill": { "type": "string" },
+              "stroke": { "type": "string" },
+              "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
               "x": { "$ref": "#/$defs/hydraulicsCoord" },
-              "y": { "$ref": "#/$defs/hydraulicsCoord" }
+              "y": { "$ref": "#/$defs/hydraulicsCoord" },
+              "labelOffsetX": { "$ref": "#/$defs/hydraulicsLabelOffset" },
+              "labelOffsetY": { "$ref": "#/$defs/hydraulicsLabelOffset" }
             }
           }
         },
@@ -444,8 +489,11 @@
               "expression": { "type": "string" },
               "polarity": { "enum": ["asset", "liability"] },
               "color": { "type": "string" },
+              "maxLevel": { "type": "number", "minimum": 0 },
               "x": { "$ref": "#/$defs/hydraulicsCoord" },
-              "y": { "$ref": "#/$defs/hydraulicsCoord" }
+              "y": { "$ref": "#/$defs/hydraulicsCoord" },
+              "labelOffsetX": { "$ref": "#/$defs/hydraulicsLabelOffset" },
+              "labelOffsetY": { "$ref": "#/$defs/hydraulicsLabelOffset" }
             }
           }
         },
@@ -464,11 +512,12 @@
               "label": { "type": "string" },
               "color": { "type": "string" },
               "arrowSize": { "type": "number", "minimum": 0 },
-              "animationSpeed": { "type": "number", "minimum": 0 },
               "widthScale": { "type": "number", "minimum": 0 },
               "dashed": { "type": "boolean" },
               "tokenCount": { "type": "integer", "minimum": 0 },
               "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+              "labelT": { "type": "number", "minimum": 0, "maximum": 1 },
+              "labelOffset": { "$ref": "#/$defs/hydraulicsLabelOffset" },
               "waypoints": {
                 "type": "array",
                 "items": {
@@ -481,6 +530,28 @@
                   }
                 }
               }
+            }
+          }
+        },
+        "boxes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "x", "y", "width", "height"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string" },
+              "x": { "$ref": "#/$defs/hydraulicsCoord" },
+              "y": { "$ref": "#/$defs/hydraulicsCoord" },
+              "width": { "type": "number", "minimum": 1 },
+              "height": { "type": "number", "minimum": 1 },
+              "fill": { "type": "string" },
+              "fillOpacity": { "type": "number", "minimum": 0, "maximum": 1 },
+              "stroke": { "type": "string" },
+              "dashed": { "type": "boolean" },
+              "labelOffsetX": { "$ref": "#/$defs/hydraulicsLabelOffset" },
+              "labelOffsetY": { "$ref": "#/$defs/hydraulicsLabelOffset" }
             }
           }
         }

@@ -113,6 +113,14 @@ function parseVariableMathParts(name: string): Array<{ kind: "text" | "sup" | "s
   let index = 0;
 
   while (index < name.length) {
+    const lagged = readLaggedToken(name, index);
+    if (lagged) {
+      parts.push(...parseVariableMathParts(lagged.value));
+      parts.push({ kind: "sup", value: "'" });
+      index = lagged.nextIndex;
+      continue;
+    }
+
     const char = name[index];
     if ((char === "^" || char === "_") && index + 1 < name.length) {
       const parsed = readScript(name, index + 1);
@@ -133,11 +141,34 @@ function parseVariableMathParts(name: string): Array<{ kind: "text" | "sup" | "s
       continue;
     }
 
-    parts.push({ kind: "text", value: char });
+    parts.push({ kind: "text", value: char === "*" ? "•" : char });
     index += 1;
   }
 
   return parts;
+}
+
+const LAGGED_IDENTIFIER = "[A-Za-z_][A-Za-z0-9_.^{}]*";
+
+function readLaggedToken(source: string, startIndex: number): { value: string; nextIndex: number } | null {
+  const remainder = source.slice(startIndex);
+  const lagCall = remainder.match(new RegExp(`^lag\\(\\s*(${LAGGED_IDENTIFIER})\\s*\\)`, "i"));
+  if (lagCall?.[1]) {
+    return {
+      value: lagCall[1],
+      nextIndex: startIndex + lagCall[0].length
+    };
+  }
+
+  const laggedIndex = remainder.match(new RegExp(`^(${LAGGED_IDENTIFIER})\\s*\\[\\s*-1\\s*\\]`));
+  if (laggedIndex?.[1]) {
+    return {
+      value: laggedIndex[1],
+      nextIndex: startIndex + laggedIndex[0].length
+    };
+  }
+
+  return null;
 }
 
 function readScript(source: string, startIndex: number): { value: string; nextIndex: number } {
