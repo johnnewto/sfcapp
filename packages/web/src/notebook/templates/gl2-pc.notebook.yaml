@@ -334,7 +334,7 @@ cells:
               port: ne
             variable: TX
             expression: ""
-            label: Taxes  (TX)
+            label: Taxes
             waypoints:
               - x: 20
                 y: 1
@@ -444,7 +444,7 @@ cells:
               id: Bs
               port: e
             expression: d(Hs)
-            label: d(hs)
+            label: d(Hs)
             waypoints:
               - x: 9
                 y: 15
@@ -487,8 +487,8 @@ cells:
             height: 10
             fill: "#7dd3fc"
             fillOpacity: 0.2
-            stroke: "#64748b"
-            dashed: true
+            stroke: "#ffc2c2"
+            dashed: false
             labelOffsetX: -0.5
             labelOffsetY: 6
       description: MONIAC-style tanks and pipes for PC, bound to the baseline run at the selected period.
