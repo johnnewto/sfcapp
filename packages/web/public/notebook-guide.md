@@ -64,7 +64,7 @@ Supported wrapped cell keys include:
 - `matrix`
 - `sequence`
 - `sankey`
-- `hydraulics`
+- `diagram`
 - `equations`
 - `solver`
 - `externals`

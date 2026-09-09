@@ -47,7 +47,7 @@ cells:
       source: ...
 ```
 
-- Each `cells` item has **exactly one** wrapper key: `markdown`, `matrix`, `sequence`, `equations`, `solver`, `externals`, `initial-values`, `run`, `chart`, `table`.
+- Each `cells` item has **exactly one** wrapper key: `markdown`, `matrix`, `sequence`, `sankey`, `diagram`, `equations`, `solver`, `externals`, `initial-values`, `run`, `chart`, `table`.
 - Fields inside the wrapper are cell fields **without** a redundant `type` field.
 - **Do not** use legacy top-level sections (`introCell`, `cellOrder`, `variables`, `equations` at root, etc.) in new YAML.
 

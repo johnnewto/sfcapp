@@ -125,4 +125,34 @@ describe("publicationInspect", () => {
     expect(request.selectedVariable).toBe("Y");
     expect(request.sourceRunCellId).toBeTruthy();
   });
+
+  it("resolves inspect context for stock-flow diagram cells from the bound run", () => {
+    const document = createNotebookFromTemplate("gl2-pc");
+    const diagramCell = document.cells.find((cell) => cell.type === "diagram");
+    expect(diagramCell?.type).toBe("diagram");
+
+    if (diagramCell?.type !== "diagram") {
+      return;
+    }
+
+    const context = resolvePublicationInspectContext({
+      cell: diagramCell,
+      document,
+      getResult: (cellId) =>
+        cellId === "baseline-run"
+          ? {
+              series: { G: new Float64Array([20, 20]) },
+              blocks: [],
+              model: { equations: [], externals: {}, initialValues: {} },
+              options: { periods: 2, solverMethod: "NEWTON", tolerance: 1e-6, maxIterations: 40 }
+            }
+          : null,
+      selectedPeriodIndex: 0
+    });
+
+    expect(context).not.toBeNull();
+    expect(context?.sourceRunCellId).toBe("baseline-run");
+    expect(context?.variableDescriptions.get("G")).toMatch(/Government expenditure/i);
+    expect(context?.currentValues.G).toBe(20);
+  });
 });

@@ -586,7 +586,7 @@ function renameVariableInCell(
       };
     case "sequence":
       return renameSequenceCell(cell, oldName, newName);
-    case "hydraulics":
+    case "diagram":
       return renameHydraulicsCell(cell, oldName, newName);
     case "markdown":
       return {
@@ -811,7 +811,7 @@ function countReferencesInCell(
         (total, aliasVariable) => total + countExactNameMatch(aliasVariable, variable),
         0
       );
-    case "hydraulics":
+    case "diagram":
       return countHydraulicsReferences(cell, variable);
     case "markdown":
       return countIdentifierOccurrences(cell.source, variable);
@@ -896,7 +896,7 @@ function cellMatchesModelId(cell: NotebookCell, cells: NotebookCell[], modelId: 
         return runCellMatchesModelId(cells, cell.source.sourceRunCellId, modelId);
       }
       return false;
-    case "hydraulics":
+    case "diagram":
       return runCellMatchesModelId(cells, cell.source.sourceRunCellId, modelId);
     default:
       return false;

@@ -21,6 +21,7 @@ import {
   snapHydraulicsLabelOffset,
   snapHydraulicsNodeLabelOffset
 } from "../src/components/HydraulicsCanvas";
+import { FORMULA_TOOLTIP_ATTR } from "../src/components/InstantTooltip";
 import { HYDRAULICS_GRID_COLS, HYDRAULICS_GRID_ROWS, snapHydraulicsPoint, type ResolvedHydraulicsScene } from "../src/notebook/hydraulics";
 
 afterEach(() => {
@@ -95,6 +96,17 @@ const scene: ResolvedHydraulicsScene = {
   errors: []
 };
 
+const inspectContext = {
+  currentValues: { G: 20, Bs: 10 },
+  highlightedVariable: null,
+  parameterNames: new Set<string>(),
+  variableDescriptions: new Map([
+    ["G", "Government spending"],
+    ["Bs", "Government bills"]
+  ]),
+  variableUnitMetadata: new Map()
+};
+
 function mockSvgRect(): () => void {
   const original = Element.prototype.getBoundingClientRect;
   Element.prototype.getBoundingClientRect = () =>
@@ -136,7 +148,7 @@ describe("HydraulicsCanvas", () => {
     );
 
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
     const government = screen.getByTestId("hydraulics-sector-Government");
 
     act(() => {
@@ -155,6 +167,152 @@ describe("HydraulicsCanvas", () => {
     const moved = layout.sectors.find((sector: { id: string }) => sector.id === "Government");
     expect(moved.x).toBe(16);
     expect(moved.y).toBe(8);
+  });
+
+  it("attaches formula tooltips to bound pipe and tank labels", () => {
+    render(<HydraulicsCanvas inspectContext={inspectContext} layoutLocked scene={scene} />);
+
+    const pipeTooltip = screen
+      .getByTestId("hydraulics-pipe-label-G")
+      .querySelector(`[${FORMULA_TOOLTIP_ATTR}]`)
+      ?.getAttribute(FORMULA_TOOLTIP_ATTR);
+    expect(pipeTooltip).toMatch(/Government spending\s*:\s*20/);
+    expect(pipeTooltip).not.toMatch(/G\s*=/);
+
+    const tankTooltip = screen
+      .getByTestId("hydraulics-tank-label-Bs")
+      .querySelector(`[${FORMULA_TOOLTIP_ATTR}]`)
+      ?.getAttribute(FORMULA_TOOLTIP_ATTR);
+    expect(tankTooltip).toMatch(/Government bills\s*:\s*10/);
+    expect(tankTooltip).not.toMatch(/Bs\s*=/);
+
+    expect(
+      screen.getByTestId("hydraulics-sector-label-Government").querySelector(`[${FORMULA_TOOLTIP_ATTR}]`)
+    ).toBeNull();
+  });
+
+  it("uses draggable SVG labels while layout is unlocked", () => {
+    const onLayoutChange = vi.fn();
+    render(
+      <HydraulicsCanvas
+        inspectContext={inspectContext}
+        layoutLocked={false}
+        onLayoutChange={onLayoutChange}
+        scene={scene}
+        tool="select"
+      />
+    );
+
+    const label = screen.getByTestId("hydraulics-pipe-label-G");
+    expect(label.querySelector(`[${FORMULA_TOOLTIP_ATTR}]`)).toBeNull();
+    expect(label).toHaveAttribute("x");
+
+    const restoreRect = mockSvgRect();
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
+    act(() => {
+      dispatchPointer(label, "pointerdown", 500, 120);
+    });
+    act(() => {
+      dispatchPointer(svg, "pointermove", 720, 40);
+    });
+    act(() => {
+      dispatchPointer(window, "pointerup", 720, 40);
+    });
+    restoreRect();
+
+    expect(onLayoutChange).toHaveBeenCalled();
+    const pipe = onLayoutChange.mock.calls.at(-1)?.[0].pipes.find((entry: { id: string }) => entry.id === "G");
+    expect(pipe.labelT).toEqual(expect.any(Number));
+    expect(pipe.labelOffset).toEqual(expect.any(Number));
+  });
+
+  it("moves every item when the selection is all", () => {
+    const onLayoutChange = vi.fn();
+    const withWaypoint: ResolvedHydraulicsScene = {
+      ...scene,
+      pipes: [
+        {
+          ...scene.pipes[0]!,
+          waypoints: [{ x: 0.5, y: 0.5 }]
+        }
+      ]
+    };
+    render(
+      <HydraulicsCanvas
+        scene={withWaypoint}
+        layoutLocked={false}
+        selected={{ kind: "all" }}
+        tool="select"
+        onLayoutChange={onLayoutChange}
+      />
+    );
+
+    const restoreRect = mockSvgRect();
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
+    const government = screen.getByTestId("hydraulics-sector-Government");
+
+    act(() => {
+      dispatchPointer(government, "pointerdown", 200, 155);
+    });
+    act(() => {
+      dispatchPointer(svg, "pointermove", 400, 200);
+    });
+    act(() => {
+      dispatchPointer(window, "pointerup", 400, 200);
+    });
+    restoreRect();
+
+    expect(onLayoutChange).toHaveBeenCalled();
+    const layout = onLayoutChange.mock.calls.at(-1)?.[0];
+    expect(layout.sectors.find((sector: { id: string }) => sector.id === "Government")).toMatchObject({
+      x: 16,
+      y: 8
+    });
+    expect(layout.sectors.find((sector: { id: string }) => sector.id === "Firms")).toMatchObject({
+      x: 40,
+      y: 8
+    });
+    expect(layout.tanks.find((tank: { id: string }) => tank.id === "Bs")).toMatchObject({ x: 16, y: 16 });
+    expect(layout.pipes[0]?.waypoints[0]).toEqual({ x: 28, y: 14 });
+  });
+
+  it("draws a snap grid when the layout is unlocked", () => {
+    const { rerender } = render(<HydraulicsCanvas scene={scene} layoutLocked={false} tool="select" />);
+    expect(screen.getByTestId("hydraulics-snap-grid")).toBeInTheDocument();
+    rerender(<HydraulicsCanvas scene={scene} layoutLocked tool="select" />);
+    expect(screen.queryByTestId("hydraulics-snap-grid")).not.toBeInTheDocument();
+  });
+
+  it("hides the snap grid when canvas.showGrid is false", () => {
+    render(
+      <HydraulicsCanvas
+        scene={{ ...scene, canvas: { snapStep: 1, showGrid: false, cols: 40, rows: 24 } }}
+        layoutLocked={false}
+        tool="select"
+      />
+    );
+    expect(screen.queryByTestId("hydraulics-snap-grid")).not.toBeInTheDocument();
+  });
+
+  it("zooms toward the pointer with ctrl+wheel", () => {
+    const onViewportChange = vi.fn();
+    render(
+      <HydraulicsCanvas
+        scene={scene}
+        layoutLocked
+        tool="select"
+        viewport={{ scale: 1, x: 0, y: 0 }}
+        onViewportChange={onViewportChange}
+      />
+    );
+    const restoreRect = mockSvgRect();
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
+    fireEvent.wheel(svg, { ctrlKey: true, deltaY: -100, clientX: 500, clientY: 310 });
+    restoreRect();
+    expect(onViewportChange).toHaveBeenCalled();
+    const next = onViewportChange.mock.calls.at(-1)?.[0];
+    expect(next.scale).toBeGreaterThan(1);
+    expect(next.scale).toBeLessThanOrEqual(3);
   });
 
   it("does not persist layout when a sector is clicked without moving", () => {
@@ -184,7 +342,7 @@ describe("HydraulicsCanvas", () => {
     );
 
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
     const handle = screen.getByTestId("hydraulics-pipe-end-G-to");
 
     act(() => {
@@ -211,7 +369,7 @@ describe("HydraulicsCanvas", () => {
     );
 
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
     const handle = screen.getByTestId("hydraulics-pipe-end-G-to");
     const topY = (0.6 - HYDRAULICS_TANK_HEIGHT / 2 / HYDRAULICS_VIEW_HEIGHT) * HYDRAULICS_VIEW_HEIGHT;
 
@@ -249,13 +407,12 @@ describe("HydraulicsCanvas", () => {
     expect(auto.x).toBeCloseTo(0.2 + HYDRAULICS_SECTOR_WIDTH / 2 / HYDRAULICS_VIEW_WIDTH);
   });
 
-  it("places sector long-side extras on the snap grid", () => {
+  it("places sector rim extras on the snap grid", () => {
     const government = scene.sectors[0]!;
     const ports = portsForNode("sector", government);
     const names = ports.map((entry) => entry.port);
 
-    expect(names).toEqual(expect.arrayContaining(["nne", "nnw", "sse", "ssw"]));
-    expect(names).not.toContain("ene");
+    expect(names).toEqual(expect.arrayContaining(["nne", "nnw", "sse", "ssw", "ene", "ese", "wnw", "wsw"]));
     for (const { point } of ports) {
       const snapped = snapHydraulicsPoint(point);
       expect(snapped.x).toBeCloseTo(point.x);
@@ -265,6 +422,9 @@ describe("HydraulicsCanvas", () => {
     const nne = ports.find((entry) => entry.port === "nne")?.point;
     expect(nne?.x).toBeCloseTo(government.x + 2 / HYDRAULICS_GRID_COLS);
     expect(nne?.y).toBeCloseTo(government.y - 2 / HYDRAULICS_GRID_ROWS);
+    const ene = ports.find((entry) => entry.port === "ene")?.point;
+    expect(ene?.x).toBeCloseTo(government.x + 4 / HYDRAULICS_GRID_COLS);
+    expect(ene?.y).toBeCloseTo(government.y - 1 / HYDRAULICS_GRID_ROWS);
   });
 
   it("places box ports every two cells on the snap grid", () => {
@@ -321,7 +481,7 @@ describe("HydraulicsCanvas", () => {
       <HydraulicsCanvas scene={withBox} layoutLocked={false} tool="select" onLayoutChange={onLayoutChange} />
     );
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
     const handle = screen.getByTestId("hydraulics-pipe-end-G-to");
     const nPlus2X = (0.5 + 2 / HYDRAULICS_GRID_COLS) * HYDRAULICS_VIEW_WIDTH;
     const nPlus2Y = (0.5 - 4 / HYDRAULICS_GRID_ROWS) * HYDRAULICS_VIEW_HEIGHT;
@@ -341,18 +501,21 @@ describe("HydraulicsCanvas", () => {
     expect(pipe.to).toEqual({ kind: "box", id: "frame", port: "n+2" });
   });
 
-  it("places tank long-side extras on the snap grid", () => {
+  it("places tank rim extras on the snap grid", () => {
     const tank = { x: 8 / 40, y: 14 / 24 };
     const ports = portsForNode("tank", tank);
     const names = ports.map((entry) => entry.port);
 
-    expect(names).toEqual(expect.arrayContaining(["ene", "ese", "wnw", "wsw"]));
-    expect(names).not.toContain("nne");
+    expect(names).toEqual(expect.arrayContaining(["ene", "ese", "wnw", "wsw", "nne", "nnw", "sse", "ssw"]));
     for (const { point } of ports) {
       const snapped = snapHydraulicsPoint(point);
       expect(snapped.x).toBeCloseTo(point.x);
       expect(snapped.y).toBeCloseTo(point.y);
     }
+
+    const nne = ports.find((entry) => entry.port === "nne")?.point;
+    expect(nne?.x).toBeCloseTo(tank.x + 1 / HYDRAULICS_GRID_COLS);
+    expect(nne?.y).toBeCloseTo(tank.y - 4 / HYDRAULICS_GRID_ROWS);
   });
 
   it("shows the tank variable value on the tank", () => {
@@ -523,7 +686,7 @@ describe("HydraulicsCanvas", () => {
     );
 
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
     const label = screen.getByTestId("hydraulics-pipe-label-G");
 
     act(() => {
@@ -560,7 +723,7 @@ describe("HydraulicsCanvas", () => {
       <HydraulicsCanvas scene={scene} layoutLocked={false} tool="select" onLayoutChange={onLayoutChange} />
     );
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
     const label = screen.getByTestId("hydraulics-sector-label-Government");
 
     act(() => {
@@ -684,11 +847,18 @@ describe("HydraulicsCanvas", () => {
 
   it("adds a box at the clicked point", () => {
     const onLayoutChange = vi.fn();
+    const onToolChange = vi.fn();
     render(
-      <HydraulicsCanvas scene={scene} layoutLocked={false} tool="add-box" onLayoutChange={onLayoutChange} />
+      <HydraulicsCanvas
+        scene={scene}
+        layoutLocked={false}
+        tool="add-box"
+        onLayoutChange={onLayoutChange}
+        onToolChange={onToolChange}
+      />
     );
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
 
     act(() => {
       dispatchPointer(svg, "pointerdown", 500, 310);
@@ -708,6 +878,7 @@ describe("HydraulicsCanvas", () => {
       fillOpacity: 0.2,
       stroke: "#64748b"
     });
+    expect(onToolChange).toHaveBeenCalledWith("select");
   });
 
   it("persists a resized box from the east handle", () => {
@@ -741,7 +912,7 @@ describe("HydraulicsCanvas", () => {
       />
     );
     const restoreRect = mockSvgRect();
-    const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+    const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
     const handle = screen.getByTestId("hydraulics-box-handle-frame-e");
 
     act(() => {
@@ -818,7 +989,7 @@ describe("HydraulicsCanvas", () => {
       });
       expect(screen.getByTestId("hydraulics-pipe-overlay-G")).not.toHaveClass("is-animated");
 
-      const svg = screen.getByRole("img", { name: "Hydraulics diagram" });
+      const svg = screen.getByRole("img", { name: "Stock-flow diagram" });
       act(() => {
         dispatchPointer(svg, "pointerdown", 10, 10);
       });

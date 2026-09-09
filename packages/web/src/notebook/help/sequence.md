@@ -9,7 +9,7 @@ Sequence cells render a step-by-step visual view. They can show transaction flow
 
 A sequence cell is an inspection view. It does not define equations and does not solve a model.
 
-Hydraulics cells are a related inspection view: they draw a tank-and-pipe scene from the same transactions-flow and balance-sheet matrices, bound to the selected run period.
+Stock-flow diagram cells are a related inspection view: they draw a tank-and-pipe scene from the same transactions-flow and balance-sheet matrices, bound to the selected run period.
 
 ## Source Types
 

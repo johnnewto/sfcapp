@@ -4,13 +4,13 @@ import type { SimulationResult } from "@sfcr/core";
 import type { EditorState } from "../lib/editorModel";
 import { buildVariableUnitMetadata } from "../lib/units";
 import type { VariableUnitMetadata } from "../lib/unitMeta";
-import type { VariableDescriptions } from "../lib/variableDescriptions";
+import { buildVariableDescriptions, type VariableDescriptions } from "../lib/variableDescriptions";
 import {
   resolveInspectorModelSource,
   type InspectorModelSource
 } from "../lib/variableInspect";
 import { buildEditorStateForNotebookModel } from "./modelSections";
-import type { MatrixCell, NotebookCell, RunCell, SequenceCell } from "./types";
+import type { HydraulicsCell, MatrixCell, NotebookCell, RunCell, SequenceCell } from "./types";
 import type { useNotebookRunner } from "./useNotebookRunner";
 
 const EMPTY_PARAMETER_NAMES = new Set<string>();
@@ -43,14 +43,40 @@ export function resolveSequenceMatrixRunCellId(
   return source.sourceRunCellId ?? matrixCell?.sourceRunCellId ?? null;
 }
 
+export function resolveHydraulicsRunCellId(
+  cell: HydraulicsCell,
+  cells: NotebookCell[]
+): string | null {
+  const matrixCell = cells.find(
+    (candidate): candidate is MatrixCell =>
+      candidate.type === "matrix" && candidate.id === cell.source.transactionMatrixCellId
+  );
+  return cell.source.sourceRunCellId ?? matrixCell?.sourceRunCellId ?? null;
+}
+
 export function resolveSequenceMatrixInspectBundle(
   cell: SequenceCell,
   cells: NotebookCell[],
-  runner: ReturnType<typeof useNotebookRunner>,
+  runner: Pick<ReturnType<typeof useNotebookRunner>, "getResult">,
   selectedPeriodIndex: number,
   variableDescriptions: VariableDescriptions
 ): SequenceMatrixInspectBundle {
-  const sourceRunCellId = resolveSequenceMatrixRunCellId(cell, cells);
+  return resolveInspectBundleForRunCell(
+    cells,
+    runner,
+    selectedPeriodIndex,
+    variableDescriptions,
+    resolveSequenceMatrixRunCellId(cell, cells)
+  );
+}
+
+export function resolveInspectBundleForRunCell(
+  cells: NotebookCell[],
+  runner: Pick<ReturnType<typeof useNotebookRunner>, "getResult">,
+  selectedPeriodIndex: number,
+  variableDescriptions: VariableDescriptions,
+  sourceRunCellId: string | null
+): SequenceMatrixInspectBundle {
   const sourceRunCell = sourceRunCellId
     ? cells.find(
         (candidate): candidate is RunCell =>
@@ -72,6 +98,17 @@ export function resolveSequenceMatrixInspectBundle(
         externals: editor.externals
       })
     : new Map();
+  const resolvedVariableDescriptions = new Map(variableDescriptions);
+  if (editor) {
+    for (const [name, description] of buildVariableDescriptions({
+      equations: editor.equations,
+      externals: editor.externals
+    })) {
+      if (!resolvedVariableDescriptions.has(name)) {
+        resolvedVariableDescriptions.set(name, description);
+      }
+    }
+  }
 
   return {
     currentValues,
@@ -81,7 +118,7 @@ export function resolveSequenceMatrixInspectBundle(
     modelSource,
     sourceRunCellId,
     parameterNames,
-    variableDescriptions,
+    variableDescriptions: resolvedVariableDescriptions,
     variableUnitMetadata
   };
 }

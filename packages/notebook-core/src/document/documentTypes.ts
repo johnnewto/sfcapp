@@ -43,7 +43,7 @@ export const NOTEBOOK_CELL_TYPES = new Set<NotebookCell["type"]>([
   "matrix",
   "sequence",
   "sankey",
-  "hydraulics"
+  "diagram"
 ]);
 
 export interface CompactYamlFormatOptions {

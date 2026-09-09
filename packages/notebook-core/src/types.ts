@@ -418,39 +418,9 @@ export const HYDRAULICS_PORTS = [
 ] as const;
 export type HydraulicsPort = (typeof HYDRAULICS_PORTS)[number];
 
-/** Rim extras sit on the long (north/south) sides of a sector. */
-export const HYDRAULICS_SECTOR_PORTS = [
-  "c",
-  "n",
-  "nne",
-  "ne",
-  "e",
-  "se",
-  "sse",
-  "s",
-  "ssw",
-  "sw",
-  "w",
-  "nw",
-  "nnw"
-] as const satisfies readonly HydraulicsPort[];
-
-/** Rim extras sit on the long (east/west) sides of a tank. */
-export const HYDRAULICS_TANK_PORTS = [
-  "c",
-  "n",
-  "ne",
-  "ene",
-  "e",
-  "ese",
-  "se",
-  "s",
-  "sw",
-  "wsw",
-  "w",
-  "wnw",
-  "nw"
-] as const satisfies readonly HydraulicsPort[];
+/** Center plus 16 rim ports: mid-sides, corners, and two extras on every side. */
+export const HYDRAULICS_SECTOR_PORTS = HYDRAULICS_PORTS;
+export const HYDRAULICS_TANK_PORTS = HYDRAULICS_PORTS;
 
 export function isHydraulicsPort(value: unknown): value is HydraulicsPort {
   return typeof value === "string" && (HYDRAULICS_PORTS as readonly string[]).includes(value);
@@ -466,6 +436,20 @@ export type HydraulicsAnchor =
   | { kind: "box"; id: string; port?: string }
   | { kind: "point"; x: number; y: number }; // point x/y are grid cells, or legacy (0, 1)
 
+export const HYDRAULICS_SNAP_STEPS = [1, 0.5, 0.25] as const;
+export type HydraulicsSnapStep = (typeof HYDRAULICS_SNAP_STEPS)[number];
+
+export interface HydraulicsCanvasSettings {
+  /** Snap lattice in grid cells. Omit for whole cells. */
+  snapStep?: HydraulicsSnapStep;
+  /** Snap-grid overlay while the layout is unlocked. Omit to show the grid. */
+  showGrid?: boolean;
+  /** Horizontal grid extent in cells. Omit for 40. Extra columns add empty space on the right. */
+  cols?: number;
+  /** Vertical grid extent in cells. Omit for 24. Extra rows add empty space at the bottom. */
+  rows?: number;
+}
+
 export interface HydraulicsSectorLayout {
   id: string;
   label?: string;
@@ -475,9 +459,9 @@ export interface HydraulicsSectorLayout {
   stroke?: string;
   /** Sector body opacity 0–1. */
   opacity?: number;
-  /** Integer grid cell 0–40, or legacy (0, 1) fraction. */
+  /** Grid cell 0–cols (default 40; fractional when canvas.snapStep < 1), or legacy (0, 1) fraction. */
   x: number;
-  /** Integer grid cell 0–24, or legacy (0, 1) fraction. */
+  /** Grid cell 0–rows (default 24; fractional when canvas.snapStep < 1), or legacy (0, 1) fraction. */
   y: number;
   /** Label offset from the default position, in half-cell steps. Omitted until moved. */
   labelOffsetX?: number;
@@ -494,9 +478,9 @@ export interface HydraulicsTankLayout {
   color?: string;
   /** Absolute fill ceiling. Omit to scale against the run max of the bound series. */
   maxLevel?: number;
-  /** Integer grid cell 0–40, or legacy (0, 1) fraction. */
+  /** Grid cell 0–cols (default 40; fractional when canvas.snapStep < 1), or legacy (0, 1) fraction. */
   x: number;
-  /** Integer grid cell 0–24, or legacy (0, 1) fraction. */
+  /** Grid cell 0–rows (default 24; fractional when canvas.snapStep < 1), or legacy (0, 1) fraction. */
   y: number;
   /** Label offset from the default position, in half-cell steps. Omitted until moved. */
   labelOffsetX?: number;
@@ -531,9 +515,9 @@ export interface HydraulicsPipeLayout {
 export interface HydraulicsBoxLayout {
   id: string;
   label?: string;
-  /** Center x, integer grid cell 0–40, or legacy (0, 1) fraction. */
+  /** Center x, grid cell 0–cols (default 40; fractional when canvas.snapStep < 1), or legacy (0, 1) fraction. */
   x: number;
-  /** Center y, integer grid cell 0–24, or legacy (0, 1) fraction. */
+  /** Center y, grid cell 0–rows (default 24; fractional when canvas.snapStep < 1), or legacy (0, 1) fraction. */
   y: number;
   /** Width in grid cells. */
   width: number;
@@ -552,6 +536,7 @@ export interface HydraulicsBoxLayout {
 }
 
 export interface HydraulicsLayout {
+  canvas?: HydraulicsCanvasSettings;
   sectors?: HydraulicsSectorLayout[];
   tanks?: HydraulicsTankLayout[];
   pipes?: HydraulicsPipeLayout[];
@@ -565,7 +550,7 @@ export type HydraulicsCellSource = {
 };
 
 export interface HydraulicsCell extends NotebookCellBase {
-  type: "hydraulics";
+  type: "diagram";
   source: HydraulicsCellSource;
   layout?: HydraulicsLayout;
 }

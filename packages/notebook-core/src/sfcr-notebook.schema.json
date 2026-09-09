@@ -377,7 +377,34 @@
     },
     "hydraulicsCoord": {
       "type": "number",
-      "description": "Integer grid cell (x: 0–40, y: 0–24). Values in (0, 1) are legacy normalized coordinates."
+      "description": "Grid cell (x: 0–cols, y: 0–rows; default 40×24), including fractional cells when canvas.snapStep is 0.5 or 0.25. Values in (0, 1) that are not on the snap lattice are legacy normalized coordinates."
+    },
+    "hydraulicsSnapStep": {
+      "type": "number",
+      "enum": [1, 0.5, 0.25],
+      "description": "Snap lattice in grid cells. Default 1."
+    },
+    "hydraulicsCanvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "snapStep": { "$ref": "#/$defs/hydraulicsSnapStep" },
+        "showGrid": { "type": "boolean" },
+        "cols": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 80,
+          "multipleOf": 2,
+          "description": "Horizontal grid extent in cells. Default 40. Extra columns add empty space on the right."
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 12,
+          "maximum": 48,
+          "multipleOf": 2,
+          "description": "Vertical grid extent in cells. Default 24. Extra rows add empty space at the bottom."
+        }
+      }
     },
     "hydraulicsLabelOffset": {
       "type": "number",
@@ -457,6 +484,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "canvas": { "$ref": "#/$defs/hydraulicsCanvas" },
         "sectors": {
           "type": "array",
           "items": {
@@ -579,7 +607,7 @@
             "matrix",
             "sequence",
             "sankey",
-            "hydraulics"
+            "diagram"
           ]
         },
         "title": { "type": "string", "minLength": 1 },
@@ -860,7 +888,7 @@
           }
         },
         {
-          "if": { "properties": { "type": { "const": "hydraulics" } } },
+          "if": { "properties": { "type": { "const": "diagram" } } },
           "then": {
             "required": ["source"],
             "properties": { "source": { "$ref": "#/$defs/hydraulicsSource" } }

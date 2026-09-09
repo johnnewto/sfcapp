@@ -2,11 +2,13 @@ import type { SimulationResult } from "@sfcr/core";
 import type {
   HydraulicsAnchor,
   HydraulicsBoxLayout,
+  HydraulicsCanvasSettings,
   HydraulicsCell,
   HydraulicsLayout,
   HydraulicsPipeLayout,
   HydraulicsPolarity,
   HydraulicsSectorLayout,
+  HydraulicsSnapStep,
   HydraulicsTankLayout,
   MatrixCell,
   NotebookCell
@@ -23,9 +25,13 @@ const LIABILITY_COLOR = "#c0392b";
 
 export const HYDRAULICS_GRID_COLS = 40;
 export const HYDRAULICS_GRID_ROWS = 24;
+export const HYDRAULICS_GRID_COLS_MIN = 20;
+export const HYDRAULICS_GRID_COLS_MAX = 80;
+export const HYDRAULICS_GRID_ROWS_MIN = 12;
+export const HYDRAULICS_GRID_ROWS_MAX = 48;
 export const HYDRAULICS_SECTOR_GRID_Y = 5;
 export const HYDRAULICS_TANK_GRID_Y = 14;
-/** Even cell counts so 5 long-side ports land on grid intersections. */
+/** Even cell counts so rim ports (including two extras per side) land on grid intersections. */
 export const HYDRAULICS_SECTOR_GRID_WIDTH = 8;
 export const HYDRAULICS_SECTOR_GRID_HEIGHT = 4;
 export const HYDRAULICS_TANK_GRID_WIDTH = 4;
@@ -42,7 +48,7 @@ export type HydraulicsBoxResizeHandle = (typeof HYDRAULICS_BOX_RESIZE_HANDLES)[n
 
 export const DEFAULT_PIPE_COLOR = "#334155";
 export const DEFAULT_PIPE_ARROW_SIZE = 8;
-/** Dash overlay speed for the largest peer flow on the diagram. */
+/** Dash overlay speed when this pipe matches the largest |flow| in the run. */
 export const DEFAULT_PIPE_FLOW_ANIMATION_SPEED = 1;
 export const DEFAULT_PIPE_WIDTH_SCALE = 1;
 export const DEFAULT_PIPE_TOKEN_COUNT = 3;
@@ -55,6 +61,9 @@ export const HYDRAULICS_LABEL_OFFSET_MAX = 12;
 export const DEFAULT_SECTOR_FILL = "#f8fafc";
 export const DEFAULT_SECTOR_STROKE = "#334155";
 export const DEFAULT_SECTOR_OPACITY = 1;
+export const DEFAULT_HYDRAULICS_SNAP_STEP: HydraulicsSnapStep = 1;
+export const HYDRAULICS_ZOOM_MIN = 1;
+export const HYDRAULICS_ZOOM_MAX = 3;
 
 export interface ResolvedHydraulicsSector {
   id: string;
@@ -129,13 +138,39 @@ export interface ResolvedHydraulicsBox {
   labelOffsetY: number | null;
 }
 
+export interface HydraulicsGridExtent {
+  cols: number;
+  rows: number;
+}
+
+export const DEFAULT_HYDRAULICS_GRID_EXTENT: HydraulicsGridExtent = {
+  cols: HYDRAULICS_GRID_COLS,
+  rows: HYDRAULICS_GRID_ROWS
+};
+
+export interface ResolvedHydraulicsCanvas {
+  snapStep: HydraulicsSnapStep;
+  showGrid: boolean;
+  cols: number;
+  rows: number;
+}
+
 export interface ResolvedHydraulicsScene {
+  canvas?: ResolvedHydraulicsCanvas;
   sectors: ResolvedHydraulicsSector[];
   tanks: ResolvedHydraulicsTank[];
   pipes: ResolvedHydraulicsPipe[];
   boxes: ResolvedHydraulicsBox[];
   errors: string[];
 }
+
+export interface HydraulicsViewport {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+export const DEFAULT_HYDRAULICS_VIEWPORT: HydraulicsViewport = { scale: 1, x: 0, y: 0 };
 
 export function resolveHydraulicsScene(
   cell: HydraulicsCell,
@@ -169,6 +204,78 @@ export function resolveHydraulicsScene(
   return evaluateHydraulicsLayout(layout, result, selectedPeriodIndex, errors);
 }
 
+export function resolveHydraulicsSnapStep(value: number | undefined): HydraulicsSnapStep {
+  if (value === 0.25 || value === 0.5 || value === 1) {
+    return value;
+  }
+  return DEFAULT_HYDRAULICS_SNAP_STEP;
+}
+
+export function resolveHydraulicsCanvas(canvas: HydraulicsCanvasSettings | undefined): ResolvedHydraulicsCanvas {
+  const extent = resolveHydraulicsGridExtent(canvas);
+  return {
+    snapStep: resolveHydraulicsSnapStep(canvas?.snapStep),
+    showGrid: canvas?.showGrid !== false,
+    cols: extent.cols,
+    rows: extent.rows
+  };
+}
+
+export function resolveHydraulicsGridExtent(
+  canvas: { cols?: number; rows?: number } | undefined
+): HydraulicsGridExtent {
+  return {
+    cols: resolveHydraulicsGridAxis(canvas?.cols, HYDRAULICS_GRID_COLS, HYDRAULICS_GRID_COLS_MIN, HYDRAULICS_GRID_COLS_MAX),
+    rows: resolveHydraulicsGridAxis(canvas?.rows, HYDRAULICS_GRID_ROWS, HYDRAULICS_GRID_ROWS_MIN, HYDRAULICS_GRID_ROWS_MAX)
+  };
+}
+
+function resolveHydraulicsGridAxis(
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  if (value == null || !Number.isFinite(value)) {
+    return fallback;
+  }
+  const even = Math.round(value / 2) * 2;
+  return Math.min(max, Math.max(min, even));
+}
+
+export function persistHydraulicsCanvas(
+  canvas: ResolvedHydraulicsCanvas | HydraulicsCanvasSettings | undefined
+): HydraulicsCanvasSettings | undefined {
+  const resolved = resolveHydraulicsCanvas(canvas);
+  const next: HydraulicsCanvasSettings = {};
+  if (resolved.snapStep !== DEFAULT_HYDRAULICS_SNAP_STEP) {
+    next.snapStep = resolved.snapStep;
+  }
+  if (canvas?.showGrid === false) {
+    next.showGrid = false;
+  }
+  if (resolved.cols !== HYDRAULICS_GRID_COLS) {
+    next.cols = resolved.cols;
+  }
+  if (resolved.rows !== HYDRAULICS_GRID_ROWS) {
+    next.rows = resolved.rows;
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+export function clampHydraulicsViewport(viewport: HydraulicsViewport): HydraulicsViewport {
+  const scale = Math.min(HYDRAULICS_ZOOM_MAX, Math.max(HYDRAULICS_ZOOM_MIN, viewport.scale));
+  const viewWidth = 1 / scale;
+  const viewHeight = 1 / scale;
+  const maxX = Math.max(0, 1 - viewWidth);
+  const maxY = Math.max(0, 1 - viewHeight);
+  return {
+    scale,
+    x: Math.min(maxX, Math.max(0, viewport.x)),
+    y: Math.min(maxY, Math.max(0, viewport.y))
+  };
+}
+
 export function seedHydraulicsLayout(
   transactionMatrix: MatrixCell | null,
   balanceMatrix: MatrixCell | null
@@ -188,6 +295,7 @@ export function mergeHydraulicsLayout(
   }
 
   return {
+    ...(authored.canvas ?? seeded.canvas ? { canvas: authored.canvas ?? seeded.canvas } : {}),
     sectors: mergeById(seeded.sectors ?? [], authored.sectors ?? []),
     tanks: mergeById(seeded.tanks ?? [], authored.tanks ?? []),
     pipes: mergeById(seeded.pipes ?? [], authored.pipes ?? []),
@@ -195,41 +303,124 @@ export function mergeHydraulicsLayout(
   };
 }
 
-export function hydraulicsGridToUnit(value: number, axis: "x" | "y"): number {
-  const span = axis === "x" ? HYDRAULICS_GRID_COLS : HYDRAULICS_GRID_ROWS;
+export function hydraulicsGridToUnit(
+  value: number,
+  axis: "x" | "y",
+  snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): number {
+  const span = hydraulicsGridSpan(axis, extent);
   if (!Number.isFinite(value)) {
     return 0.5;
   }
-  if (value > 0 && value < 1) {
+  if (isLegacyNormalizedCoord(value, snapStep)) {
     return value;
   }
   return clampUnit(value / span);
 }
 
-export function hydraulicsUnitToGrid(value: number, axis: "x" | "y"): number {
-  const span = axis === "x" ? HYDRAULICS_GRID_COLS : HYDRAULICS_GRID_ROWS;
-  return Math.round(clampUnit(value) * span);
+export function hydraulicsUnitToGrid(
+  value: number,
+  axis: "x" | "y",
+  snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): number {
+  const span = hydraulicsGridSpan(axis, extent);
+  return snapHydraulicsCells(clampUnit(value) * span, snapStep);
 }
 
-export function snapHydraulicsUnit(value: number, axis: "x" | "y"): number {
-  return hydraulicsGridToUnit(hydraulicsUnitToGrid(value, axis), axis);
+export function snapHydraulicsUnit(
+  value: number,
+  axis: "x" | "y",
+  snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): number {
+  return hydraulicsGridToUnit(hydraulicsUnitToGrid(value, axis, snapStep, extent), axis, snapStep, extent);
 }
 
-export function snapHydraulicsPoint(point: { x: number; y: number }): { x: number; y: number } {
+export function snapHydraulicsPoint(
+  point: { x: number; y: number },
+  snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): { x: number; y: number } {
   return {
-    x: snapHydraulicsUnit(point.x, "x"),
-    y: snapHydraulicsUnit(point.y, "y")
+    x: snapHydraulicsUnit(point.x, "x", snapStep, extent),
+    y: snapHydraulicsUnit(point.y, "y", snapStep, extent)
   };
 }
 
-function persistAnchor(anchor: HydraulicsAnchor): HydraulicsAnchor {
+export function translateHydraulicsScene(
+  scene: ResolvedHydraulicsScene,
+  dx: number,
+  dy: number,
+  snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): ResolvedHydraulicsScene {
+  const points = collectHydraulicsScenePoints(scene);
+  if (points.length === 0 || (dx === 0 && dy === 0)) {
+    return scene;
+  }
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const clampedDx = Math.min(Math.max(dx, -minX), 1 - maxX);
+  const clampedDy = Math.min(Math.max(dy, -minY), 1 - maxY);
+  if (clampedDx === 0 && clampedDy === 0) {
+    return scene;
+  }
+
+  const shiftPoint = (point: { x: number; y: number }): { x: number; y: number } => ({
+    x: snapHydraulicsUnit(point.x + clampedDx, "x", snapStep, extent),
+    y: snapHydraulicsUnit(point.y + clampedDy, "y", snapStep, extent)
+  });
+  const shiftAnchor = (anchor: HydraulicsAnchor): HydraulicsAnchor =>
+    anchor.kind === "point" ? { kind: "point", ...shiftPoint(anchor) } : anchor;
+
+  return {
+    ...scene,
+    sectors: scene.sectors.map((sector) => ({ ...sector, ...shiftPoint(sector) })),
+    tanks: scene.tanks.map((tank) => ({ ...tank, ...shiftPoint(tank) })),
+    boxes: scene.boxes.map((box) => ({ ...box, ...shiftPoint(box) })),
+    pipes: scene.pipes.map((pipe) => ({
+      ...pipe,
+      from: shiftAnchor(pipe.from),
+      to: shiftAnchor(pipe.to),
+      waypoints: pipe.waypoints.map(shiftPoint)
+    }))
+  };
+}
+
+function collectHydraulicsScenePoints(scene: ResolvedHydraulicsScene): Array<{ x: number; y: number }> {
+  const points: Array<{ x: number; y: number }> = [
+    ...scene.sectors,
+    ...scene.tanks,
+    ...scene.boxes,
+    ...scene.pipes.flatMap((pipe) => pipe.waypoints)
+  ];
+  for (const pipe of scene.pipes) {
+    if (pipe.from.kind === "point") {
+      points.push(pipe.from);
+    }
+    if (pipe.to.kind === "point") {
+      points.push(pipe.to);
+    }
+  }
+  return points;
+}
+
+function hydraulicsGridSpan(axis: "x" | "y", extent: HydraulicsGridExtent): number {
+  return axis === "x" ? extent.cols : extent.rows;
+}
+
+function persistAnchor(anchor: HydraulicsAnchor, snapStep: number, extent: HydraulicsGridExtent): HydraulicsAnchor {
   if (anchor.kind !== "point") {
     return anchor;
   }
   return {
     kind: "point",
-    x: hydraulicsUnitToGrid(anchor.x, "x"),
-    y: hydraulicsUnitToGrid(anchor.y, "y")
+    x: hydraulicsUnitToGrid(anchor.x, "x", snapStep, extent),
+    y: hydraulicsUnitToGrid(anchor.y, "y", snapStep, extent)
   };
 }
 
@@ -243,18 +434,22 @@ function persistLabelOffsets(node: { labelOffsetX: number | null; labelOffsetY: 
   };
 }
 
-function readAnchor(anchor: HydraulicsAnchor): HydraulicsAnchor {
+function readAnchor(anchor: HydraulicsAnchor, snapStep: number, extent: HydraulicsGridExtent): HydraulicsAnchor {
   if (anchor.kind !== "point") {
     return anchor;
   }
   return {
     kind: "point",
-    x: hydraulicsGridToUnit(anchor.x, "x"),
-    y: hydraulicsGridToUnit(anchor.y, "y")
+    x: hydraulicsGridToUnit(anchor.x, "x", snapStep, extent),
+    y: hydraulicsGridToUnit(anchor.y, "y", snapStep, extent)
   };
 }
 
-function canonicalizeBoxAnchor(anchor: HydraulicsAnchor, boxes: ResolvedHydraulicsBox[]): HydraulicsAnchor {
+function canonicalizeBoxAnchor(
+  anchor: HydraulicsAnchor,
+  boxes: ResolvedHydraulicsBox[],
+  extent: HydraulicsGridExtent
+): HydraulicsAnchor {
   if (anchor.kind !== "box" || !anchor.port) {
     return anchor;
   }
@@ -264,22 +459,26 @@ function canonicalizeBoxAnchor(anchor: HydraulicsAnchor, boxes: ResolvedHydrauli
   }
   const port = canonicalHydraulicsBoxPort(
     anchor.port,
-    hydraulicsUnitToGrid(box.width, "x"),
-    hydraulicsUnitToGrid(box.height, "y")
+    hydraulicsUnitToGrid(box.width, "x", DEFAULT_HYDRAULICS_SNAP_STEP, extent),
+    hydraulicsUnitToGrid(box.height, "y", DEFAULT_HYDRAULICS_SNAP_STEP, extent)
   );
   return port ? { kind: "box", id: anchor.id, port } : { kind: "box", id: anchor.id };
 }
 
 export function layoutFromResolved(scene: ResolvedHydraulicsScene): HydraulicsLayout {
+  const snapStep = resolveHydraulicsSnapStep(scene.canvas?.snapStep);
+  const extent = resolveHydraulicsGridExtent(scene.canvas);
+  const canvas = persistHydraulicsCanvas(scene.canvas);
   return {
+    ...(canvas ? { canvas } : {}),
     sectors: scene.sectors.map((sector) => ({
       id: sector.id,
       label: sector.label,
       fill: sector.fill,
       stroke: sector.stroke,
       opacity: sector.opacity,
-      x: hydraulicsUnitToGrid(sector.x, "x"),
-      y: hydraulicsUnitToGrid(sector.y, "y"),
+      x: hydraulicsUnitToGrid(sector.x, "x", snapStep, extent),
+      y: hydraulicsUnitToGrid(sector.y, "y", snapStep, extent),
       ...persistLabelOffsets(sector)
     })),
     tanks: scene.tanks.map((tank) => ({
@@ -290,22 +489,22 @@ export function layoutFromResolved(scene: ResolvedHydraulicsScene): HydraulicsLa
       polarity: tank.polarity,
       color: tank.color,
       ...(tank.maxLevel != null ? { maxLevel: tank.maxLevel } : {}),
-      x: hydraulicsUnitToGrid(tank.x, "x"),
-      y: hydraulicsUnitToGrid(tank.y, "y"),
+      x: hydraulicsUnitToGrid(tank.x, "x", snapStep, extent),
+      y: hydraulicsUnitToGrid(tank.y, "y", snapStep, extent),
       ...persistLabelOffsets(tank)
     })),
     pipes: scene.pipes.map((pipe) => ({
       id: pipe.id,
-      from: persistAnchor(pipe.from),
-      to: persistAnchor(pipe.to),
+      from: persistAnchor(pipe.from, snapStep, extent),
+      to: persistAnchor(pipe.to, snapStep, extent),
       variable: pipe.variable,
       expression: pipe.expression,
       label: pipe.label,
       waypoints:
         pipe.waypoints.length > 0
           ? pipe.waypoints.map((point) => ({
-              x: hydraulicsUnitToGrid(point.x, "x"),
-              y: hydraulicsUnitToGrid(point.y, "y")
+              x: hydraulicsUnitToGrid(point.x, "x", snapStep, extent),
+              y: hydraulicsUnitToGrid(point.y, "y", snapStep, extent)
             }))
           : undefined,
       color: pipe.color,
@@ -320,10 +519,10 @@ export function layoutFromResolved(scene: ResolvedHydraulicsScene): HydraulicsLa
     boxes: scene.boxes.map((box) => ({
       id: box.id,
       ...(box.label.trim() ? { label: box.label } : {}),
-      x: hydraulicsUnitToGrid(box.x, "x"),
-      y: hydraulicsUnitToGrid(box.y, "y"),
-      width: Math.max(1, hydraulicsUnitToGrid(box.width, "x")),
-      height: Math.max(1, hydraulicsUnitToGrid(box.height, "y")),
+      x: hydraulicsUnitToGrid(box.x, "x", snapStep, extent),
+      y: hydraulicsUnitToGrid(box.y, "y", snapStep, extent),
+      width: Math.max(1, hydraulicsUnitToGrid(box.width, "x", DEFAULT_HYDRAULICS_SNAP_STEP, extent)),
+      height: Math.max(1, hydraulicsUnitToGrid(box.height, "y", DEFAULT_HYDRAULICS_SNAP_STEP, extent)),
       fill: box.fill,
       fillOpacity: box.fillOpacity,
       stroke: box.stroke,
@@ -339,14 +538,17 @@ export function evaluateHydraulicsLayout(
   selectedPeriodIndex: number,
   errors: string[] = []
 ): ResolvedHydraulicsScene {
+  const canvas = resolveHydraulicsCanvas(layout.canvas);
+  const snapStep = canvas.snapStep;
+  const extent: HydraulicsGridExtent = { cols: canvas.cols, rows: canvas.rows };
   const sectors = (layout.sectors ?? []).map((sector) => ({
     id: sector.id,
     label: sector.label?.trim() || sector.id,
     fill: sector.fill?.trim() || DEFAULT_SECTOR_FILL,
     stroke: sector.stroke?.trim() || DEFAULT_SECTOR_STROKE,
     opacity: clampRange(sector.opacity, 0, 1, DEFAULT_SECTOR_OPACITY),
-    x: hydraulicsGridToUnit(sector.x, "x"),
-    y: hydraulicsGridToUnit(sector.y, "y"),
+    x: hydraulicsGridToUnit(sector.x, "x", snapStep, extent),
+    y: hydraulicsGridToUnit(sector.y, "y", snapStep, extent),
     labelOffsetX: clampLabelOffset(sector.labelOffsetX),
     labelOffsetY: clampLabelOffset(sector.labelOffsetY)
   }));
@@ -366,8 +568,8 @@ export function evaluateHydraulicsLayout(
       expression: tank.expression,
       polarity,
       color: tank.color?.trim() || defaultTankColor(polarity, index),
-      x: hydraulicsGridToUnit(tank.x, "x"),
-      y: hydraulicsGridToUnit(tank.y, "y"),
+      x: hydraulicsGridToUnit(tank.x, "x", snapStep, extent),
+      y: hydraulicsGridToUnit(tank.y, "y", snapStep, extent),
       value,
       maxLevel,
       runMaxAbs,
@@ -378,7 +580,7 @@ export function evaluateHydraulicsLayout(
     } satisfies ResolvedHydraulicsTank;
   });
 
-  const boxes = (layout.boxes ?? []).map((box) => resolveHydraulicsBox(box));
+  const boxes = (layout.boxes ?? []).map((box) => resolveHydraulicsBox(box, snapStep, extent));
 
   const rawPipes = (layout.pipes ?? []).map((pipe) => {
     const expression = pipe.expression?.trim() || pipe.variable?.trim() || "";
@@ -386,14 +588,14 @@ export function evaluateHydraulicsLayout(
     const style = resolvePipeStyle(pipe);
     return {
       id: pipe.id,
-      from: canonicalizeBoxAnchor(readAnchor(pipe.from), boxes),
-      to: canonicalizeBoxAnchor(readAnchor(pipe.to), boxes),
+      from: canonicalizeBoxAnchor(readAnchor(pipe.from, snapStep, extent), boxes, extent),
+      to: canonicalizeBoxAnchor(readAnchor(pipe.to, snapStep, extent), boxes, extent),
       variable: pipe.variable,
       expression: pipe.expression,
       label: pipe.label?.trim() || pipe.variable?.trim() || pipe.id,
       waypoints: (pipe.waypoints ?? []).map((point) => ({
-        x: hydraulicsGridToUnit(point.x, "x"),
-        y: hydraulicsGridToUnit(point.y, "y")
+        x: hydraulicsGridToUnit(point.x, "x", snapStep, extent),
+        y: hydraulicsGridToUnit(point.y, "y", snapStep, extent)
       })),
       magnitude,
       strokeWidth: 0,
@@ -405,7 +607,10 @@ export function evaluateHydraulicsLayout(
   });
   const maxMagnitude = Math.max(
     0,
-    ...rawPipes.map((pipe) => (pipe.magnitude != null ? Math.abs(pipe.magnitude) : 0))
+    ...(layout.pipes ?? []).map((pipe) => {
+      const expression = pipe.expression?.trim() || pipe.variable?.trim() || "";
+      return expression ? maxAbsOverRun(expression, result) : 0;
+    })
   );
   const pipes = rawPipes.map((pipe) => ({
     ...pipe,
@@ -418,10 +623,10 @@ export function evaluateHydraulicsLayout(
     flowAnimationSpeed: scaleHydraulicsPipeAnimationSpeed(pipe.magnitude, maxMagnitude)
   }));
 
-  return { sectors, tanks, pipes, boxes, errors };
+  return { canvas, sectors, tanks, pipes, boxes, errors };
 }
 
-/** Dash speed from peer-relative flow magnitude. Unbound or ~0 magnitude stays still. */
+/** Dash speed from run-peak-relative flow magnitude. Unbound or ~0 magnitude stays still. */
 export function scaleHydraulicsPipeAnimationSpeed(
   magnitude: number | null,
   maxMagnitude: number
@@ -440,14 +645,19 @@ export function scaleHydraulicsPipeAnimationSpeed(
   );
 }
 
-export function createResolvedHydraulicsBox(id: string, x: number, y: number): ResolvedHydraulicsBox {
+export function createResolvedHydraulicsBox(
+  id: string,
+  x: number,
+  y: number,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): ResolvedHydraulicsBox {
   return {
     id,
     label: "",
     x,
     y,
-    width: hydraulicsGridToUnit(HYDRAULICS_BOX_GRID_WIDTH, "x"),
-    height: hydraulicsGridToUnit(HYDRAULICS_BOX_GRID_HEIGHT, "y"),
+    width: hydraulicsGridToUnit(HYDRAULICS_BOX_GRID_WIDTH, "x", DEFAULT_HYDRAULICS_SNAP_STEP, extent),
+    height: hydraulicsGridToUnit(HYDRAULICS_BOX_GRID_HEIGHT, "y", DEFAULT_HYDRAULICS_SNAP_STEP, extent),
     fill: DEFAULT_BOX_FILL,
     fillOpacity: DEFAULT_BOX_FILL_OPACITY,
     stroke: DEFAULT_BOX_STROKE,
@@ -457,15 +667,19 @@ export function createResolvedHydraulicsBox(id: string, x: number, y: number): R
   };
 }
 
-function resolveHydraulicsBox(box: HydraulicsBoxLayout): ResolvedHydraulicsBox {
+function resolveHydraulicsBox(
+  box: HydraulicsBoxLayout,
+  snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): ResolvedHydraulicsBox {
   const fill = box.fill?.trim() ?? "";
   return {
     id: box.id,
     label: box.label?.trim() ?? "",
-    x: hydraulicsGridToUnit(box.x, "x"),
-    y: hydraulicsGridToUnit(box.y, "y"),
-    width: hydraulicsGridToUnit(Math.max(1, box.width), "x"),
-    height: hydraulicsGridToUnit(Math.max(1, box.height), "y"),
+    x: hydraulicsGridToUnit(box.x, "x", snapStep, extent),
+    y: hydraulicsGridToUnit(box.y, "y", snapStep, extent),
+    width: hydraulicsGridToUnit(Math.max(1, box.width), "x", DEFAULT_HYDRAULICS_SNAP_STEP, extent),
+    height: hydraulicsGridToUnit(Math.max(1, box.height), "y", DEFAULT_HYDRAULICS_SNAP_STEP, extent),
     fill: fill || DEFAULT_BOX_FILL,
     fillOpacity: fill ? clampRange(box.fillOpacity, 0, 1, DEFAULT_BOX_FILL_OPACITY) : 0,
     stroke: box.stroke?.trim() || DEFAULT_BOX_STROKE,
@@ -489,26 +703,28 @@ export function hydraulicsBoxHandlePoint(
 export function resizeHydraulicsBox(
   box: ResolvedHydraulicsBox,
   handle: HydraulicsBoxResizeHandle,
-  point: { x: number; y: number }
+  point: { x: number; y: number },
+  snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): ResolvedHydraulicsBox {
   const flags = boxResizeFlags(handle);
   let left = box.x - box.width / 2;
   let right = box.x + box.width / 2;
   let top = box.y - box.height / 2;
   let bottom = box.y + box.height / 2;
-  const snapped = snapHydraulicsPoint(point);
+  const snapped = snapHydraulicsPoint(point, snapStep, extent);
 
   if (flags.moveE) {
-    right = snapEvenSpanEdge(left, snapped.x, "x", "end");
+    right = snapEvenSpanEdge(left, snapped.x, "x", "end", extent);
   }
   if (flags.moveW) {
-    left = snapEvenSpanEdge(right, snapped.x, "x", "start");
+    left = snapEvenSpanEdge(right, snapped.x, "x", "start", extent);
   }
   if (flags.moveS) {
-    bottom = snapEvenSpanEdge(top, snapped.y, "y", "end");
+    bottom = snapEvenSpanEdge(top, snapped.y, "y", "end", extent);
   }
   if (flags.moveN) {
-    top = snapEvenSpanEdge(bottom, snapped.y, "y", "start");
+    top = snapEvenSpanEdge(bottom, snapped.y, "y", "start", extent);
   }
 
   return {
@@ -538,20 +754,24 @@ function snapEvenSpanEdge(
   fixed: number,
   proposed: number,
   axis: "x" | "y",
-  side: "start" | "end"
+  side: "start" | "end",
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): number {
-  const minSpan = hydraulicsGridToUnit(HYDRAULICS_BOX_MIN_GRID, axis);
-  let edge = snapHydraulicsUnit(proposed, axis);
+  const minSpan = hydraulicsGridToUnit(HYDRAULICS_BOX_MIN_GRID, axis, DEFAULT_HYDRAULICS_SNAP_STEP, extent);
+  let edge = snapHydraulicsUnit(proposed, axis, DEFAULT_HYDRAULICS_SNAP_STEP, extent);
   if (side === "end") {
     edge = Math.min(1, Math.max(fixed + minSpan, edge));
   } else {
     edge = Math.max(0, Math.min(fixed - minSpan, edge));
   }
-  let cells = Math.max(HYDRAULICS_BOX_MIN_GRID, hydraulicsUnitToGrid(Math.abs(edge - fixed), axis));
+  let cells = Math.max(
+    HYDRAULICS_BOX_MIN_GRID,
+    hydraulicsUnitToGrid(Math.abs(edge - fixed), axis, DEFAULT_HYDRAULICS_SNAP_STEP, extent)
+  );
   if (cells % 2 !== 0) {
     cells += 1;
   }
-  const span = hydraulicsGridToUnit(cells, axis);
+  const span = hydraulicsGridToUnit(cells, axis, DEFAULT_HYDRAULICS_SNAP_STEP, extent);
   if (side === "end") {
     return Math.min(1, fixed + span);
   }
@@ -848,6 +1068,28 @@ function clampUnit(value: number): number {
     return 0.5;
   }
   return Math.min(1, Math.max(0, value));
+}
+
+function snapHydraulicsCells(cells: number, snapStep: number = DEFAULT_HYDRAULICS_SNAP_STEP): number {
+  const step = resolveHydraulicsSnapStep(snapStep);
+  if (!Number.isFinite(cells)) {
+    return 0;
+  }
+  return Number((Math.round(cells / step) * step).toFixed(6));
+}
+
+function isLegacyNormalizedCoord(value: number, snapStep: number): boolean {
+  if (!(value > 0 && value < 1)) {
+    return false;
+  }
+  const step = resolveHydraulicsSnapStep(snapStep);
+  if (step < 1) {
+    const cells = value / step;
+    if (Math.abs(cells - Math.round(cells)) < 1e-9) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function resolvePipeStyle(pipe: Pick<

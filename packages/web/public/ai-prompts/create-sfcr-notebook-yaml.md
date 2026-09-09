@@ -16,7 +16,7 @@ Requirements:
 - Set `format` to `sfcr-notebook-yaml` and `formatVersion` to `1`.
 - Set `metadata.version` to `1`.
 - Include unique `id`, `title`, and an ordered `cells:` list.
-- Use wrapped compact cell entries, where each item has exactly one cell-type key such as `markdown`, `matrix`, `equations`, `solver`, `externals`, `initial-values`, `run`, `chart`, `table`, or `sequence`.
+- Use wrapped compact cell entries, where each item has exactly one cell-type key such as `markdown`, `matrix`, `equations`, `solver`, `externals`, `initial-values`, `run`, `chart`, `table`, `sequence`, `sankey`, or `diagram`.
 - Do not use the older top-level shorthand sections such as `introCell`, `variables`, `equations`, `parameters`, `baselineRun`, `charts`, `tables`, or `cellOrder` for newly generated YAML.
 - Keep cell ids stable and descriptive in kebab-case.
 - Use compact array rows for matrices, equations, externals, and initial values when possible.

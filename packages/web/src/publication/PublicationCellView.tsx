@@ -166,13 +166,14 @@ export function PublicationCellView({
     );
   }
 
-  if (section.kind === "hydraulics" && cell.type === "hydraulics") {
+  if (section.kind === "diagram" && cell.type === "diagram") {
     return (
       <figure id={section.anchorId} className="publication-section publication-section-hydraulics">
         <PublicationHydraulics
           cell={cell}
           cells={cells}
           getResult={getResult}
+          inspectContext={interaction}
           selectedPeriodIndex={selectedPeriodIndex}
         />
         <PublicationCaption description={cell.description} note={cell.note} title={cell.title} />

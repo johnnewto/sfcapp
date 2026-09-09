@@ -1,7 +1,7 @@
 {
-  "id": "gl2-pc-notebook",
-  "title": "GL2 PC Notebook",
-  "metadata": { "version": 1, "template": "gl2-pc" },
+  "id": "gl2-pc-test-hydr",
+  "title": "test hydr",
+  "metadata": { "version": 1, "template": "gl2-pc", "sourceFileName": "gl2-pc-test-hydr (1).notebook.yaml" },
   "cells": [
     { "id": "intro", "type": "markdown", "title": "Overview", "source": "This notebook adapts `gl2-pc.Rmd` into executable browser cells.  It includes the PC balance-sheet, transactions-flow, and account-transactions matrices,  the baseline portfolio-choice model, the interest-rate scenario from the article,  a deterministic `PCEX1` random-shock section with a stored `Ra` sequence,  the `PCEX2` adaptive-expectations variant, and the `PCEX3` interest-sensitive  propensity-to-consume extension.\n", "more": "**Model PC** — Godley & Lavoie's _\"portfolio choice\"_ model (_Monetary\nEconomics_, 2007, chapter 4) — is the first model in the book where households\nhold **more than one financial asset**. Where model SIM (chapter 3) had a single\nform of money, PC splits household wealth between two government liabilities:\nnon-interest-bearing **cash** (`Hh`) and interest-bearing **bills** (`Bh`). The\nletters \"PC\" stand for _portfolio choice_: the central new behaviour is how\nhouseholds divide their wealth between the two.\n\nThe economy still has the SIM sectors — **households**, **production firms** and\n**government** — but adds a **central bank** that buys whatever bills households\ndo not want (`Bcb`) and issues cash against them. The new ingredients relative to\nSIM are:\n\n- **bills paying interest** at the policy rate `r`, so households now receive\n  interest income `lag(r) * lag(Bh)`;\n- a **portfolio (liquidity-preference) decision**: the share of wealth held as\n  bills rises with the interest rate and falls with the income-to-wealth ratio\n  (Tobin-style);\n- a **central bank** that fixes `r` and accommodates household portfolio choices,\n  so the interest rate is a _policy instrument_, not a market price.\n\nThis notebook adapts `gl2-pc.Rmd` into executable cells. It builds up the PC\nbalance-sheet, transactions-flow and account-transaction matrices, the baseline\nmodel, the chapter-4 experiments (a higher interest rate; a higher propensity to\nconsume), and three extensions: `PCEX1` (the role of mistaken expectations with a\nstored random-shock sequence), `PCEX2` (adaptive expectations), and `PCEX3` (an\ninterest-sensitive propensity to consume).\n" },
     {
@@ -70,33 +70,236 @@
       "note": "Columns group balance-sheet accounts by sector. Use Expand all / Collapse all or click sector headers to show or hide account columns.",
       "more": "This is the same period's transactions expanded to the **account level**:\nbalance-sheet accounts (deposits/cash, bills, equity) are grouped under each\nsector, so you can trace a single transaction across the specific accounts it\ntouches. Use **Expand all / Collapse all**, or click a sector header, to show or\nhide the account columns under each sector.\n\nIt is the most granular view of the quadruple-entry structure: every row still\nsums to zero across accounts, and the closing **Sum** row reports the\nend-of-period stocks (household cash `Mh`, bills `Bh`, the government deficit, and\nissued cash `Hs`) that carry into the next period.\n"
     },
-    { "id": "transaction-flow-sequence", "type": "sequence", "title": "PC transaction flow sequence", "source": { "kind": "matrix", "matrixCellId": "transaction-flow" }, "description": "Sequence view generated from the PC transactions-flow matrix at the selected simulation period.", "more": "This reads the transactions-flow matrix **column by column** at the selected\nperiod, as each sector's budget identity. Following the columns shows the\n_circuit_ of money and bills within a single period: government spending and\ninterest payments inject purchasing power; consumption and taxes withdraw it; and\nwhatever households do not consume is allocated between additional cash and\nadditional bills according to the portfolio rule.\n" },
+    { "id": "transaction-flow-sequence", "type": "sequence", "title": "PC transaction flow sequence", "source": { "kind": "matrix", "matrixCellId": "transaction-flow" }, "description": "Sequence view generated from the PC transactions-flow matrix at the selected simulation period.", "more": "This reads the transactions-flow matrix **column by column** at the selected\nperiod, as each sector's budget identity. Following the columns shows the\n_circuit_ of money and bills within a single period: government spending and\ninterest payments inject purchasing power; consumption and taxes withdraw it; and\nwhatever households do not consume is allocated between additional cash and\nadditional bills according to the portfolio rule.\n", "collapsed": false },
     {
       "id": "pc-hydraulics",
-      "type": "hydraulics",
-      "title": "PC stock-flow hydraulics",
+      "type": "diagram",
+      "title": "PC stock-flow diagram",
       "source": { "transactionMatrixCellId": "transaction-flow", "balanceMatrixCellId": "balance-sheet", "sourceRunCellId": "baseline-run" },
       "layout": {
+        "canvas": { "cols": 50, "rows": 34 },
         "sectors": [
-          { "id": "Government", "label": "Government", "x": 6, "y": 5 },
-          { "id": "Firms", "label": "Firms", "x": 20, "y": 4 },
-          { "id": "Households", "label": "Households", "x": 34, "y": 5 }
+          { "id": "Households", "label": "Households", "fill": "#a2ebb5", "stroke": "#334155", "opacity": 0.35, "x": 34, "y": 5 },
+          { "id": "Firms", "label": "Firms", "fill": "#78b5f2", "stroke": "#fafafa", "opacity": 0.5, "x": 18, "y": 5 },
+          { "id": "Government", "label": "Government", "fill": "#f8fafc", "stroke": "#334155", "opacity": 1, "x": 4, "y": 5 },
+          { "id": "sector", "label": "CentralBank", "fill": "#1782ee", "stroke": "#334155", "opacity": 0.2, "x": 15, "y": 14 }
         ],
         "tanks": [
-          { "id": "Bs", "sectorId": "Government", "variable": "Bs", "polarity": "liability", "color": "#c0392b", "x": 6, "y": 14 },
-          { "id": "Hh", "sectorId": "Households", "variable": "Hh", "polarity": "asset", "color": "#2980b9", "x": 30, "y": 14 },
-          { "id": "Bh", "sectorId": "Households", "variable": "Bh", "polarity": "asset", "color": "#d4a017", "x": 37, "y": 14 }
+          { "id": "Hh", "sectorId": "Households", "variable": "Hh", "expression": "", "polarity": "asset", "color": "#2980b9", "maxLevel": 100, "x": 31, "y": 15 },
+          { "id": "Bh", "sectorId": "Households", "variable": "Bh", "polarity": "asset", "color": "#d4a017", "maxLevel": 100, "x": 37, "y": 15 },
+          { "id": "Bs", "sectorId": "Government", "variable": "Bs", "polarity": "liability", "color": "#c0392b", "maxLevel": 100, "x": 4, "y": 15 }
         ],
         "pipes": [
-          { "id": "G", "from": { "kind": "sector", "id": "Government" }, "to": { "kind": "sector", "id": "Firms" }, "variable": "G" },
-          { "id": "Y", "from": { "kind": "sector", "id": "Firms" }, "to": { "kind": "sector", "id": "Households" }, "variable": "Y" },
-          { "id": "C", "from": { "kind": "sector", "id": "Households" }, "to": { "kind": "sector", "id": "Firms" }, "variable": "C" },
-          { "id": "T", "from": { "kind": "sector", "id": "Households" }, "to": { "kind": "sector", "id": "Government" }, "variable": "TX" },
-          { "id": "rBh", "from": { "kind": "sector", "id": "Government" }, "to": { "kind": "sector", "id": "Households" }, "expression": "lag(r) * lag(Bh)" }
+          {
+            "id": "C",
+            "from": { "kind": "sector", "id": "Households", "port": "wsw" },
+            "to": { "kind": "sector", "id": "Firms", "port": "ese" },
+            "variable": "C",
+            "label": "Consumption",
+            "waypoints": [
+              { "x": 26, "y": 6 }
+            ],
+            "color": "#2faa27",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.5208333333333334,
+            "labelOffset": -1
+          },
+          {
+            "id": "G",
+            "from": { "kind": "sector", "id": "Government", "port": "e" },
+            "to": { "kind": "sector", "id": "Firms", "port": "w" },
+            "variable": "G",
+            "expression": "",
+            "label": "Govt. expenditures",
+            "waypoints": [
+              { "x": 11, "y": 5 }
+            ],
+            "color": "#51ac20",
+            "arrowSize": 24,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 5,
+            "opacity": 0.9,
+            "labelT": 0.4791666666666667,
+            "labelOffset": -1
+          },
+          {
+            "id": "Y",
+            "from": { "kind": "sector", "id": "Firms", "port": "ene" },
+            "to": { "kind": "sector", "id": "Households", "port": "wnw" },
+            "variable": "Y",
+            "expression": "",
+            "label": "Income",
+            "waypoints": [
+              { "x": 26, "y": 4 }
+            ],
+            "color": "#334155",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.4166666666666667,
+            "labelOffset": 1
+          },
+          {
+            "id": "rBh",
+            "from": { "kind": "sector", "id": "Government", "port": "se" },
+            "to": { "kind": "sector", "id": "Households", "port": "sw" },
+            "expression": "r' * Bh'",
+            "label": "Interest payments",
+            "waypoints": [
+              { "x": 14, "y": 8 },
+              { "x": 24, "y": 10 }
+            ],
+            "color": "#1e56a4",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.6666666666666666,
+            "labelOffset": -1
+          },
+          {
+            "id": "T",
+            "from": { "kind": "sector", "id": "Households", "port": "n" },
+            "to": { "kind": "sector", "id": "Government", "port": "ne" },
+            "variable": "TX",
+            "expression": "",
+            "label": "Taxes  (TX)",
+            "waypoints": [
+              { "x": 20, "y": 1 }
+            ],
+            "color": "#e09224",
+            "arrowSize": 12,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 6,
+            "opacity": 1,
+            "labelT": 0.5,
+            "labelOffset": -1
+          },
+          {
+            "id": "pipe",
+            "from": { "kind": "sector", "id": "Government", "port": "s" },
+            "to": { "kind": "tank", "id": "Bs", "port": "n" },
+            "expression": "d(Bs)",
+            "label": "G+r*Bh-TX",
+            "waypoints": [
+              { "x": 4, "y": 9 }
+            ],
+            "color": "#334155",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 6,
+            "opacity": 1,
+            "labelT": 0.3958333333333333,
+            "labelOffset": 1.5
+          },
+          {
+            "id": "pipe-2",
+            "from": { "kind": "sector", "id": "Households", "port": "ssw" },
+            "to": { "kind": "tank", "id": "Hh", "port": "n" },
+            "expression": "d(Hh)",
+            "label": "d(Hh)",
+            "waypoints": [
+              { "x": 31, "y": 9 }
+            ],
+            "color": "#334155",
+            "arrowSize": 11,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.4583333333333333,
+            "labelOffset": 1
+          },
+          {
+            "id": "pipe-3",
+            "from": { "kind": "sector", "id": "Households", "port": "sse" },
+            "to": { "kind": "tank", "id": "Bh", "port": "n" },
+            "expression": "10",
+            "label": "d(Bh)",
+            "waypoints": [
+              { "x": 37, "y": 9 }
+            ],
+            "color": "#334155",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.4166666666666667,
+            "labelOffset": 1
+          },
+          {
+            "id": "pipe-4",
+            "from": { "kind": "tank", "id": "Bs", "port": "ene" },
+            "to": { "kind": "sector", "id": "sector", "port": "wnw" },
+            "expression": "d(Bcb)",
+            "label": "d(Bcb)",
+            "waypoints": [
+              { "x": 9, "y": 13 }
+            ],
+            "color": "#334155",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.375,
+            "labelOffset": 1
+          },
+          {
+            "id": "pipe-5",
+            "from": { "kind": "sector", "id": "sector", "port": "wsw" },
+            "to": { "kind": "tank", "id": "Bs", "port": "e" },
+            "expression": "d(Hs)",
+            "label": "d(hs)",
+            "waypoints": [
+              { "x": 9, "y": 15 }
+            ],
+            "color": "#334155",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.5833333333333334,
+            "labelOffset": -1
+          },
+          {
+            "id": "pipe-6",
+            "from": { "kind": "box", "id": "box", "port": "n" },
+            "to": { "kind": "sector", "id": "Households", "port": "s" },
+            "expression": "alpha2*V",
+            "label": "alpha2*V",
+            "waypoints": [
+              { "x": 34, "y": 9 }
+            ],
+            "color": "#334155",
+            "arrowSize": 8,
+            "widthScale": 1,
+            "dashed": false,
+            "tokenCount": 3,
+            "opacity": 1,
+            "labelT": 0.6875,
+            "labelOffset": 0.5
+          }
+        ],
+        "boxes": [
+          { "id": "box", "label": "Wealth V = H_h+B_h", "x": 34, "y": 15, "width": 12, "height": 10, "fill": "#7dd3fc", "fillOpacity": 0.2, "stroke": "#64748b", "dashed": true, "labelOffsetX": -0.5, "labelOffsetY": 6 }
         ]
       },
       "description": "MONIAC-style tanks and pipes for PC, bound to the baseline run at the selected period.",
-      "more": "This cell draws the lecture-style PC circuit from the **actual run series**:\ngovernment spending `G` and income `Y` feed households; consumption `C` and taxes\n`TX` return purchasing power; interest `lag(r) * lag(Bh)` is the extra PC pipe.\nTanks `Bs`, `Hh`, and `Bh` fill from the balance sheet. Unlock the layout to\ndrag boxes, add pipes, and retarget endpoints. Play advances the shared period\nso matrices, Sankey, charts, and this scene stay in lockstep.\n"
+      "more": "This cell draws the lecture-style PC circuit from the **actual run series**:\ngovernment spending `G` and income `Y` feed households; consumption `C` and taxes\n`TX` return purchasing power; interest `lag(r) * lag(Bh)` is the extra PC pipe.\nTanks `Bs`, `Hh`, and `Bh` fill from the balance sheet. Unlock the layout to\ndrag boxes, add pipes, and retarget endpoints. Play advances the shared period\nso matrices, Sankey, charts, and this scene stay in lockstep.\n",
+      "collapsed": false
     },
     {
       "id": "equations",
@@ -161,7 +364,20 @@
       "resultKey": "gl2_pc_s1",
       "sourceModelId": "pc-baseline"
     },
-    { "id": "scenario-1-chart", "type": "chart", "title": "Scenario 1 portfolio adjustment", "more": "After the rate rise the economy moves to a **higher** stationary state: output\nclimbs from `Y ≈ 105.34` to `≈ 107.69`, with disposable income and consumption\nrising in step to `≈ 87.69`. This is Godley & Lavoie's initially _puzzling_\nresult — a higher interest rate is **expansionary** here, because the extra\ninterest the government pays on bills is income to households, which they partly\nspend.\n\nThe _portfolio_ response, by contrast, is barely visible in this notebook: the\nbill share moves only from about `62.62%` to `62.67%`. In the book (with\n`lambda1 = 5`) the same experiment shifts the bill share by roughly a full\npercentage point — the headline of Figure 4.3. Here the small `lambda1 = 0.05`\nmutes the composition effect, so what you see is almost entirely the\ninterest-income channel. (Raise `lambda1` toward `5` to recover the textbook-sized\nportfolio swing.)\n", "sourceRunCellId": "scenario-1-run", "variables": ["Y", "YD", "C", "Bh", "Hh"], "axisMode": "shared", "axisSnapTolarance": 0.5 },
+    {
+      "id": "scenario-1-chart",
+      "type": "chart",
+      "title": "Scenario 1 portfolio adjustment",
+      "more": "After the rate rise the economy moves to a **higher** stationary state: output\nclimbs from `Y ≈ 105.34` to `≈ 107.69`, with disposable income and consumption\nrising in step to `≈ 87.69`. This is Godley & Lavoie's initially _puzzling_\nresult — a higher interest rate is **expansionary** here, because the extra\ninterest the government pays on bills is income to households, which they partly\nspend.\n\nThe _portfolio_ response, by contrast, is barely visible in this notebook: the\nbill share moves only from about `62.62%` to `62.67%`. In the book (with\n`lambda1 = 5`) the same experiment shifts the bill share by roughly a full\npercentage point — the headline of Figure 4.3. Here the small `lambda1 = 0.05`\nmutes the composition effect, so what you see is almost entirely the\ninterest-income channel. (Raise `lambda1` toward `5` to recover the textbook-sized\nportfolio swing.)\n",
+      "sourceRunCellId": "scenario-1-run",
+      "series": [
+        { "expression": "C" },
+        { "expression": "YD" },
+        { "expression": "Hh / V", "label": "Share of money" },
+        { "expression": "Bh / V", "label": "Share of bills" }
+      ],
+      "axisMode": "separate"
+    },
     { "id": "scenario-2-note", "type": "markdown", "title": "Higher propensity to consume", "source": "This scenario raises the propensity to consume out of income `alpha1` from `0.6` to `0.7` between periods 5 and 60 on the baseline PC model, reproducing Godley & Lavoie's third chapter-4 experiment on the model without expectations.", "more": "Scenario 2 reproduces Godley & Lavoie's other chapter-4 experiment (R scenario 3):\na permanent rise in the **propensity to consume out of income** `alpha1` from\n`0.6` to `0.7`, applied to the baseline PC model from period 5. Unlike the\nadaptive run further down, this is the _plain_ model with within-period\nexpectations, so it isolates the pure dynamics of a thriftiness shock.\n" },
     {
       "id": "scenario-2-run",

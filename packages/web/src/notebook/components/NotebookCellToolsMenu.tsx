@@ -21,7 +21,7 @@ export const CELL_INSERT_TYPES: NotebookCellInsertType[] = [
   "matrix",
   "sequence",
   "sankey",
-  "hydraulics"
+  "diagram"
 ];
 
 export function formatCellInsertType(type: NotebookCellInsertType): string {
@@ -42,8 +42,8 @@ export function formatCellInsertType(type: NotebookCellInsertType): string {
       return "Sequence";
     case "sankey":
       return "Sankey";
-    case "hydraulics":
-      return "Hydraulics";
+    case "diagram":
+      return "Stock-flow diagram";
   }
 }
 

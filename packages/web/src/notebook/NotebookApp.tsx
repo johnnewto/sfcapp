@@ -634,7 +634,7 @@ function createNotebookCellForInsert(
         }
       };
     }
-    case "hydraulics": {
+    case "diagram": {
       const matrixCell = resolveDefaultMatrixCell(cells, anchorIndex);
       const companion = matrixCell
         ? cells.find(
@@ -645,9 +645,9 @@ function createNotebookCellForInsert(
           )
         : null;
       return {
-        id: createUniqueNotebookCellId(cells, "hydraulics"),
-        type: "hydraulics",
-        title: "New hydraulics",
+        id: createUniqueNotebookCellId(cells, "diagram"),
+        type: "diagram",
+        title: "New stock-flow diagram",
         source: {
           transactionMatrixCellId: matrixCell?.id ?? "matrix",
           ...(companion ? { balanceMatrixCellId: companion.id } : {}),
@@ -2359,7 +2359,7 @@ export function NotebookApp() {
           ? "externals"
           : args.cellType === "chart-grid"
             ? "chart"
-            : args.cellType === "sankey" || args.cellType === "hydraulics"
+            : args.cellType === "sankey" || args.cellType === "diagram"
               ? "sequence"
               : args.cellType === "abm-model"
                 ? "abm-model"

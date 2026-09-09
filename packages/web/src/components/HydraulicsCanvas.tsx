@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -19,10 +20,17 @@ import {
 } from "@sfcr/notebook-core";
 
 import { useMultiportEdgeAnimation } from "../hooks/useMultiportEdgeAnimation";
+import { highlightFormula } from "./EquationGridEditor";
+import { FORMULA_TOOLTIP_ATTR } from "./InstantTooltip";
+import type { MultiportVariableInspectContextValue } from "./flow/MultiportVariableInspectContext";
 import { renderVariableMathSvgLabel } from "./VariableMathLabel";
+import { resolveVariableTooltip } from "../lib/unitMeta";
 
 import {
+  clampHydraulicsViewport,
   createResolvedHydraulicsBox,
+  DEFAULT_HYDRAULICS_GRID_EXTENT,
+  DEFAULT_HYDRAULICS_VIEWPORT,
   DEFAULT_PIPE_ARROW_SIZE,
   DEFAULT_PIPE_COLOR,
   DEFAULT_PIPE_OPACITY,
@@ -40,15 +48,22 @@ import {
   HYDRAULICS_TANK_GRID_HEIGHT,
   HYDRAULICS_TANK_GRID_WIDTH,
   HYDRAULICS_TANK_GRID_Y,
+  HYDRAULICS_ZOOM_MAX,
+  HYDRAULICS_ZOOM_MIN,
   hydraulicsBoxHandlePoint,
   hydraulicsGridToUnit,
   hydraulicsUnitToGrid,
   layoutFromResolved,
   resizeHydraulicsBox,
+  resolveHydraulicsGridExtent,
+  resolveHydraulicsSnapStep,
   snapHydraulicsLabelOffsetCells,
   snapHydraulicsPoint,
   snapHydraulicsUnit,
+  translateHydraulicsScene,
   type HydraulicsBoxResizeHandle,
+  type HydraulicsGridExtent,
+  type HydraulicsViewport,
   type ResolvedHydraulicsBox,
   type ResolvedHydraulicsPipe,
   type ResolvedHydraulicsScene,
@@ -69,10 +84,14 @@ export const HYDRAULICS_LABEL_AUTO_T = 0.5;
 export const HYDRAULICS_LABEL_CLEARANCE_PX = 8;
 /** Vertical gap from the pipe name baseline to the numeric flow value. */
 export const HYDRAULICS_PIPE_VALUE_GAP_PX = 12;
+const HYDRAULICS_FORMULA_LABEL_WIDTH = 240;
+const HYDRAULICS_FORMULA_LABEL_HEIGHT = 28;
 
 export type HydraulicsTool = "select" | "add-sector" | "add-tank" | "add-pipe" | "add-box";
 
 export type HydraulicsSelection =
+  | { kind: "canvas" }
+  | { kind: "all" }
   | { kind: "sector"; id: string }
   | { kind: "tank"; id: string }
   | { kind: "pipe"; id: string }
@@ -92,6 +111,8 @@ interface Point {
 }
 
 type DragState =
+  | { kind: "pan"; startClient: Point; startViewport: HydraulicsViewport }
+  | { kind: "all"; origin: Point; grabOffset: Point }
   | { kind: "sector" | "tank" | "box"; id: string; grabOffset: Point }
   | { kind: "box-resize"; id: string; handle: HydraulicsBoxResizeHandle }
   | { kind: "pipe-end"; pipeId: string; end: "from" | "to" }
@@ -107,10 +128,14 @@ export function HydraulicsCanvas({
   prefersReducedMotion = false,
   selected = null,
   tool = "select",
+  viewport = DEFAULT_HYDRAULICS_VIEWPORT,
   viewportRoot = null,
+  inspectContext = null,
   onContextMenu,
   onLayoutChange,
-  onSelect
+  onSelect,
+  onToolChange,
+  onViewportChange
 }: {
   scene: ResolvedHydraulicsScene;
   interactive?: boolean;
@@ -119,12 +144,17 @@ export function HydraulicsCanvas({
   prefersReducedMotion?: boolean;
   selected?: HydraulicsSelection | null;
   tool?: HydraulicsTool;
+  viewport?: HydraulicsViewport;
   viewportRoot?: Element | null;
+  inspectContext?: MultiportVariableInspectContextValue | null;
   onContextMenu?(request: HydraulicsContextMenuRequest): void;
   onLayoutChange?(layout: HydraulicsLayout): void;
   onSelect?(selection: HydraulicsSelection | null): void;
+  onToolChange?(tool: HydraulicsTool): void;
+  onViewportChange?(viewport: HydraulicsViewport): void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const gridPatternId = `hydraulics-grid-${useId().replace(/:/g, "")}`;
   const { bumpAnimation, shellRef, shouldAnimateEdges } = useMultiportEdgeAnimation({
     interactionEpoch,
     root: viewportRoot
@@ -136,21 +166,36 @@ export function HydraulicsCanvas({
   const [draft, setDraft] = useState<ResolvedHydraulicsScene | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const draftRef = useRef<ResolvedHydraulicsScene | null>(null);
+  const originSceneRef = useRef<ResolvedHydraulicsScene | null>(null);
   const dragMovedRef = useRef(false);
   const onLayoutChangeRef = useRef(onLayoutChange);
+  const onToolChangeRef = useRef(onToolChange);
+  const onViewportChangeRef = useRef(onViewportChange);
+  const viewportRef = useRef(viewport);
   const [pipeDraftFrom, setPipeDraftFrom] = useState<HydraulicsAnchor | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
   const rendered = draft ?? scene;
   const canEdit = interactive && !layoutLocked;
+  const formulaInspect = inspectContext && !canEdit ? inspectContext : null;
+  const snapStep = resolveHydraulicsSnapStep(rendered.canvas?.snapStep);
+  const extent = resolveHydraulicsGridExtent(rendered.canvas);
+  const sectorWidth = (HYDRAULICS_SECTOR_GRID_WIDTH / extent.cols) * HYDRAULICS_VIEW_WIDTH;
+  const sectorHeight = (HYDRAULICS_SECTOR_GRID_HEIGHT / extent.rows) * HYDRAULICS_VIEW_HEIGHT;
+  const tankWidth = (HYDRAULICS_TANK_GRID_WIDTH / extent.cols) * HYDRAULICS_VIEW_WIDTH;
+  const tankHeight = (HYDRAULICS_TANK_GRID_HEIGHT / extent.rows) * HYDRAULICS_VIEW_HEIGHT;
+  const showSnapGrid = canEdit && rendered.canvas?.showGrid !== false;
   dragRef.current = drag;
   draftRef.current = draft;
   onLayoutChangeRef.current = onLayoutChange;
+  onToolChangeRef.current = onToolChange;
+  onViewportChangeRef.current = onViewportChange;
+  viewportRef.current = viewport;
 
   const pipePaths = useMemo(
     () =>
       rendered.pipes.map((pipe) => ({
         pipe,
-        d: buildPipePath(pipe, rendered.sectors, rendered.tanks, rendered.boxes)
+        d: buildPipePath(pipe, rendered.sectors, rendered.tanks, rendered.boxes, extent)
       })),
     [rendered]
   );
@@ -159,19 +204,45 @@ export function HydraulicsCanvas({
     onLayoutChangeRef.current?.(layoutFromResolved(nextScene));
   }
 
+  function finishAddTool(): void {
+    onToolChangeRef.current?.("select");
+  }
+
+  function commitViewport(next: HydraulicsViewport): void {
+    onViewportChangeRef.current?.(clampHydraulicsViewport(next));
+  }
+
   function clientToNormalized(clientX: number, clientY: number): Point {
     const svg = svgRef.current;
     const rect = svg?.getBoundingClientRect();
+    const view = viewportRef.current;
     if (!rect || rect.width <= 0 || rect.height <= 0) {
       return {
-        x: clampUnit(clientX / HYDRAULICS_VIEW_WIDTH),
-        y: clampUnit(clientY / HYDRAULICS_VIEW_HEIGHT)
+        x: clampUnit(view.x + clientX / HYDRAULICS_VIEW_WIDTH / view.scale),
+        y: clampUnit(view.y + clientY / HYDRAULICS_VIEW_HEIGHT / view.scale)
       };
     }
+    const nx = (clientX - rect.left) / rect.width;
+    const ny = (clientY - rect.top) / rect.height;
     return {
-      x: clampUnit((clientX - rect.left) / rect.width),
-      y: clampUnit((clientY - rect.top) / rect.height)
+      x: clampUnit(view.x + nx / view.scale),
+      y: clampUnit(view.y + ny / view.scale)
     };
+  }
+
+  function zoomAt(clientX: number, clientY: number, nextScale: number): void {
+    const view = viewportRef.current;
+    const world = clientToNormalized(clientX, clientY);
+    const svg = svgRef.current;
+    const rect = svg?.getBoundingClientRect();
+    const nx = rect && rect.width > 0 ? (clientX - rect.left) / rect.width : 0.5;
+    const ny = rect && rect.height > 0 ? (clientY - rect.top) / rect.height : 0.5;
+    const scale = Math.min(HYDRAULICS_ZOOM_MAX, Math.max(HYDRAULICS_ZOOM_MIN, nextScale));
+    commitViewport({
+      scale,
+      x: world.x - nx / scale,
+      y: world.y - ny / scale
+    });
   }
 
   function applyDragPoint(point: Point): void {
@@ -180,10 +251,35 @@ export function HydraulicsCanvas({
     if (!activeDrag || !activeDraft) {
       return;
     }
+    if (activeDrag.kind === "pan") {
+      return;
+    }
+    const step = resolveHydraulicsSnapStep(activeDraft.canvas?.snapStep);
+    const draftExtent = resolveHydraulicsGridExtent(activeDraft.canvas);
+
+    if (activeDrag.kind === "all") {
+      const originScene = originSceneRef.current ?? activeDraft;
+      const x = snapHydraulicsUnit(point.x - activeDrag.grabOffset.x, "x", step, draftExtent);
+      const y = snapHydraulicsUnit(point.y - activeDrag.grabOffset.y, "y", step, draftExtent);
+      const nextDraft = translateHydraulicsScene(
+        originScene,
+        x - activeDrag.origin.x,
+        y - activeDrag.origin.y,
+        step,
+        draftExtent
+      );
+      if (nextDraft === activeDraft) {
+        return;
+      }
+      dragMovedRef.current = true;
+      draftRef.current = nextDraft;
+      setDraft(nextDraft);
+      return;
+    }
 
     if (activeDrag.kind === "sector" || activeDrag.kind === "tank" || activeDrag.kind === "box") {
-      const x = snapHydraulicsUnit(point.x - activeDrag.grabOffset.x, "x");
-      const y = snapHydraulicsUnit(point.y - activeDrag.grabOffset.y, "y");
+      const x = snapHydraulicsUnit(point.x - activeDrag.grabOffset.x, "x", step, draftExtent);
+      const y = snapHydraulicsUnit(point.y - activeDrag.grabOffset.y, "y", step, draftExtent);
       const current =
         activeDrag.kind === "sector"
           ? activeDraft.sectors.find((sector) => sector.id === activeDrag.id)
@@ -221,7 +317,7 @@ export function HydraulicsCanvas({
       if (!current) {
         return;
       }
-      const nextBox = resizeHydraulicsBox(current, activeDrag.handle, point);
+      const nextBox = resizeHydraulicsBox(current, activeDrag.handle, point, step, draftExtent);
       if (
         nextBox.x === current.x &&
         nextBox.y === current.y &&
@@ -250,9 +346,9 @@ export function HydraulicsCanvas({
       if (!current) {
         return;
       }
-      const auto = nodeLabelAutoViewBox(activeDrag.nodeKind, current);
-      const labelOffsetX = snapHydraulicsNodeLabelOffset(point.x * HYDRAULICS_VIEW_WIDTH - auto.x, "x");
-      const labelOffsetY = snapHydraulicsNodeLabelOffset(point.y * HYDRAULICS_VIEW_HEIGHT - auto.y, "y");
+      const auto = nodeLabelAutoViewBox(activeDrag.nodeKind, current, draftExtent);
+      const labelOffsetX = snapHydraulicsNodeLabelOffset(point.x * HYDRAULICS_VIEW_WIDTH - auto.x, "x", draftExtent);
+      const labelOffsetY = snapHydraulicsNodeLabelOffset(point.y * HYDRAULICS_VIEW_HEIGHT - auto.y, "y", draftExtent);
       if (current.labelOffsetX === labelOffsetX && current.labelOffsetY === labelOffsetY) {
         return;
       }
@@ -291,7 +387,7 @@ export function HydraulicsCanvas({
           if (pipe.id !== activeDrag.pipeId) {
             return pipe;
           }
-          const geometry = pipeGeometry(pipe, activeDraft.sectors, activeDraft.tanks, activeDraft.boxes);
+          const geometry = pipeGeometry(pipe, activeDraft.sectors, activeDraft.tanks, activeDraft.boxes, draftExtent);
           const labelT = closestHydraulicsPipeLabelT(geometry, point);
           const sample = samplePipeGeometry(geometry, labelT);
           const normal = upNormalViewBox(sample.tangent);
@@ -301,7 +397,7 @@ export function HydraulicsCanvas({
           return {
             ...pipe,
             labelT,
-            labelOffset: snapHydraulicsLabelOffset(signedPx - HYDRAULICS_LABEL_CLEARANCE_PX)
+            labelOffset: snapHydraulicsLabelOffset(signedPx - HYDRAULICS_LABEL_CLEARANCE_PX, draftExtent)
           };
         })
       };
@@ -319,7 +415,7 @@ export function HydraulicsCanvas({
             ? {
                 ...pipe,
                 waypoints: pipe.waypoints.map((waypoint, index) =>
-                  index === activeDrag.index ? snapHydraulicsPoint(point) : waypoint
+                  index === activeDrag.index ? snapHydraulicsPoint(point, step, draftExtent) : waypoint
                 )
               }
             : pipe
@@ -334,13 +430,13 @@ export function HydraulicsCanvas({
       return;
     }
 
-    const snapped = snapAnchor(point, activeDraft.sectors, activeDraft.tanks, activeDraft.boxes);
+    const snapped = snapAnchor(point, activeDraft.sectors, activeDraft.tanks, activeDraft.boxes, draftExtent);
     dragMovedRef.current = true;
     const nextDraft = {
       ...activeDraft,
       pipes: activeDraft.pipes.map((pipe) =>
         pipe.id === activeDrag.pipeId
-          ? { ...pipe, [activeDrag.end]: snapped ?? { kind: "point" as const, ...snapHydraulicsPoint(point) } }
+          ? { ...pipe, [activeDrag.end]: snapped ?? { kind: "point" as const, ...snapHydraulicsPoint(point, step, draftExtent) } }
           : pipe
       )
     };
@@ -359,6 +455,7 @@ export function HydraulicsCanvas({
       }
       dragRef.current = null;
       draftRef.current = null;
+      originSceneRef.current = null;
       dragMovedRef.current = false;
       setDrag(null);
       setDraft(null);
@@ -370,7 +467,48 @@ export function HydraulicsCanvas({
     };
   }, [drag]);
 
+  useEffect(() => {
+    if (!interactive) {
+      return;
+    }
+    const svg = svgRef.current;
+    if (!svg) {
+      return;
+    }
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        return;
+      }
+      event.preventDefault();
+      const view = viewportRef.current;
+      const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+      zoomAt(event.clientX, event.clientY, view.scale * factor);
+    };
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      svg.removeEventListener("wheel", handleWheel);
+    };
+  }, [interactive]);
+
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>): void {
+    const activeDrag = dragRef.current;
+    if (activeDrag?.kind === "pan") {
+      const svg = svgRef.current;
+      const rect = svg?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+      const view = activeDrag.startViewport;
+      const dx = (event.clientX - activeDrag.startClient.x) / rect.width / view.scale;
+      const dy = (event.clientY - activeDrag.startClient.y) / rect.height / view.scale;
+      dragMovedRef.current = true;
+      commitViewport({
+        scale: view.scale,
+        x: view.x - dx,
+        y: view.y - dy
+      });
+      return;
+    }
     const point = clientToNormalized(event.clientX, event.clientY);
     setCursor(point);
     applyDragPoint(point);
@@ -414,6 +552,7 @@ export function HydraulicsCanvas({
     });
     onSelect?.({ kind: "pipe", id });
     setPipeDraftFrom(null);
+    finishAddTool();
   }
 
   function startNodeDrag(
@@ -437,7 +576,8 @@ export function HydraulicsCanvas({
           id,
           rendered.sectors,
           rendered.tanks,
-          rendered.boxes
+          rendered.boxes,
+          extent
         )
       );
       return;
@@ -450,6 +590,10 @@ export function HydraulicsCanvas({
     event.stopPropagation();
     capturePointer(event);
     const point = clientToNormalized(event.clientX, event.clientY);
+    if (selected?.kind === "all") {
+      startAllDrag(event, node, point);
+      return;
+    }
     const nextDrag: DragState = { kind, id, grabOffset: { x: point.x - node.x, y: point.y - node.y } };
     dragMovedRef.current = false;
     dragRef.current = nextDrag;
@@ -457,6 +601,23 @@ export function HydraulicsCanvas({
     setDrag(nextDrag);
     setDraft(rendered);
     onSelect?.({ kind, id });
+  }
+
+  function startAllDrag(event: ReactPointerEvent, origin: Point, point = clientToNormalized(event.clientX, event.clientY)): void {
+    event.preventDefault();
+    event.stopPropagation();
+    capturePointer(event);
+    const nextDrag: DragState = {
+      kind: "all",
+      origin,
+      grabOffset: { x: point.x - origin.x, y: point.y - origin.y }
+    };
+    dragMovedRef.current = false;
+    dragRef.current = nextDrag;
+    originSceneRef.current = rendered;
+    draftRef.current = rendered;
+    setDrag(nextDrag);
+    setDraft(rendered);
   }
 
   function startBoxResize(id: string, handle: HydraulicsBoxResizeHandle, event: ReactPointerEvent): void {
@@ -506,9 +667,10 @@ export function HydraulicsCanvas({
     if (event.target !== event.currentTarget && nodeKind === "box" && tool === "select") {
       return;
     }
-    const point = snapHydraulicsPoint(clientToNormalized(event.clientX, event.clientY));
+    const point = snapHydraulicsPoint(clientToNormalized(event.clientX, event.clientY), snapStep, extent);
     if (!canEdit) {
-      onSelect?.(null);
+      onSelect?.({ kind: "canvas" });
+      startPanIfNeeded(event);
       return;
     }
 
@@ -535,6 +697,7 @@ export function HydraulicsCanvas({
         ]
       });
       onSelect?.({ kind: "sector", id });
+      finishAddTool();
       return;
     }
 
@@ -554,8 +717,8 @@ export function HydraulicsCanvas({
             label: id,
             polarity: "asset",
             color: "#2980b9",
-            x: snapped ? snapTankX(snapped, rendered.tanks) : point.x,
-            y: snapped ? hydraulicsGridToUnit(HYDRAULICS_TANK_GRID_Y, "y") : point.y,
+            x: snapped ? snapTankX(snapped, rendered.tanks, extent) : point.x,
+            y: snapped ? hydraulicsGridToUnit(HYDRAULICS_TANK_GRID_Y, "y", snapStep, extent) : point.y,
             value: null,
             maxLevel: null,
             runMaxAbs: 0,
@@ -567,11 +730,12 @@ export function HydraulicsCanvas({
         ]
       });
       onSelect?.({ kind: "tank", id });
+      finishAddTool();
       return;
     }
 
     if (tool === "add-pipe") {
-      applyPipeDraft(snapAnchor(point, rendered.sectors, rendered.tanks, rendered.boxes));
+      applyPipeDraft(snapAnchor(point, rendered.sectors, rendered.tanks, rendered.boxes, extent));
       return;
     }
 
@@ -582,13 +746,33 @@ export function HydraulicsCanvas({
       );
       persist({
         ...rendered,
-        boxes: [...rendered.boxes, createResolvedHydraulicsBox(id, point.x, point.y)]
+        boxes: [...rendered.boxes, createResolvedHydraulicsBox(id, point.x, point.y, extent)]
       });
       onSelect?.({ kind: "box", id });
+      finishAddTool();
       return;
     }
 
-    onSelect?.(null);
+    onSelect?.({ kind: "canvas" });
+    startPanIfNeeded(event);
+  }
+
+  function startPanIfNeeded(event: ReactPointerEvent<SVGSVGElement>): void {
+    if (tool !== "select" || viewportRef.current.scale <= 1) {
+      return;
+    }
+    event.preventDefault();
+    capturePointer(event);
+    const nextDrag: DragState = {
+      kind: "pan",
+      startClient: { x: event.clientX, y: event.clientY },
+      startViewport: viewportRef.current
+    };
+    dragMovedRef.current = false;
+    dragRef.current = nextDrag;
+    draftRef.current = null;
+    setDrag(nextDrag);
+    setDraft(null);
   }
 
   function handleContextMenu(event: ReactMouseEvent<SVGSVGElement>): void {
@@ -612,7 +796,7 @@ export function HydraulicsCanvas({
         nextSelection = { kind, id };
       }
     }
-    onSelect?.(nextSelection);
+    onSelect?.(nextSelection ?? { kind: "canvas" });
     onContextMenu?.({
       selection: nextSelection,
       clientX: event.clientX,
@@ -626,7 +810,7 @@ export function HydraulicsCanvas({
       return;
     }
     event.stopPropagation();
-    const point = snapHydraulicsPoint(clientToNormalized(event.clientX, event.clientY));
+    const point = snapHydraulicsPoint(clientToNormalized(event.clientX, event.clientY), snapStep, extent);
     persist({
       ...rendered,
       pipes: rendered.pipes.map((entry) =>
@@ -637,7 +821,7 @@ export function HydraulicsCanvas({
 
   const previewPath =
     tool === "add-pipe" && pipeDraftFrom && cursor
-      ? buildPathFromPoints([anchorPoint(pipeDraftFrom, rendered.sectors, rendered.tanks, rendered.boxes) ?? cursor, cursor])
+      ? buildPathFromPoints([anchorPoint(pipeDraftFrom, rendered.sectors, rendered.tanks, rendered.boxes, extent) ?? cursor, cursor])
       : null;
 
   if (scene.errors.length > 0 && scene.sectors.length === 0) {
@@ -660,14 +844,24 @@ export function HydraulicsCanvas({
         ref={svgRef}
         className="hydraulics-diagram-canvas"
         role="img"
-        aria-label="Hydraulics diagram"
-        viewBox={`0 0 ${HYDRAULICS_VIEW_WIDTH} ${HYDRAULICS_VIEW_HEIGHT}`}
+        aria-label="Stock-flow diagram"
+        viewBox={`${viewport.x * HYDRAULICS_VIEW_WIDTH} ${viewport.y * HYDRAULICS_VIEW_HEIGHT} ${HYDRAULICS_VIEW_WIDTH / viewport.scale} ${HYDRAULICS_VIEW_HEIGHT / viewport.scale}`}
         width="100%"
         onPointerDown={handleBackgroundPointerDown}
         onPointerMove={handlePointerMove}
         onContextMenu={handleContextMenu}
       >
       <defs>
+        {showSnapGrid ? (
+          <pattern
+            id={gridPatternId}
+            width={(HYDRAULICS_VIEW_WIDTH / extent.cols) * snapStep}
+            height={(HYDRAULICS_VIEW_HEIGHT / extent.rows) * snapStep}
+            patternUnits="userSpaceOnUse"
+          >
+            <circle className="hydraulics-snap-grid-dot" cx="0.75" cy="0.75" r="1.15" />
+          </pattern>
+        ) : null}
         {rendered.pipes
           .filter((pipe) => pipe.arrowSize > 0)
           .map((pipe) => (
@@ -689,13 +883,26 @@ export function HydraulicsCanvas({
           ))}
       </defs>
 
+      {showSnapGrid ? (
+        <rect
+          className="hydraulics-snap-grid"
+          data-testid="hydraulics-snap-grid"
+          x={0}
+          y={0}
+          width={HYDRAULICS_VIEW_WIDTH}
+          height={HYDRAULICS_VIEW_HEIGHT}
+          fill={`url(#${gridPatternId})`}
+          pointerEvents="none"
+        />
+      ) : null}
+
       {rendered.boxes.map((box) => {
         const width = box.width * HYDRAULICS_VIEW_WIDTH;
         const height = box.height * HYDRAULICS_VIEW_HEIGHT;
         const x = box.x * HYDRAULICS_VIEW_WIDTH - width / 2;
         const y = box.y * HYDRAULICS_VIEW_HEIGHT - height / 2;
-        const isSelected = selected?.kind === "box" && selected.id === box.id;
-        const labelPosition = placeHydraulicsNodeLabel("box", box);
+        const isSelected = isHydraulicsItemSelected(selected, "box", box.id);
+        const labelPosition = placeHydraulicsNodeLabel("box", box, extent);
         return (
           <g
             key={box.id}
@@ -742,7 +949,7 @@ export function HydraulicsCanvas({
         const showFlowOverlay = !prefersReducedMotion && pipe.flowAnimationSpeed > 0;
         const animateFlow = showFlowOverlay && shouldAnimateEdges;
         const labelPosition = pipe.label
-          ? placeHydraulicsPipeLabel(pipe, rendered.sectors, rendered.tanks, rendered.boxes)
+          ? placeHydraulicsPipeLabel(pipe, rendered.sectors, rendered.tanks, rendered.boxes, extent)
           : null;
         return (
         <g
@@ -757,12 +964,16 @@ export function HydraulicsCanvas({
             fill="none"
             stroke="transparent"
             strokeWidth={Math.max(18, pipe.strokeWidth + 12)}
-            className={selected?.kind === "pipe" && selected.id === pipe.id ? "is-selected" : undefined}
+            className={isHydraulicsItemSelected(selected, "pipe", pipe.id) ? "is-selected" : undefined}
             onPointerDown={(event) => {
               if (!isPrimaryPointer(event)) {
                 return;
               }
               event.stopPropagation();
+              if (selected?.kind === "all" && canEdit && tool === "select") {
+                startAllDrag(event, clientToNormalized(event.clientX, event.clientY));
+                return;
+              }
               onSelect?.({ kind: "pipe", id: pipe.id });
             }}
             onDoubleClick={(event) =>
@@ -806,33 +1017,62 @@ export function HydraulicsCanvas({
           ) : null}
           {pipe.label && labelPosition ? (
             <g data-testid={`hydraulics-pipe-label-group-${pipe.id}`}>
-              <text
-                data-testid={`hydraulics-pipe-label-${pipe.id}`}
-                x={labelPosition.x}
-                y={labelPosition.y}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                className={`hydraulics-pipe-label${canEdit && tool === "select" ? " is-editable" : ""}`}
-                style={{ fill: pipe.color }}
-                pointerEvents={canEdit && tool === "select" ? "auto" : "none"}
-                onPointerDown={(event) => {
-                  if (!isPrimaryPointer(event) || !canEdit || tool !== "select") {
-                    return;
-                  }
-                  event.preventDefault();
-                  event.stopPropagation();
-                  capturePointer(event);
-                  const nextDrag: DragState = { kind: "pipe-label", pipeId: pipe.id };
-                  dragMovedRef.current = false;
-                  dragRef.current = nextDrag;
-                  draftRef.current = rendered;
-                  setDrag(nextDrag);
-                  setDraft(rendered);
-                  onSelect?.({ kind: "pipe", id: pipe.id });
-                }}
-              >
-                {renderVariableMathSvgLabel(pipe.label)}
-              </text>
+              {formulaInspect ? (
+                <HydraulicsFormulaLabel
+                  canEdit={false}
+                  color={pipe.color}
+                  inspect={formulaInspect}
+                  label={pipe.label}
+                  testId={`hydraulics-pipe-label-${pipe.id}`}
+                  variable={pipe.variable}
+                  expression={pipe.expression}
+                  x={labelPosition.x}
+                  y={labelPosition.y}
+                  onLabelPointerDown={(event) => {
+                    if (!isPrimaryPointer(event) || !canEdit || tool !== "select") {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    capturePointer(event);
+                    const nextDrag: DragState = { kind: "pipe-label", pipeId: pipe.id };
+                    dragMovedRef.current = false;
+                    dragRef.current = nextDrag;
+                    draftRef.current = rendered;
+                    setDrag(nextDrag);
+                    setDraft(rendered);
+                    onSelect?.({ kind: "pipe", id: pipe.id });
+                  }}
+                />
+              ) : (
+                <text
+                  data-testid={`hydraulics-pipe-label-${pipe.id}`}
+                  x={labelPosition.x}
+                  y={labelPosition.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className={`hydraulics-pipe-label${canEdit && tool === "select" ? " is-editable" : ""}`}
+                  style={{ fill: pipe.color }}
+                  pointerEvents={canEdit && tool === "select" ? "auto" : "none"}
+                  onPointerDown={(event) => {
+                    if (!isPrimaryPointer(event) || !canEdit || tool !== "select") {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    capturePointer(event);
+                    const nextDrag: DragState = { kind: "pipe-label", pipeId: pipe.id };
+                    dragMovedRef.current = false;
+                    dragRef.current = nextDrag;
+                    draftRef.current = rendered;
+                    setDrag(nextDrag);
+                    setDraft(rendered);
+                    onSelect?.({ kind: "pipe", id: pipe.id });
+                  }}
+                >
+                  {renderVariableMathSvgLabel(pipe.label)}
+                </text>
+              )}
               {pipe.variable?.trim() || pipe.expression?.trim() ? (
                 <text
                   data-testid={`hydraulics-pipe-value-${pipe.id}`}
@@ -853,9 +1093,9 @@ export function HydraulicsCanvas({
             ? (["from", "to"] as const).map((end) => {
                 const otherAnchor = pipe[end === "from" ? "to" : "from"];
                 const other = pipe.waypoints[end === "from" ? 0 : pipe.waypoints.length - 1]
-                  ?? anchorPoint(otherAnchor, rendered.sectors, rendered.tanks, rendered.boxes)
+                  ?? anchorPoint(otherAnchor, rendered.sectors, rendered.tanks, rendered.boxes, extent)
                   ?? { x: 0.5, y: 0.5 };
-                const point = resolvePipeEnd(pipe[end], other, rendered.sectors, rendered.tanks, rendered.boxes);
+                const point = resolvePipeEnd(pipe[end], other, rendered.sectors, rendered.tanks, rendered.boxes, extent);
                 return (
                   <circle
                     key={`${pipe.id}-${end}`}
@@ -922,10 +1162,10 @@ export function HydraulicsCanvas({
       ) : null}
 
       {rendered.sectors.map((sector) => {
-        const x = sector.x * HYDRAULICS_VIEW_WIDTH - HYDRAULICS_SECTOR_WIDTH / 2;
-        const y = sector.y * HYDRAULICS_VIEW_HEIGHT - HYDRAULICS_SECTOR_HEIGHT / 2;
-        const isSelected = selected?.kind === "sector" && selected.id === sector.id;
-        const labelPosition = placeHydraulicsNodeLabel("sector", sector);
+        const x = sector.x * HYDRAULICS_VIEW_WIDTH - sectorWidth / 2;
+        const y = sector.y * HYDRAULICS_VIEW_HEIGHT - sectorHeight / 2;
+        const isSelected = isHydraulicsItemSelected(selected, "sector", sector.id);
+        const labelPosition = placeHydraulicsNodeLabel("sector", sector, extent);
         return (
           <g
             key={sector.id}
@@ -938,8 +1178,8 @@ export function HydraulicsCanvas({
             <rect
               x={x}
               y={y}
-              width={HYDRAULICS_SECTOR_WIDTH}
-              height={HYDRAULICS_SECTOR_HEIGHT}
+              width={sectorWidth}
+              height={sectorHeight}
               rx="10"
               fill={sector.fill}
               stroke={isSelected ? "#2563eb" : sector.stroke}
@@ -963,11 +1203,11 @@ export function HydraulicsCanvas({
       })}
 
       {rendered.tanks.map((tank) => {
-        const x = tank.x * HYDRAULICS_VIEW_WIDTH - HYDRAULICS_TANK_WIDTH / 2;
-        const y = tank.y * HYDRAULICS_VIEW_HEIGHT - HYDRAULICS_TANK_HEIGHT / 2;
-        const fillHeight = tank.fill * HYDRAULICS_TANK_HEIGHT;
-        const fillY = tank.polarity === "liability" ? y : y + HYDRAULICS_TANK_HEIGHT - fillHeight;
-        const isSelected = selected?.kind === "tank" && selected.id === tank.id;
+        const x = tank.x * HYDRAULICS_VIEW_WIDTH - tankWidth / 2;
+        const y = tank.y * HYDRAULICS_VIEW_HEIGHT - tankHeight / 2;
+        const fillHeight = tank.fill * tankHeight;
+        const fillY = tank.polarity === "liability" ? y : y + tankHeight - fillHeight;
+        const isSelected = isHydraulicsItemSelected(selected, "tank", tank.id);
         return (
           <g
             key={tank.id}
@@ -980,7 +1220,7 @@ export function HydraulicsCanvas({
             <rect
               x={x}
               y={fillY}
-              width={HYDRAULICS_TANK_WIDTH}
+              width={tankWidth}
               height={fillHeight}
               fill={tank.color}
               opacity="0.85"
@@ -988,8 +1228,8 @@ export function HydraulicsCanvas({
             <rect
               x={x}
               y={y}
-              width={HYDRAULICS_TANK_WIDTH}
-              height={HYDRAULICS_TANK_HEIGHT}
+              width={tankWidth}
+              height={tankHeight}
               rx="8"
               fill="none"
               stroke={tank.color}
@@ -997,7 +1237,7 @@ export function HydraulicsCanvas({
             />
             <text
               x={tank.x * HYDRAULICS_VIEW_WIDTH}
-              y={y + HYDRAULICS_TANK_HEIGHT / 2}
+              y={y + tankHeight / 2}
               textAnchor="middle"
               dominantBaseline="middle"
               className="hydraulics-tank-value"
@@ -1005,18 +1245,32 @@ export function HydraulicsCanvas({
             >
               {formatHydraulicsTankValue(tank.value)}
             </text>
-            <text
-              data-hydraulics-label=""
-              data-testid={`hydraulics-tank-label-${tank.id}`}
-              x={placeHydraulicsNodeLabel("tank", tank).x}
-              y={placeHydraulicsNodeLabel("tank", tank).y}
-              textAnchor="middle"
-              className={`hydraulics-tank-label${canEdit && tool === "select" ? " is-editable" : ""}`}
-              pointerEvents={canEdit && tool === "select" ? "auto" : "none"}
-              onPointerDown={(event) => startNodeLabelDrag("tank", tank.id, event)}
-            >
-              {renderVariableMathSvgLabel(tank.label)}
-            </text>
+            {formulaInspect ? (
+              <HydraulicsFormulaLabel
+                canEdit={false}
+                inspect={formulaInspect}
+                label={tank.label}
+                testId={`hydraulics-tank-label-${tank.id}`}
+                variable={tank.variable}
+                expression={tank.expression}
+                x={placeHydraulicsNodeLabel("tank", tank, extent).x}
+                y={placeHydraulicsNodeLabel("tank", tank, extent).y}
+                onLabelPointerDown={(event) => startNodeLabelDrag("tank", tank.id, event)}
+              />
+            ) : (
+              <text
+                data-hydraulics-label=""
+                data-testid={`hydraulics-tank-label-${tank.id}`}
+                x={placeHydraulicsNodeLabel("tank", tank, extent).x}
+                y={placeHydraulicsNodeLabel("tank", tank, extent).y}
+                textAnchor="middle"
+                className={`hydraulics-tank-label${canEdit && tool === "select" ? " is-editable" : ""}`}
+                pointerEvents={canEdit && tool === "select" ? "auto" : "none"}
+                onPointerDown={(event) => startNodeLabelDrag("tank", tank.id, event)}
+              >
+                {renderVariableMathSvgLabel(tank.label)}
+              </text>
+            )}
           </g>
         );
       })}
@@ -1045,7 +1299,7 @@ export function HydraulicsCanvas({
       {canEdit && (tool === "add-pipe" || drag?.kind === "pipe-end")
         ? [
             ...rendered.sectors.flatMap((sector) =>
-              portsForNode("sector", sector).map(({ port, point }) => ({
+              portsForNode("sector", sector, extent).map(({ port, point }) => ({
                 key: `sector-${sector.id}-${port}`,
                 kind: "sector" as const,
                 id: sector.id,
@@ -1054,7 +1308,7 @@ export function HydraulicsCanvas({
               }))
             ),
             ...rendered.tanks.flatMap((tank) =>
-              portsForNode("tank", tank).map(({ port, point }) => ({
+              portsForNode("tank", tank, extent).map(({ port, point }) => ({
                 key: `tank-${tank.id}-${port}`,
                 kind: "tank" as const,
                 id: tank.id,
@@ -1063,7 +1317,7 @@ export function HydraulicsCanvas({
               }))
             ),
             ...rendered.boxes.flatMap((box) =>
-              portsForBox(box).map(({ port, point }) => ({
+              portsForBox(box, extent).map(({ port, point }) => ({
                 key: `box-${box.id}-${port}`,
                 kind: "box" as const,
                 id: box.id,
@@ -1106,7 +1360,8 @@ export function snapAnchor(
   point: Point,
   sectors: ResolvedHydraulicsSector[],
   tanks: ResolvedHydraulicsTank[],
-  boxes: ResolvedHydraulicsBox[] = []
+  boxes: ResolvedHydraulicsBox[] = [],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): HydraulicsAnchor | null {
   const candidates: Array<{ distance: number; anchor: HydraulicsAnchor }> = [];
 
@@ -1118,17 +1373,17 @@ export function snapAnchor(
   };
 
   for (const sector of sectors) {
-    for (const { port, point: target } of portsForNode("sector", sector)) {
+    for (const { port, point: target } of portsForNode("sector", sector, extent)) {
       consider({ kind: "sector", id: sector.id, port }, target);
     }
   }
   for (const tank of tanks) {
-    for (const { port, point: target } of portsForNode("tank", tank)) {
+    for (const { port, point: target } of portsForNode("tank", tank, extent)) {
       consider({ kind: "tank", id: tank.id, port }, target);
     }
   }
   for (const box of boxes) {
-    for (const { port, point: target } of portsForBox(box)) {
+    for (const { port, point: target } of portsForBox(box, extent)) {
       consider({ kind: "box", id: box.id, port }, target);
     }
   }
@@ -1143,21 +1398,22 @@ export function snapPortOnNode(
   id: string,
   sectors: ResolvedHydraulicsSector[],
   tanks: ResolvedHydraulicsTank[],
-  boxes: ResolvedHydraulicsBox[] = []
+  boxes: ResolvedHydraulicsBox[] = [],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): HydraulicsAnchor | null {
   if (kind === "box") {
     const box = boxes.find((entry) => entry.id === id);
     if (!box) {
       return null;
     }
-    const nearest = nearestPort(point, portsForBox(box));
+    const nearest = nearestPort(point, portsForBox(box, extent));
     return { kind: "box", id, port: nearest.port };
   }
   const node = kind === "sector" ? sectors.find((entry) => entry.id === id) : tanks.find((entry) => entry.id === id);
   if (!node) {
     return null;
   }
-  const nearest = nearestPort(point, portsForNode(kind, node));
+  const nearest = nearestPort(point, portsForNode(kind, node, extent));
   if (kind === "sector") {
     return { kind: "sector", id, port: nearest.port };
   }
@@ -1177,14 +1433,18 @@ function snapToSector(point: Point, sectors: ResolvedHydraulicsSector[]): Resolv
   return nearest;
 }
 
-function snapTankX(sector: ResolvedHydraulicsSector, tanks: ResolvedHydraulicsTank[]): number {
+function snapTankX(
+  sector: ResolvedHydraulicsSector,
+  tanks: ResolvedHydraulicsTank[],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): number {
   const attached = tanks.filter((tank) => tank.sectorId === sector.id);
-  return snapHydraulicsUnit(sector.x + attached.length * (2 / HYDRAULICS_GRID_COLS), "x");
+  return snapHydraulicsUnit(sector.x + attached.length * (2 / extent.cols), "x", undefined, extent);
 }
 
 const AUTO_PORTS: readonly HydraulicsPort[] = ["n", "e", "s", "w"];
 
-/** Unit offsets in [-1, 1] of the node half-size. Long-side extras sit at ±½. */
+/** Unit offsets in [-1, 1] of the node half-size. Side extras sit at ±½. */
 const PORT_UNIT_OFFSET: Record<HydraulicsPort, Point> = {
   c: { x: 0, y: 0 },
   n: { x: 0, y: -1 },
@@ -1205,16 +1465,19 @@ const PORT_UNIT_OFFSET: Record<HydraulicsPort, Point> = {
   nnw: { x: -0.5, y: -1 }
 };
 
-function nodeHalfSize(kind: "sector" | "tank"): Point {
+function nodeHalfSize(
+  kind: "sector" | "tank",
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): Point {
   if (kind === "sector") {
     return {
-      x: HYDRAULICS_SECTOR_GRID_WIDTH / 2 / HYDRAULICS_GRID_COLS,
-      y: HYDRAULICS_SECTOR_GRID_HEIGHT / 2 / HYDRAULICS_GRID_ROWS
+      x: HYDRAULICS_SECTOR_GRID_WIDTH / 2 / extent.cols,
+      y: HYDRAULICS_SECTOR_GRID_HEIGHT / 2 / extent.rows
     };
   }
   return {
-    x: HYDRAULICS_TANK_GRID_WIDTH / 2 / HYDRAULICS_GRID_COLS,
-    y: HYDRAULICS_TANK_GRID_HEIGHT / 2 / HYDRAULICS_GRID_ROWS
+    x: HYDRAULICS_TANK_GRID_WIDTH / 2 / extent.cols,
+    y: HYDRAULICS_TANK_GRID_HEIGHT / 2 / extent.rows
   };
 }
 
@@ -1225,36 +1488,44 @@ function portOffset(port: HydraulicsPort, half: Point): Point {
 
 export function portsForNode(
   kind: "sector" | "tank",
-  node: { x: number; y: number }
+  node: { x: number; y: number },
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Array<{ port: HydraulicsPort; point: Point }> {
-  const half = nodeHalfSize(kind);
+  const half = nodeHalfSize(kind, extent);
   return hydraulicsPortsForKind(kind).map((port) => {
     const offset = portOffset(port, half);
     return { port, point: { x: node.x + offset.x, y: node.y + offset.y } };
   });
 }
 
-export function portsForBox(box: ResolvedHydraulicsBox): Array<{ port: string; point: Point }> {
-  const widthCells = hydraulicsUnitToGrid(box.width, "x");
-  const heightCells = hydraulicsUnitToGrid(box.height, "y");
+export function portsForBox(
+  box: ResolvedHydraulicsBox,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): Array<{ port: string; point: Point }> {
+  const widthCells = hydraulicsUnitToGrid(box.width, "x", undefined, extent);
+  const heightCells = hydraulicsUnitToGrid(box.height, "y", undefined, extent);
   return hydraulicsBoxPorts(widthCells, heightCells).map((port) => ({
     port,
-    point: boxPortPoint(box, port)
+    point: boxPortPoint(box, port, extent)
   }));
 }
 
-function boxPortPoint(box: ResolvedHydraulicsBox, port: string): Point {
+function boxPortPoint(
+  box: ResolvedHydraulicsBox,
+  port: string,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): Point {
   const delta = hydraulicsBoxPortCellDelta(
     port,
-    hydraulicsUnitToGrid(box.width, "x"),
-    hydraulicsUnitToGrid(box.height, "y")
+    hydraulicsUnitToGrid(box.width, "x", undefined, extent),
+    hydraulicsUnitToGrid(box.height, "y", undefined, extent)
   );
   if (!delta) {
     return { x: box.x, y: box.y };
   }
   return {
-    x: box.x + delta.dx / HYDRAULICS_GRID_COLS,
-    y: box.y + delta.dy / HYDRAULICS_GRID_ROWS
+    x: box.x + delta.dx / extent.cols,
+    y: box.y + delta.dy / extent.rows
   };
 }
 
@@ -1272,13 +1543,17 @@ function nearestPort<T extends string>(
 
 function autoPortsForNode(
   kind: "sector" | "tank",
-  node: { x: number; y: number }
+  node: { x: number; y: number },
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Array<{ port: HydraulicsPort; point: Point }> {
-  return portsForNode(kind, node).filter((entry) => AUTO_PORTS.includes(entry.port));
+  return portsForNode(kind, node, extent).filter((entry) => AUTO_PORTS.includes(entry.port));
 }
 
-function autoPortsForBox(box: ResolvedHydraulicsBox): Array<{ port: string; point: Point }> {
-  return portsForBox(box).filter((entry) => AUTO_PORTS.includes(entry.port as HydraulicsPort));
+function autoPortsForBox(
+  box: ResolvedHydraulicsBox,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): Array<{ port: string; point: Point }> {
+  return portsForBox(box, extent).filter((entry) => AUTO_PORTS.includes(entry.port as HydraulicsPort));
 }
 
 function nodeForAnchor(
@@ -1294,9 +1569,10 @@ function nodeForAnchor(
 function pointForPort(
   kind: "sector" | "tank",
   node: { x: number; y: number },
-  port: HydraulicsPort
+  port: HydraulicsPort,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Point {
-  const offset = portOffset(port, nodeHalfSize(kind));
+  const offset = portOffset(port, nodeHalfSize(kind, extent));
   return { x: node.x + offset.x, y: node.y + offset.y };
 }
 
@@ -1304,7 +1580,8 @@ export function anchorPoint(
   anchor: HydraulicsAnchor,
   sectors: ResolvedHydraulicsSector[],
   tanks: ResolvedHydraulicsTank[],
-  boxes: ResolvedHydraulicsBox[] = []
+  boxes: ResolvedHydraulicsBox[] = [],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Point | null {
   if (anchor.kind === "point") {
     return { x: clampUnit(anchor.x), y: clampUnit(anchor.y) };
@@ -1314,14 +1591,14 @@ export function anchorPoint(
     if (!box) {
       return null;
     }
-    return anchor.port ? boxPortPoint(box, anchor.port) : { x: box.x, y: box.y };
+    return anchor.port ? boxPortPoint(box, anchor.port, extent) : { x: box.x, y: box.y };
   }
   const node = nodeForAnchor(anchor, sectors, tanks);
   if (!node) {
     return null;
   }
   if (isHydraulicsPort(anchor.port)) {
-    return pointForPort(anchor.kind, node, anchor.port);
+    return pointForPort(anchor.kind, node, anchor.port, extent);
   }
   return { x: node.x, y: node.y };
 }
@@ -1331,7 +1608,8 @@ export function resolvePipeEnd(
   other: Point,
   sectors: ResolvedHydraulicsSector[],
   tanks: ResolvedHydraulicsTank[],
-  boxes: ResolvedHydraulicsBox[] = []
+  boxes: ResolvedHydraulicsBox[] = [],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Point {
   if (anchor.kind === "point") {
     return { x: clampUnit(anchor.x), y: clampUnit(anchor.y) };
@@ -1342,30 +1620,31 @@ export function resolvePipeEnd(
       return other;
     }
     if (anchor.port) {
-      return boxPortPoint(box, anchor.port);
+      return boxPortPoint(box, anchor.port, extent);
     }
-    return nearestPort(other, autoPortsForBox(box)).point;
+    return nearestPort(other, autoPortsForBox(box, extent)).point;
   }
   const node = nodeForAnchor(anchor, sectors, tanks);
   if (!node) {
     return other;
   }
   if (isHydraulicsPort(anchor.port)) {
-    return pointForPort(anchor.kind, node, anchor.port);
+    return pointForPort(anchor.kind, node, anchor.port, extent);
   }
-  return nearestPort(other, autoPortsForNode(anchor.kind, node)).point;
+  return nearestPort(other, autoPortsForNode(anchor.kind, node, extent)).point;
 }
 
 function buildPipePath(
   pipe: ResolvedHydraulicsPipe,
   sectors: ResolvedHydraulicsSector[],
   tanks: ResolvedHydraulicsTank[],
-  boxes: ResolvedHydraulicsBox[] = []
+  boxes: ResolvedHydraulicsBox[] = [],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): string {
-  const fromCenter = anchorPoint(pipe.from, sectors, tanks, boxes) ?? { x: 0.5, y: 0.5 };
-  const toCenter = anchorPoint(pipe.to, sectors, tanks, boxes) ?? { x: 0.5, y: 0.5 };
-  const start = resolvePipeEnd(pipe.from, pipe.waypoints[0] ?? toCenter, sectors, tanks, boxes);
-  const end = resolvePipeEnd(pipe.to, pipe.waypoints.at(-1) ?? fromCenter, sectors, tanks, boxes);
+  const fromCenter = anchorPoint(pipe.from, sectors, tanks, boxes, extent) ?? { x: 0.5, y: 0.5 };
+  const toCenter = anchorPoint(pipe.to, sectors, tanks, boxes, extent) ?? { x: 0.5, y: 0.5 };
+  const start = resolvePipeEnd(pipe.from, pipe.waypoints[0] ?? toCenter, sectors, tanks, boxes, extent);
+  const end = resolvePipeEnd(pipe.to, pipe.waypoints.at(-1) ?? fromCenter, sectors, tanks, boxes, extent);
   if (pipe.waypoints.length > 0) {
     return buildHydraulicsSplinePath([start, ...pipe.waypoints, end]);
   }
@@ -1431,12 +1710,13 @@ function pipeGeometry(
   pipe: ResolvedHydraulicsPipe,
   sectors: ResolvedHydraulicsSector[],
   tanks: ResolvedHydraulicsTank[],
-  boxes: ResolvedHydraulicsBox[] = []
+  boxes: ResolvedHydraulicsBox[] = [],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): PipeGeometry {
-  const fromCenter = anchorPoint(pipe.from, sectors, tanks, boxes) ?? { x: 0.5, y: 0.5 };
-  const toCenter = anchorPoint(pipe.to, sectors, tanks, boxes) ?? { x: 0.5, y: 0.5 };
-  const start = resolvePipeEnd(pipe.from, pipe.waypoints[0] ?? toCenter, sectors, tanks, boxes);
-  const end = resolvePipeEnd(pipe.to, pipe.waypoints.at(-1) ?? fromCenter, sectors, tanks, boxes);
+  const fromCenter = anchorPoint(pipe.from, sectors, tanks, boxes, extent) ?? { x: 0.5, y: 0.5 };
+  const toCenter = anchorPoint(pipe.to, sectors, tanks, boxes, extent) ?? { x: 0.5, y: 0.5 };
+  const start = resolvePipeEnd(pipe.from, pipe.waypoints[0] ?? toCenter, sectors, tanks, boxes, extent);
+  const end = resolvePipeEnd(pipe.to, pipe.waypoints.at(-1) ?? fromCenter, sectors, tanks, boxes, extent);
   if (pipe.waypoints.length > 0) {
     return { kind: "spline", points: [start, ...pipe.waypoints, end] };
   }
@@ -1540,16 +1820,23 @@ function upNormalViewBox(tangent: Point): Point {
   return { x: nx, y: ny };
 }
 
-export function snapHydraulicsLabelOffset(offsetPx: number): number {
-  const cellPx = HYDRAULICS_VIEW_HEIGHT / HYDRAULICS_GRID_ROWS;
+export function snapHydraulicsLabelOffset(
+  offsetPx: number,
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): number {
+  const cellPx = HYDRAULICS_VIEW_HEIGHT / extent.rows;
   if (!Number.isFinite(offsetPx)) {
     return 0;
   }
   return snapHydraulicsLabelOffsetCells(offsetPx / cellPx);
 }
 
-export function snapHydraulicsNodeLabelOffset(offsetPx: number, axis: "x" | "y"): number {
-  const cellPx = axis === "x" ? HYDRAULICS_VIEW_WIDTH / HYDRAULICS_GRID_COLS : HYDRAULICS_VIEW_HEIGHT / HYDRAULICS_GRID_ROWS;
+export function snapHydraulicsNodeLabelOffset(
+  offsetPx: number,
+  axis: "x" | "y",
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
+): number {
+  const cellPx = axis === "x" ? HYDRAULICS_VIEW_WIDTH / extent.cols : HYDRAULICS_VIEW_HEIGHT / extent.rows;
   if (!Number.isFinite(offsetPx)) {
     return 0;
   }
@@ -1561,13 +1848,15 @@ const TANK_LABEL_GAP_PX = 18;
 
 function nodeLabelAutoViewBox(
   kind: "sector" | "tank" | "box",
-  node: { x: number; y: number }
+  node: { x: number; y: number },
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Point {
   if (kind === "tank") {
-    const top = node.y * HYDRAULICS_VIEW_HEIGHT - HYDRAULICS_TANK_HEIGHT / 2;
+    const tankHeight = (HYDRAULICS_TANK_GRID_HEIGHT / extent.rows) * HYDRAULICS_VIEW_HEIGHT;
+    const top = node.y * HYDRAULICS_VIEW_HEIGHT - tankHeight / 2;
     return {
       x: node.x * HYDRAULICS_VIEW_WIDTH,
-      y: top + HYDRAULICS_TANK_HEIGHT + TANK_LABEL_GAP_PX
+      y: top + tankHeight + TANK_LABEL_GAP_PX
     };
   }
   return {
@@ -1578,12 +1867,13 @@ function nodeLabelAutoViewBox(
 
 export function placeHydraulicsNodeLabel(
   kind: "sector" | "tank" | "box",
-  node: { x: number; y: number; labelOffsetX: number | null; labelOffsetY: number | null }
+  node: { x: number; y: number; labelOffsetX: number | null; labelOffsetY: number | null },
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Point {
-  const auto = nodeLabelAutoViewBox(kind, node);
+  const auto = nodeLabelAutoViewBox(kind, node, extent);
   return {
-    x: auto.x + (node.labelOffsetX ?? 0) * (HYDRAULICS_VIEW_WIDTH / HYDRAULICS_GRID_COLS),
-    y: auto.y + (node.labelOffsetY ?? 0) * (HYDRAULICS_VIEW_HEIGHT / HYDRAULICS_GRID_ROWS)
+    x: auto.x + (node.labelOffsetX ?? 0) * (HYDRAULICS_VIEW_WIDTH / extent.cols),
+    y: auto.y + (node.labelOffsetY ?? 0) * (HYDRAULICS_VIEW_HEIGHT / extent.rows)
   };
 }
 
@@ -1609,13 +1899,14 @@ export function placeHydraulicsPipeLabel(
   pipe: ResolvedHydraulicsPipe,
   sectors: ResolvedHydraulicsSector[],
   tanks: ResolvedHydraulicsTank[],
-  boxes: ResolvedHydraulicsBox[] = []
+  boxes: ResolvedHydraulicsBox[] = [],
+  extent: HydraulicsGridExtent = DEFAULT_HYDRAULICS_GRID_EXTENT
 ): Point {
-  const geometry = pipeGeometry(pipe, sectors, tanks, boxes);
+  const geometry = pipeGeometry(pipe, sectors, tanks, boxes, extent);
   const sample = samplePipeGeometry(geometry, pipe.labelT ?? HYDRAULICS_LABEL_AUTO_T);
   const normal = upNormalViewBox(sample.tangent);
   const offsetPx =
-    HYDRAULICS_LABEL_CLEARANCE_PX + (pipe.labelOffset ?? 0) * (HYDRAULICS_VIEW_HEIGHT / HYDRAULICS_GRID_ROWS);
+    HYDRAULICS_LABEL_CLEARANCE_PX + (pipe.labelOffset ?? 0) * (HYDRAULICS_VIEW_HEIGHT / extent.rows);
   return {
     x: sample.point.x * HYDRAULICS_VIEW_WIDTH + normal.x * offsetPx,
     y: sample.point.y * HYDRAULICS_VIEW_HEIGHT + normal.y * offsetPx
@@ -1639,10 +1930,108 @@ function uniqueId(prefix: string, existing: string[]): string {
   return `${prefix}-${suffix}`;
 }
 
+function isHydraulicsItemSelected(
+  selected: HydraulicsSelection | null | undefined,
+  kind: "sector" | "tank" | "box" | "pipe",
+  id: string
+): boolean {
+  if (selected?.kind === "all") {
+    return true;
+  }
+  return selected?.kind === kind && selected.id === id;
+}
+
+function HydraulicsFormulaLabel({
+  canEdit,
+  color,
+  inspect,
+  label,
+  testId,
+  variable,
+  expression,
+  x,
+  y,
+  onLabelPointerDown
+}: {
+  canEdit: boolean;
+  color?: string;
+  inspect: MultiportVariableInspectContextValue;
+  label: string;
+  testId: string;
+  variable?: string;
+  expression?: string;
+  x: number;
+  y: number;
+  onLabelPointerDown?(event: ReactPointerEvent): void;
+}) {
+  const displaySource = label.trim() || expression?.trim() || variable?.trim() || "";
+  if (!displaySource) {
+    return null;
+  }
+  const boundName = variable?.trim() || "";
+  const wrapperTooltip = boundName
+    ? resolveVariableTooltip({
+        name: boundName,
+        variableDescriptions: inspect.variableDescriptions,
+        variableUnitMetadata: inspect.variableUnitMetadata,
+        currentValues: inspect.currentValues,
+        laggedCurrentValues: inspect.laggedCurrentValues,
+        laggedPeriodLabel: inspect.laggedPeriodLabel
+      })
+    : undefined;
+
+  return (
+    <foreignObject
+      className="hydraulics-formula-label-host"
+      data-testid={testId}
+      height={HYDRAULICS_FORMULA_LABEL_HEIGHT}
+      overflow="visible"
+      width={HYDRAULICS_FORMULA_LABEL_WIDTH}
+      x={x - HYDRAULICS_FORMULA_LABEL_WIDTH / 2}
+      y={y - HYDRAULICS_FORMULA_LABEL_HEIGHT / 2}
+    >
+      <div
+        className={`hydraulics-formula-label${canEdit ? " is-editable" : ""}`}
+        style={color ? { color } : undefined}
+        {...(wrapperTooltip ? { [FORMULA_TOOLTIP_ATTR]: wrapperTooltip } : {})}
+        onMouseDown={(event) => {
+          if ((event.target as HTMLElement).closest(".formula-token.is-clickable")) {
+            event.stopPropagation();
+          }
+        }}
+        onPointerDown={(event) => {
+          if ((event.target as HTMLElement).closest(".formula-token.is-clickable")) {
+            event.stopPropagation();
+            return;
+          }
+          onLabelPointerDown?.(event as unknown as ReactPointerEvent);
+        }}
+      >
+        {highlightFormula(
+          displaySource,
+          inspect.parameterNames,
+          undefined,
+          inspect.variableDescriptions,
+          inspect.variableUnitMetadata,
+          inspect.onSelectVariable,
+          undefined,
+          inspect.currentValues,
+          inspect.highlightedVariable,
+          true,
+          inspect.laggedCurrentValues,
+          inspect.laggedPeriodLabel
+        )}
+      </div>
+    </foreignObject>
+  );
+}
+
 function capturePointer(event: ReactPointerEvent): void {
-  const target = event.currentTarget as SVGElement;
-  const svg = target.ownerSVGElement ?? (target as SVGSVGElement);
-  if (typeof svg.setPointerCapture === "function") {
+  const target = event.currentTarget as Element;
+  const svg =
+    (target instanceof SVGElement ? target.ownerSVGElement ?? (target instanceof SVGSVGElement ? target : null) : null) ??
+    target.closest("svg");
+  if (svg && typeof svg.setPointerCapture === "function") {
     svg.setPointerCapture(event.pointerId);
   }
 }

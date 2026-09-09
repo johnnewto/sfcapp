@@ -124,6 +124,7 @@ import type {
 import type { NotebookAssistantSnapshot } from "./notebookAssistantTools";
 import type { NotebookPatch } from "./notebookPatch";
 import { useNotebookRunner } from "./useNotebookRunner";
+import { resolveHydraulicsRunCellId } from "./sequenceMatrixInspect";
 import { useViewportObserver } from "../hooks/useViewportObserver";
 
 const VIEWPORT_DEFERRED_CELL_TYPES = new Set<NotebookCell["type"]>([
@@ -133,7 +134,7 @@ const VIEWPORT_DEFERRED_CELL_TYPES = new Set<NotebookCell["type"]>([
   "matrix",
   "sequence",
   "sankey",
-  "hydraulics"
+  "diagram"
 ]);
 
 type SourceLayoutMode = "pretty" | "compact" | "grid" | "run" | "abm";
@@ -1707,15 +1708,18 @@ function NotebookCellViewComponent({
                 selectedPeriodIndex={selectedPeriodIndex}
               />
             ) : null}
-            {cell.type === "hydraulics" ? (
+            {cell.type === "diagram" ? (
               <HydraulicsCellView
                 cell={cell}
                 cells={cells}
+                highlightedVariable={highlightedVariable}
                 maxPeriodIndex={maxPeriodIndex}
                 onCellChange={onCellChange}
                 onSelectedPeriodIndexChange={onSelectedPeriodIndexChange}
+                onVariableInspectRequest={onVariableInspectRequest}
                 runner={runner}
                 selectedPeriodIndex={selectedPeriodIndex}
+                variableDescriptions={variableDescriptions}
                 viewportRoot={viewportRoot}
               />
             ) : null}
@@ -2013,7 +2017,7 @@ function getViewportDeferredPlaceholderHeight(cell: NotebookCell): number {
       return 360;
     case "sankey":
       return 360;
-    case "hydraulics":
+    case "diagram":
       return 420;
     case "table":
       return 240;
@@ -2048,8 +2052,8 @@ function getViewportDeferredPlaceholderLabel(cell: NotebookCell): string {
       return "Sequence diagram";
     case "sankey":
       return "Sankey diagram";
-    case "hydraulics":
-      return "Hydraulics diagram";
+    case "diagram":
+      return "Stock-flow diagram";
     case "table":
       return "Table";
     default:
@@ -2085,12 +2089,13 @@ function usesSelectedPeriodIndex(cell: NotebookCell): boolean {
     cell.type === "chart" ||
     cell.type === "table" ||
     cell.type === "matrix" ||
-    (cell.type === "sequence" && cell.source.kind === "matrix")
+    (cell.type === "sequence" && cell.source.kind === "matrix") ||
+    cell.type === "diagram"
   );
 }
 
 function usesMaxPeriodIndex(cell: NotebookCell): boolean {
-  return cell.type === "sequence" && cell.source.kind === "matrix";
+  return (cell.type === "sequence" && cell.source.kind === "matrix") || cell.type === "diagram";
 }
 
 
@@ -2179,6 +2184,18 @@ function resolveCellVariableDescriptions(
     return sourceRunCell ? resolveModelVariableDescriptionsForRunCell(cells, sourceRunCell) : new Map();
   }
 
+  if (cell.type === "diagram") {
+    const sourceRunCellId = resolveHydraulicsRunCellId(cell, cells);
+    const sourceRunCell = sourceRunCellId
+      ? cells.find(
+          (candidate): candidate is RunCell =>
+            candidate.type === "run" && candidate.id === sourceRunCellId
+        ) ?? null
+      : null;
+
+    return sourceRunCell ? resolveModelVariableDescriptionsForRunCell(cells, sourceRunCell) : new Map();
+  }
+
   return new Map();
 }
 
@@ -2247,6 +2264,18 @@ function resolveCellVariableUnitMetadata(
         candidate.type === "matrix" && candidate.id === source.matrixCellId
     );
     const sourceRunCellId = source.sourceRunCellId ?? matrixCell?.sourceRunCellId;
+    const sourceRunCell = sourceRunCellId
+      ? cells.find(
+          (candidate): candidate is RunCell =>
+            candidate.type === "run" && candidate.id === sourceRunCellId
+        ) ?? null
+      : null;
+
+    return sourceRunCell ? resolveModelVariableUnitMetadataForRunCell(cells, sourceRunCell) : new Map();
+  }
+
+  if (cell.type === "diagram") {
+    const sourceRunCellId = resolveHydraulicsRunCellId(cell, cells);
     const sourceRunCell = sourceRunCellId
       ? cells.find(
           (candidate): candidate is RunCell =>
@@ -2464,6 +2493,25 @@ function resolveNotebookInspectionContext({
         candidate.type === "matrix" && candidate.id === source.matrixCellId
     );
     const sourceRunCellId = source.sourceRunCellId ?? matrixCell?.sourceRunCellId;
+    const sourceRunCell = sourceRunCellId
+      ? cells.find(
+          (candidate): candidate is RunCell =>
+            candidate.type === "run" && candidate.id === sourceRunCellId
+        )
+      : null;
+    return sourceRunCell
+      ? resolveNotebookInspectionContext({
+          cell: sourceRunCell,
+          cells,
+          getModelCurrentValues,
+          runner,
+          selectedPeriodIndex
+        })
+      : null;
+  }
+
+  if (cell.type === "diagram") {
+    const sourceRunCellId = resolveHydraulicsRunCellId(cell, cells);
     const sourceRunCell = sourceRunCellId
       ? cells.find(
           (candidate): candidate is RunCell =>

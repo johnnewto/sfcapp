@@ -164,14 +164,17 @@ cells:
         whatever households do not consume is allocated between additional cash and
         additional bills according to the portfolio rule.
       collapsed: false
-  - hydraulics:
+  - diagram:
       id: pc-hydraulics
-      title: PC stock-flow hydraulics
+      title: PC stock-flow diagram
       source:
         transactionMatrixCellId: transaction-flow
         balanceMatrixCellId: balance-sheet
         sourceRunCellId: baseline-run
       layout:
+        canvas:
+          cols: 50
+          rows: 34
         sectors:
           - id: Households
             label: Households
@@ -200,7 +203,7 @@ cells:
             stroke: "#334155"
             opacity: 0.2
             x: 15
-            y: 15
+            y: 14
         tanks:
           - id: Hh
             sectorId: Households
@@ -232,15 +235,16 @@ cells:
             from:
               kind: sector
               id: Households
+              port: wsw
             to:
               kind: sector
               id: Firms
-              port: e
+              port: ese
             variable: C
             label: Consumption
             waypoints:
               - x: 26
-                y: 5
+                y: 6
             color: "#2faa27"
             arrowSize: 8
             widthScale: 1
@@ -276,25 +280,25 @@ cells:
             from:
               kind: sector
               id: Firms
-              port: ne
+              port: ene
             to:
               kind: sector
               id: Households
-              port: nw
+              port: wnw
             variable: Y
             expression: ""
             label: Income
             waypoints:
-              - x: 27
-                y: 3
+              - x: 26
+                y: 4
             color: "#334155"
             arrowSize: 8
             widthScale: 1
             dashed: false
             tokenCount: 3
             opacity: 1
-            labelT: 0.3958333333333333
-            labelOffset: -1
+            labelT: 0.4166666666666667
+            labelOffset: 1
           - id: rBh
             from:
               kind: sector
@@ -406,8 +410,8 @@ cells:
             dashed: false
             tokenCount: 3
             opacity: 1
-            labelT: 0.3958333333333333
-            labelOffset: 0.5
+            labelT: 0.4166666666666667
+            labelOffset: 1
           - id: pipe-4
             from:
               kind: tank
@@ -416,7 +420,7 @@ cells:
             to:
               kind: sector
               id: sector
-              port: nw
+              port: wnw
             expression: d(Bcb)
             label: d(Bcb)
             waypoints:
@@ -428,13 +432,13 @@ cells:
             dashed: false
             tokenCount: 3
             opacity: 1
-            labelT: 0.4583333333333333
-            labelOffset: -1
+            labelT: 0.375
+            labelOffset: 1
           - id: pipe-5
             from:
               kind: sector
               id: sector
-              port: w
+              port: wsw
             to:
               kind: tank
               id: Bs
@@ -450,7 +454,7 @@ cells:
             dashed: false
             tokenCount: 3
             opacity: 1
-            labelT: 0.5416666666666666
+            labelT: 0.5833333333333334
             labelOffset: -1
           - id: pipe-6
             from:

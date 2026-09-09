@@ -25,7 +25,7 @@ const runCell: RunCell = {
 
 const hydraulicsCell: HydraulicsCell = {
   id: "pc-hydraulics",
-  type: "hydraulics",
+  type: "diagram",
   title: "PC hydraulics",
   source: {
     transactionMatrixCellId: "missing",

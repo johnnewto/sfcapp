@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { SimulationResult } from "@sfcr/core";
 
 import { HydraulicsCanvas } from "../../components/HydraulicsCanvas";
+import type { MultiportVariableInspectContextValue } from "../../components/flow/MultiportVariableInspectContext";
 import { resolveHydraulicsScene } from "../../notebook/hydraulics";
 import type { HydraulicsCell, MatrixCell, NotebookCell } from "../../notebook/types";
 
@@ -10,11 +11,13 @@ export function PublicationHydraulics({
   cell,
   cells,
   getResult,
+  inspectContext = null,
   selectedPeriodIndex
 }: {
   cell: HydraulicsCell;
   cells: NotebookCell[];
   getResult(runCellId: string): SimulationResult | null;
+  inspectContext?: MultiportVariableInspectContextValue | null;
   selectedPeriodIndex: number;
 }) {
   const scene = useMemo(
@@ -45,6 +48,7 @@ export function PublicationHydraulics({
         </p>
       ) : null}
       <HydraulicsCanvas
+        inspectContext={inspectContext}
         interactive={false}
         interactionEpoch={selectedPeriodIndex + 1}
         layoutLocked

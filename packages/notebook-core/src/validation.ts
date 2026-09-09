@@ -52,7 +52,7 @@ const CELL_TYPE_SCHEMA_BRANCH: Record<string, number> = {
   sequence: 9,
   sankey: 10,
   "abm-model": 11,
-  hydraulics: 12
+  diagram: 12
 };
 
 function filterSchemaErrors(value: unknown, errors: ErrorObject[]): ErrorObject[] {
@@ -276,7 +276,7 @@ function validateCellReferences(
     validateSankeyCellReferences(cell, context);
   }
 
-  if (cell.type === "hydraulics") {
+  if (cell.type === "diagram") {
     validateHydraulicsCellReferences(cell, context);
   }
 }
@@ -417,20 +417,20 @@ function validateHydraulicsCellReferences(
   if (!context.matrixCellIds.has(cell.source.transactionMatrixCellId)) {
     context.issues.push(
       createNotebookIssue(
-        `Hydraulics cell '${cell.id}' references missing matrix '${cell.source.transactionMatrixCellId}'.`
+        `Stock-flow diagram cell '${cell.id}' references missing matrix '${cell.source.transactionMatrixCellId}'.`
       )
     );
   }
   if (cell.source.balanceMatrixCellId && !context.matrixCellIds.has(cell.source.balanceMatrixCellId)) {
     context.issues.push(
       createNotebookIssue(
-        `Hydraulics cell '${cell.id}' references missing matrix '${cell.source.balanceMatrixCellId}'.`
+        `Stock-flow diagram cell '${cell.id}' references missing matrix '${cell.source.balanceMatrixCellId}'.`
       )
     );
   }
   if (cell.source.sourceRunCellId && !context.runCellIds.has(cell.source.sourceRunCellId)) {
     context.issues.push(
-      createNotebookIssue(`Hydraulics cell '${cell.id}' references missing run cell '${cell.source.sourceRunCellId}'.`)
+      createNotebookIssue(`Stock-flow diagram cell '${cell.id}' references missing run cell '${cell.source.sourceRunCellId}'.`)
     );
   }
 }

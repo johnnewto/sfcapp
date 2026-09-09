@@ -85,4 +85,39 @@ describe("DelegatedFormulaTooltip", () => {
     fireEvent.pointerOver(prime);
     expect(screen.getByRole("tooltip")).toHaveStyle({ top: "198px", left: "44px" });
   });
+
+  it("does not show the tip at the viewport origin when the first measure is empty", () => {
+    let tokenHasBox = false;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement
+    ) {
+      if (this.classList.contains("instant-tooltip-bubble")) {
+        return rect(0, 0, 120, 32);
+      }
+      if (this.classList.contains("formula-token")) {
+        return tokenHasBox ? rect(80, 240, 48, 18) : rect(80, 240, 0, 0);
+      }
+      return rect(0, 0, 0, 0);
+    });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      tokenHasBox = true;
+      callback(0);
+      return 1;
+    });
+
+    render(
+      <>
+        <DelegatedFormulaTooltip />
+        <div>
+          {highlightFormula("Y", new Set(), undefined, new Map([["Y", "Output"]]))}
+        </div>
+      </>
+    );
+
+    fireEvent.pointerOver(document.querySelector(".formula-token") as HTMLElement);
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Output");
+    expect(tooltip).toHaveStyle({ top: "198px", left: "44px" });
+    expect(tooltip).toHaveStyle({ opacity: "1" });
+  });
 });

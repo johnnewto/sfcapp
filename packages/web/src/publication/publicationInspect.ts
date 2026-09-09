@@ -20,7 +20,7 @@ import {
 } from "../notebook/modelSections";
 import { buildAbmVariableDescriptions, buildEditorStateFromAbmModelCell } from "../notebook/abmInspect";
 import { resolveNearestNotebookContextCell } from "../notebook/notebookContext";
-import { resolveSequenceMatrixRunCellId } from "../notebook/sequenceMatrixInspect";
+import { resolveHydraulicsRunCellId, resolveSequenceMatrixRunCellId } from "../notebook/sequenceMatrixInspect";
 import type { NotebookCell, NotebookDocument, RunCell } from "../notebook/types";
 
 export interface PublicationVariableInteraction {
@@ -196,6 +196,24 @@ export function resolvePublicationInspectContext(args: {
 
   if (cell.type === "sequence") {
     const sourceRunCellId = resolveSequenceMatrixRunCellId(cell, document.cells);
+    const sourceRunCell = sourceRunCellId
+      ? document.cells.find(
+          (candidate): candidate is RunCell =>
+            candidate.type === "run" && candidate.id === sourceRunCellId
+        )
+      : null;
+    return sourceRunCell
+      ? resolvePublicationInspectContext({
+          cell: sourceRunCell,
+          document,
+          getResult,
+          selectedPeriodIndex
+        })
+      : null;
+  }
+
+  if (cell.type === "diagram") {
+    const sourceRunCellId = resolveHydraulicsRunCellId(cell, document.cells);
     const sourceRunCell = sourceRunCellId
       ? document.cells.find(
           (candidate): candidate is RunCell =>

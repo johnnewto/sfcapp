@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import type {
@@ -9,7 +9,7 @@ import type {
   HydraulicsPort,
   NotebookCell
 } from "@sfcr/notebook-core";
-import { hydraulicsBoxPorts, hydraulicsPortsForKind, parseHydraulicsBoxPort } from "@sfcr/notebook-core";
+import { hydraulicsBoxPorts, hydraulicsPortsForKind, HYDRAULICS_SNAP_STEPS, parseHydraulicsBoxPort } from "@sfcr/notebook-core";
 
 import {
   HydraulicsCanvas,
@@ -17,14 +17,20 @@ import {
   type HydraulicsSelection,
   type HydraulicsTool
 } from "../../components/HydraulicsCanvas";
+import type { MultiportVariableInspectContextValue } from "../../components/flow/MultiportVariableInspectContext";
 import { VariableMathLabel } from "../../components/VariableMathLabel";
+import type { VariableInspectRequest } from "../../lib/variableInspect";
+import type { VariableDescriptions } from "../../lib/variableDescriptions";
+import { resolveInspectBundleForRunCell, resolveHydraulicsRunCellId } from "../sequenceMatrixInspect";
 import { useFloatingPanelPosition } from "../../hooks/useFloatingPanelPosition";
 import { applyFixedMenuPosition } from "../../lib/clampFixedMenuPosition";
 import {
+  clampHydraulicsViewport,
   createResolvedHydraulicsBox,
   DEFAULT_BOX_FILL,
   DEFAULT_BOX_FILL_OPACITY,
   DEFAULT_BOX_STROKE,
+  DEFAULT_HYDRAULICS_VIEWPORT,
   DEFAULT_PIPE_ARROW_SIZE,
   DEFAULT_PIPE_COLOR,
   DEFAULT_PIPE_OPACITY,
@@ -36,14 +42,23 @@ import {
   formatHydraulicsTankValue,
   HYDRAULICS_BOX_GRID_HEIGHT,
   HYDRAULICS_BOX_GRID_WIDTH,
-  HYDRAULICS_GRID_COLS,
+  HYDRAULICS_GRID_COLS_MAX,
+  HYDRAULICS_GRID_COLS_MIN,
+  HYDRAULICS_GRID_ROWS_MAX,
+  HYDRAULICS_GRID_ROWS_MIN,
   HYDRAULICS_TANK_GRID_Y,
+  HYDRAULICS_ZOOM_MAX,
+  HYDRAULICS_ZOOM_MIN,
   hydraulicsGridToUnit,
   hydraulicsUnitToGrid,
   layoutFromResolved,
+  persistHydraulicsCanvas,
+  resolveHydraulicsCanvas,
   resolveHydraulicsScene,
+  resolveHydraulicsSnapStep,
   snapHydraulicsPoint,
-  snapHydraulicsUnit
+  snapHydraulicsUnit,
+  type HydraulicsViewport
 } from "../hydraulics";
 import type { MatrixCell } from "../types";
 import type { useNotebookRunner } from "../useNotebookRunner";
@@ -55,22 +70,28 @@ const PLAY_INTERVAL_MS = 700;
 export function HydraulicsCellView({
   cell,
   cells,
+  highlightedVariable = null,
   interactive = true,
   maxPeriodIndex,
   onCellChange,
   onSelectedPeriodIndexChange,
+  onVariableInspectRequest,
   runner,
   selectedPeriodIndex,
+  variableDescriptions,
   viewportRoot = null
 }: {
   cell: HydraulicsCell;
   cells: NotebookCell[];
+  highlightedVariable?: string | null;
   interactive?: boolean;
   maxPeriodIndex: number;
   onCellChange?(cellId: string, updater: (cell: NotebookCell) => NotebookCell): void;
   onSelectedPeriodIndexChange?(nextIndex: number): void;
+  onVariableInspectRequest?(args: VariableInspectRequest): void;
   runner: Pick<ReturnType<typeof useNotebookRunner>, "getResult">;
   selectedPeriodIndex: number;
+  variableDescriptions?: VariableDescriptions;
   viewportRoot?: Element | null;
 }) {
   const [tool, setTool] = useState<HydraulicsTool>("select");
@@ -79,6 +100,7 @@ export function HydraulicsCellView({
   const [speed, setSpeed] = useState(1);
   const [selected, setSelected] = useState<HydraulicsSelection | null>(null);
   const [animationEpoch, setAnimationEpoch] = useState(0);
+  const [viewport, setViewport] = useState<HydraulicsViewport>(DEFAULT_HYDRAULICS_VIEWPORT);
   const [contextMenu, setContextMenu] = useState<HydraulicsContextMenuRequest | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const periodRef = useRef(selectedPeriodIndex);
@@ -131,18 +153,69 @@ export function HydraulicsCellView({
       ),
     [cell, cells, runner, selectedPeriodIndex]
   );
+  const canvas = resolveHydraulicsCanvas(scene.canvas);
 
   const sourceMatrix = useMemo((): MatrixCell | null => {
     const target = cells.find((entry) => entry.id === cell.source.transactionMatrixCellId);
     return target?.type === "matrix" ? target : null;
   }, [cell.source.transactionMatrixCellId, cells]);
 
+  const inspectBundle = useMemo(
+    () =>
+      variableDescriptions
+        ? resolveInspectBundleForRunCell(
+            cells,
+            runner,
+            selectedPeriodIndex,
+            variableDescriptions,
+            resolveHydraulicsRunCellId(cell, cells)
+          )
+        : null,
+    [cell, cells, runner, selectedPeriodIndex, variableDescriptions]
+  );
+  const inspectContextRef = useRef(inspectBundle);
+  inspectContextRef.current = inspectBundle;
+
+  const handleInspectVariable = useCallback(
+    (selectedVariable: string) => {
+      const bundle = inspectContextRef.current;
+      if (!bundle?.editor || !onVariableInspectRequest) {
+        return;
+      }
+      onVariableInspectRequest({
+        currentValues: bundle.currentValues,
+        editor: bundle.editor,
+        modelSource: bundle.modelSource,
+        sourceRunCellId: bundle.sourceRunCellId,
+        selectedVariable,
+        variableDescriptions: bundle.variableDescriptions,
+        variableUnitMetadata: bundle.variableUnitMetadata
+      });
+    },
+    [onVariableInspectRequest]
+  );
+
+  const inspectContext = useMemo((): MultiportVariableInspectContextValue | null => {
+    if (!inspectBundle) {
+      return null;
+    }
+    return {
+      currentValues: inspectBundle.currentValues,
+      laggedCurrentValues: inspectBundle.laggedCurrentValues,
+      laggedPeriodLabel: inspectBundle.laggedPeriodLabel,
+      highlightedVariable,
+      onSelectVariable: inspectBundle.editor ? handleInspectVariable : undefined,
+      parameterNames: inspectBundle.parameterNames,
+      variableDescriptions: inspectBundle.variableDescriptions,
+      variableUnitMetadata: inspectBundle.variableUnitMetadata
+    };
+  }, [handleInspectVariable, highlightedVariable, inspectBundle]);
+
   const variableNames = useMemo(() => {
-    const runCellId =
-      cell.source.sourceRunCellId ?? sourceMatrix?.sourceRunCellId ?? cell.source.balanceMatrixCellId;
+    const runCellId = resolveHydraulicsRunCellId(cell, cells);
     const result = runCellId ? runner.getResult(runCellId) : null;
     return result ? Object.keys(result.series).sort() : [];
-  }, [cell.source, runner, sourceMatrix]);
+  }, [cell, cells, runner]);
 
   useEffect(() => {
     if (!playing || !onSelectedPeriodIndexChange) {
@@ -156,7 +229,7 @@ export function HydraulicsCellView({
   }, [maxPeriodIndex, onSelectedPeriodIndexChange, playing, speed]);
 
   function persistLayout(layout: HydraulicsLayout): void {
-    onCellChange?.(cell.id, (current) => (current.type === "hydraulics" ? { ...current, layout } : current));
+    onCellChange?.(cell.id, (current) => (current.type === "diagram" ? { ...current, layout } : current));
   }
 
   function patchSelected(mutate: (layout: HydraulicsLayout) => HydraulicsLayout): void {
@@ -179,6 +252,11 @@ export function HydraulicsCellView({
   }
 
   function deleteSelection(target: HydraulicsSelection): void {
+    if (target.kind === "canvas" || target.kind === "all") {
+      setSelected(null);
+      closeContextMenu();
+      return;
+    }
     if (target.kind === "sector") {
       persistScene({
         ...scene,
@@ -217,7 +295,7 @@ export function HydraulicsCellView({
   }
 
   function addSectorAt(point: { x: number; y: number }): void {
-    const snapped = snapHydraulicsPoint(point);
+    const snapped = snapHydraulicsPoint(point, canvas.snapStep, canvas);
     const id = uniqueHydraulicsId(
       "sector",
       scene.sectors.map((sector) => sector.id)
@@ -244,7 +322,7 @@ export function HydraulicsCellView({
   }
 
   function addTankAt(point: { x: number; y: number }, sectorId?: string): void {
-    const snapped = snapHydraulicsPoint(point);
+    const snapped = snapHydraulicsPoint(point, canvas.snapStep, canvas);
     const sector =
       (sectorId ? scene.sectors.find((entry) => entry.id === sectorId) : null) ??
       nearestSector(snapped, scene.sectors);
@@ -263,8 +341,8 @@ export function HydraulicsCellView({
           label: id,
           polarity: "asset",
           color: "#2980b9",
-          x: sector ? snapHydraulicsUnit(sector.x + attached * (2 / HYDRAULICS_GRID_COLS), "x") : snapped.x,
-          y: sector ? hydraulicsGridToUnit(HYDRAULICS_TANK_GRID_Y, "y") : snapped.y,
+          x: sector ? snapHydraulicsUnit(sector.x + attached * (2 / canvas.cols), "x", canvas.snapStep, canvas) : snapped.x,
+          y: sector ? hydraulicsGridToUnit(HYDRAULICS_TANK_GRID_Y, "y", canvas.snapStep, canvas) : snapped.y,
           value: null,
           maxLevel: null,
           runMaxAbs: 0,
@@ -280,21 +358,21 @@ export function HydraulicsCellView({
   }
 
   function addBoxAt(point: { x: number; y: number }): void {
-    const snapped = snapHydraulicsPoint(point);
+    const snapped = snapHydraulicsPoint(point, canvas.snapStep, canvas);
     const id = uniqueHydraulicsId(
       "box",
       scene.boxes.map((box) => box.id)
     );
     persistScene({
       ...scene,
-      boxes: [...scene.boxes, createResolvedHydraulicsBox(id, snapped.x, snapped.y)]
+      boxes: [...scene.boxes, createResolvedHydraulicsBox(id, snapped.x, snapped.y, canvas)]
     });
     setSelected({ kind: "box", id });
     closeContextMenu();
   }
 
   function addWaypoint(pipeId: string, point: { x: number; y: number }): void {
-    const snapped = snapHydraulicsPoint(point);
+    const snapped = snapHydraulicsPoint(point, canvas.snapStep, canvas);
     persistScene({
       ...scene,
       pipes: scene.pipes.map((pipe) =>
@@ -325,7 +403,10 @@ export function HydraulicsCellView({
   }
 
   function duplicateSelection(target: HydraulicsSelection): void {
-    const offset = 2 / HYDRAULICS_GRID_COLS;
+    if (target.kind === "canvas" || target.kind === "all" || target.kind === "waypoint") {
+      return;
+    }
+    const offset = 2 / canvas.cols;
     if (target.kind === "sector") {
       const sector = scene.sectors.find((entry) => entry.id === target.id);
       if (!sector) {
@@ -336,7 +417,7 @@ export function HydraulicsCellView({
         ...scene,
         sectors: [
           ...scene.sectors,
-          { ...sector, id, label: `${sector.label} copy`, x: snapHydraulicsUnit(sector.x + offset, "x") }
+          { ...sector, id, label: `${sector.label} copy`, x: snapHydraulicsUnit(sector.x + offset, "x", canvas.snapStep, canvas) }
         ]
       });
       setSelected({ kind: "sector", id });
@@ -348,7 +429,7 @@ export function HydraulicsCellView({
       const id = uniqueHydraulicsId(tank.id, scene.tanks.map((entry) => entry.id));
       persistScene({
         ...scene,
-        tanks: [...scene.tanks, { ...tank, id, x: snapHydraulicsUnit(tank.x + offset, "x") }]
+        tanks: [...scene.tanks, { ...tank, id, x: snapHydraulicsUnit(tank.x + offset, "x", canvas.snapStep, canvas) }]
       });
       setSelected({ kind: "tank", id });
     } else if (target.kind === "pipe") {
@@ -371,7 +452,7 @@ export function HydraulicsCellView({
             tokenCount: pipe.tokenCount || DEFAULT_PIPE_TOKEN_COUNT,
             opacity: pipe.opacity || DEFAULT_PIPE_OPACITY,
             waypoints: pipe.waypoints.map((point) => ({
-              x: snapHydraulicsUnit(point.x + offset, "x"),
+              x: snapHydraulicsUnit(point.x + offset, "x", canvas.snapStep, canvas),
               y: point.y
             }))
           }
@@ -392,7 +473,7 @@ export function HydraulicsCellView({
             ...box,
             id,
             label: box.label ? `${box.label} copy` : "",
-            x: snapHydraulicsUnit(box.x + offset, "x")
+            x: snapHydraulicsUnit(box.x + offset, "x", canvas.snapStep, canvas)
           }
         ]
       });
@@ -509,7 +590,14 @@ export function HydraulicsCellView({
             >
               Add box
             </button>
-            <button type="button" className="secondary-button" disabled={layoutLocked || !selected} onClick={handleDelete}>
+            <button
+              type="button"
+              className={`notebook-run-button notebook-source-toggle${selected?.kind === "canvas" ? " is-active" : ""}`}
+              onClick={() => setSelected({ kind: "canvas" })}
+            >
+              Canvas
+            </button>
+            <button type="button" className="secondary-button" disabled={layoutLocked || !selected || selected.kind === "canvas" || selected.kind === "all"} onClick={handleDelete}>
               Delete
             </button>
             <label className="hydraulics-toolbar-checkbox">
@@ -562,24 +650,35 @@ export function HydraulicsCellView({
           onContextMenu={setContextMenu}
           onLayoutChange={persistLayout}
           onSelect={setSelected}
+          onToolChange={setTool}
+          onViewportChange={setViewport}
+          inspectContext={inspectContext}
           prefersReducedMotion={readPrefersReducedMotion()}
           scene={scene}
           selected={selected}
           tool={tool}
+          viewport={viewport}
           viewportRoot={viewportRoot}
         />
       </div>
-      {interactive && (selectedSector || selectedTank || selectedPipe || selectedBox) ? (
+      {interactive && (selected?.kind === "canvas" || selectedSector || selectedTank || selectedPipe || selectedBox) ? (
         <HydraulicsInspector
           box={selectedBox}
           boxes={scene.boxes}
+          isCanvas={selected?.kind === "canvas"}
           onClose={() => setSelected(null)}
           onPatch={patchSelected}
+          onViewportChange={setViewport}
           pipe={selectedPipe}
           sector={selectedSector}
+          showGrid={canvas.showGrid}
+          snapStep={canvas.snapStep}
+          cols={canvas.cols}
+          rows={canvas.rows}
           tank={selectedTank}
           variableListId={`hydraulics-variable-options-${cell.id}`}
           variableNames={variableNames}
+          viewport={viewport}
         />
       ) : null}
       {interactive && contextMenu ? (
@@ -591,6 +690,11 @@ export function HydraulicsCellView({
           onAddBox={() => addBoxAt(contextMenu.point)}
           onAddPipe={startAddPipe}
           onAddSector={() => addSectorAt(contextMenu.point)}
+          onSelectAll={() => {
+            setSelected({ kind: "all" });
+            setTool("select");
+            closeContextMenu();
+          }}
           onAddTank={() =>
             addTankAt(
               contextMenu.point,
@@ -625,7 +729,7 @@ export function HydraulicsCellView({
             }
           }}
           onDuplicate={() => {
-            if (contextMenu.selection && contextMenu.selection.kind !== "waypoint") {
+            if (contextMenu.selection && contextMenu.selection.kind !== "waypoint" && contextMenu.selection.kind !== "all") {
               duplicateSelection(contextMenu.selection);
             }
           }}
@@ -679,6 +783,7 @@ function HydraulicsContextMenu({
   onDuplicate,
   onResetLabel,
   onReversePipe,
+  onSelectAll,
   onToggleLock
 }: {
   canEdit: boolean;
@@ -695,15 +800,16 @@ function HydraulicsContextMenu({
   onDuplicate(): void;
   onResetLabel(): void;
   onReversePipe(): void;
+  onSelectAll(): void;
   onToggleLock(): void;
 }) {
   const kind = request.selection?.kind ?? "canvas";
   const label =
     kind === "canvas"
-      ? "Hydraulics canvas actions"
+      ? "Stock-flow diagram canvas actions"
       : kind === "waypoint"
-        ? "Hydraulics waypoint actions"
-        : `Hydraulics ${kind} actions`;
+        ? "Stock-flow diagram waypoint actions"
+        : `Stock-flow diagram ${kind} actions`;
 
   const panel = (
     <div
@@ -728,6 +834,9 @@ function HydraulicsContextMenu({
           </button>
           <button type="button" role="menuitem" disabled={!canEdit} onClick={onAddBox}>
             Add box
+          </button>
+          <button type="button" role="menuitem" onClick={onSelectAll}>
+            Select all
           </button>
           <div className="notebook-cell-context-menu-separator" role="separator" />
           <button type="button" role="menuitem" onClick={onToggleLock}>
@@ -814,31 +923,58 @@ function HydraulicsContextMenu({
 function HydraulicsInspector({
   box,
   boxes,
+  cols,
+  isCanvas = false,
   onClose,
   onPatch,
+  onViewportChange,
   pipe,
+  rows,
   sector,
+  showGrid,
+  snapStep,
   tank,
   variableListId,
-  variableNames
+  variableNames,
+  viewport
 }: {
   box: ReturnType<typeof resolveHydraulicsScene>["boxes"][number] | null | undefined;
   boxes: ReturnType<typeof resolveHydraulicsScene>["boxes"];
+  cols: number;
+  isCanvas?: boolean;
   onClose(): void;
   onPatch(mutate: (layout: HydraulicsLayout) => HydraulicsLayout): void;
+  onViewportChange(viewport: HydraulicsViewport): void;
   pipe: ReturnType<typeof resolveHydraulicsScene>["pipes"][number] | null | undefined;
+  rows: number;
   sector: ReturnType<typeof resolveHydraulicsScene>["sectors"][number] | null | undefined;
+  showGrid: boolean;
+  snapStep: ReturnType<typeof resolveHydraulicsSnapStep>;
   tank: ReturnType<typeof resolveHydraulicsScene>["tanks"][number] | null | undefined;
   variableListId: string;
   variableNames: string[];
+  viewport: HydraulicsViewport;
 }) {
   const { position, dragHandleProps } = useFloatingPanelPosition(INSPECTOR_POSITION_STORAGE_KEY);
-  const title = selectedInspectorTitle(sector, tank, pipe, box);
+  const title = selectedInspectorTitle(sector, tank, pipe, box, isCanvas);
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  function patchCanvas(next: { snapStep?: typeof snapStep; showGrid?: boolean; cols?: number; rows?: number }): void {
+    onPatch((layout) => ({
+      ...layout,
+      canvas: persistHydraulicsCanvas({
+        snapStep,
+        showGrid,
+        cols,
+        rows,
+        ...next
+      })
+    }));
+  }
 
   useLayoutEffect(() => {
     panelRef.current?.focus({ preventScroll: true });
-  }, [box?.id, pipe?.id, sector?.id, tank?.id]);
+  }, [box?.id, isCanvas, pipe?.id, sector?.id, tank?.id]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -856,13 +992,13 @@ function HydraulicsInspector({
       ref={panelRef}
       className="stability-raw-floating-panel notebook-inspector-popup hydraulics-inspector-popup"
       role="dialog"
-      aria-label="Hydraulics inspector"
+      aria-label="Stock-flow diagram inspector"
       tabIndex={-1}
       style={{ left: position.x, top: position.y }}
     >
       <header className="stability-raw-dialog-header stability-raw-dialog-header-draggable" {...dragHandleProps}>
         <div>
-          <div className="eyebrow">Hydraulics inspector</div>
+          <div className="eyebrow">Stock-flow diagram inspector</div>
           <p className="stability-raw-dialog-subtitle">{title}</p>
         </div>
         <button
@@ -876,6 +1012,111 @@ function HydraulicsInspector({
         </button>
       </header>
       <div className="stability-raw-dialog-body notebook-inspector-popup-body hydraulics-inspector">
+      {isCanvas ? (
+        <>
+          <label>
+            Snap step
+            <select
+              aria-label="Snap step"
+              value={String(snapStep)}
+              onChange={(event) => {
+                patchCanvas({ snapStep: resolveHydraulicsSnapStep(Number(event.target.value)) });
+              }}
+            >
+              {HYDRAULICS_SNAP_STEPS.map((step) => (
+                <option key={step} value={String(step)}>
+                  {step === 1 ? "1 cell" : `${step} cell`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Columns
+            <input
+              type="number"
+              min={HYDRAULICS_GRID_COLS_MIN}
+              max={HYDRAULICS_GRID_COLS_MAX}
+              step={2}
+              aria-label="Canvas columns"
+              value={cols}
+              onChange={(event) => {
+                const parsed = Number(event.target.value);
+                if (!Number.isFinite(parsed)) {
+                  return;
+                }
+                patchCanvas({ cols: resolveHydraulicsCanvas({ cols: parsed, rows }).cols });
+              }}
+            />
+          </label>
+          <label>
+            Rows
+            <input
+              type="number"
+              min={HYDRAULICS_GRID_ROWS_MIN}
+              max={HYDRAULICS_GRID_ROWS_MAX}
+              step={2}
+              aria-label="Canvas rows"
+              value={rows}
+              onChange={(event) => {
+                const parsed = Number(event.target.value);
+                if (!Number.isFinite(parsed)) {
+                  return;
+                }
+                patchCanvas({ rows: resolveHydraulicsCanvas({ cols, rows: parsed }).rows });
+              }}
+            />
+          </label>
+          <p className="hydraulics-inspector-readout">
+            Extra columns appear on the right; extra rows at the bottom. Existing cells stay put.
+          </p>
+          <label className="hydraulics-inspector-checkbox">
+            <input
+              type="checkbox"
+              checked={showGrid}
+              onChange={(event) => {
+                patchCanvas({ showGrid: event.target.checked });
+              }}
+            />
+            Show snap grid
+          </label>
+          <label>
+            Zoom
+            <input
+              type="range"
+              min={HYDRAULICS_ZOOM_MIN * 100}
+              max={HYDRAULICS_ZOOM_MAX * 100}
+              step={10}
+              aria-label="Canvas zoom"
+              value={Math.round(viewport.scale * 100)}
+              onChange={(event) => {
+                const nextScale = Number(event.target.value) / 100;
+                const centerX = viewport.x + 1 / viewport.scale / 2;
+                const centerY = viewport.y + 1 / viewport.scale / 2;
+                onViewportChange(
+                  clampHydraulicsViewport({
+                    scale: nextScale,
+                    x: centerX - 1 / nextScale / 2,
+                    y: centerY - 1 / nextScale / 2
+                  })
+                );
+              }}
+            />
+          </label>
+          <p className="hydraulics-inspector-readout">
+            {Math.round(viewport.scale * 100)}% · Ctrl+scroll to zoom
+            {viewport.scale > 1 ? " · drag empty canvas to pan" : ""}
+          </p>
+          {viewport.scale !== 1 || viewport.x !== 0 || viewport.y !== 0 ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => onViewportChange(DEFAULT_HYDRAULICS_VIEWPORT)}
+            >
+              Reset view
+            </button>
+          ) : null}
+        </>
+      ) : null}
       {sector ? (
         <>
         <label>
@@ -1485,8 +1726,12 @@ function selectedInspectorTitle(
   sector: ReturnType<typeof resolveHydraulicsScene>["sectors"][number] | null | undefined,
   tank: ReturnType<typeof resolveHydraulicsScene>["tanks"][number] | null | undefined,
   pipe: ReturnType<typeof resolveHydraulicsScene>["pipes"][number] | null | undefined,
-  box: ReturnType<typeof resolveHydraulicsScene>["boxes"][number] | null | undefined
+  box: ReturnType<typeof resolveHydraulicsScene>["boxes"][number] | null | undefined,
+  isCanvas = false
 ): ReactNode {
+  if (isCanvas) {
+    return "Canvas";
+  }
   if (sector) {
     return (
       <>
@@ -1544,7 +1789,7 @@ function selectionHasMovedLabel(
   selection: HydraulicsSelection | null,
   scene: ReturnType<typeof resolveHydraulicsScene>
 ): boolean {
-  if (!selection) {
+  if (!selection || selection.kind === "canvas" || selection.kind === "all") {
     return false;
   }
   if (selection.kind === "pipe") {

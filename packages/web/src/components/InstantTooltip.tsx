@@ -140,36 +140,51 @@ export function InstantTooltip<T extends ElementType = "span">({
   );
 }
 
+type TooltipLayout = { left: number; placement: Placement; top: number };
+
+const TOOLTIP_MEASURE_ATTEMPTS = 3;
+
+function hasUsableClientRect(node: HTMLElement): boolean {
+  const rect = node.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
 export function DelegatedFormulaTooltip() {
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
+  const measureFrameRef = useRef<number | null>(null);
   const [state, setState] = useState<{
-    layout: { left: number; placement: Placement; top: number };
+    layout: TooltipLayout | null;
     revision: number;
     text: string;
   } | null>(null);
 
-  const syncLayout = useCallback(() => {
-    if (!anchorRef.current?.isConnected) {
-      anchorRef.current = null;
-      setState(null);
-      return;
-    }
-    if (!tooltipRef.current) {
-      return;
-    }
-
-    const layout = computeInstantTooltipLayout(anchorRef.current, tooltipRef.current);
+  const applyLayout = useCallback((layout: TooltipLayout) => {
     setState((current) =>
       current == null
         ? current
-        : current.layout.left === layout.left &&
-            current.layout.top === layout.top &&
-            current.layout.placement === layout.placement
+        : current.layout?.left === layout.left &&
+            current.layout?.top === layout.top &&
+            current.layout?.placement === layout.placement
           ? current
           : { ...current, layout }
     );
   }, []);
+
+  const measureLayout = useCallback((): boolean => {
+    const anchor = anchorRef.current;
+    if (!anchor?.isConnected) {
+      anchorRef.current = null;
+      setState(null);
+      return true;
+    }
+    const tooltip = tooltipRef.current;
+    if (!tooltip || !hasUsableClientRect(anchor) || !hasUsableClientRect(tooltip)) {
+      return false;
+    }
+    applyLayout(computeInstantTooltipLayout(anchor, tooltip));
+    return true;
+  }, [applyLayout]);
 
   useEffect(() => {
     function resolveToken(node: EventTarget | null): HTMLElement | null {
@@ -195,7 +210,7 @@ export function DelegatedFormulaTooltip() {
       }
       anchorRef.current = token;
       setState((current) => ({
-        layout: current?.layout ?? { left: 0, placement: "top", top: 0 },
+        layout: null,
         revision: (current?.revision ?? 0) + 1,
         text
       }));
@@ -230,21 +245,63 @@ export function DelegatedFormulaTooltip() {
       return;
     }
 
-    syncLayout();
-    window.addEventListener("resize", syncLayout);
-    window.addEventListener("scroll", syncLayout, true);
+    let attempts = 0;
+    let cancelled = false;
+
+    function cancelMeasureFrame(): void {
+      if (measureFrameRef.current != null) {
+        cancelAnimationFrame(measureFrameRef.current);
+        measureFrameRef.current = null;
+      }
+    }
+
+    function scheduleMeasure(): void {
+      if (cancelled || attempts >= TOOLTIP_MEASURE_ATTEMPTS) {
+        return;
+      }
+      attempts += 1;
+      measureFrameRef.current = requestAnimationFrame(() => {
+        measureFrameRef.current = null;
+        if (cancelled) {
+          return;
+        }
+        if (!measureLayout()) {
+          scheduleMeasure();
+        }
+      });
+    }
+
+    if (!measureLayout()) {
+      scheduleMeasure();
+    }
+
+    function handleViewportChange(): void {
+      if (!measureLayout()) {
+        scheduleMeasure();
+      }
+    }
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
     return () => {
-      window.removeEventListener("resize", syncLayout);
-      window.removeEventListener("scroll", syncLayout, true);
+      cancelled = true;
+      cancelMeasureFrame();
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
     };
-  }, [state?.revision, state?.text, syncLayout]);
+  }, [measureLayout, state?.revision, state?.text]);
 
   if (!state) {
     return null;
   }
 
   return createPortal(
-    <InstantTooltipBubble layout={state.layout} tooltipRef={tooltipRef} text={state.text} />,
+    <InstantTooltipBubble
+      layout={state.layout ?? { left: 0, placement: "top", top: 0 }}
+      text={state.text}
+      tooltipRef={tooltipRef}
+      visible={state.layout != null}
+    />,
     document.body
   );
 }
@@ -253,12 +310,14 @@ function InstantTooltipBubble({
   id,
   layout,
   text,
-  tooltipRef
+  tooltipRef,
+  visible = true
 }: {
   id?: string;
-  layout: { left: number; placement: Placement; top: number };
+  layout: TooltipLayout;
   text: string;
   tooltipRef: { current: HTMLDivElement | null };
+  visible?: boolean;
 }) {
   return (
     <div
@@ -271,6 +330,7 @@ function InstantTooltipBubble({
       style={{
         left: `${layout.left}px`,
         maxWidth: `${Math.min(448, Math.max(window.innerWidth - VIEWPORT_PADDING * 2, 160))}px`,
+        opacity: visible ? 1 : 0,
         top: `${layout.top}px`
       }}
     >

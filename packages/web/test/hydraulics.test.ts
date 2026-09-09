@@ -16,10 +16,14 @@ import {
   hydraulicsUnitToGrid,
   layoutFromResolved,
   mergeHydraulicsLayout,
+  persistHydraulicsCanvas,
   resizeHydraulicsBox,
+  resolveHydraulicsGridExtent,
   resolveHydraulicsScene,
   scaleHydraulicsPipeAnimationSpeed,
   seedHydraulicsLayout,
+  snapHydraulicsPoint,
+  translateHydraulicsScene,
   HYDRAULICS_PIPE_ANIMATION_SPEED_MIN_FACTOR
 } from "../src/notebook/hydraulics";
 
@@ -97,6 +101,26 @@ describe("hydraulics scene", () => {
     expect(hydraulicsGridToUnit(16, "x")).toBeCloseTo(0.4);
     expect(hydraulicsGridToUnit(0.16, "x")).toBeCloseTo(0.16);
     expect(hydraulicsUnitToGrid(0.4, "x")).toBe(16);
+    expect(hydraulicsGridToUnit(0.5, "x", 0.5)).toBeCloseTo(0.5 / 40);
+    expect(hydraulicsGridToUnit(16.5, "x", 0.5)).toBeCloseTo(16.5 / 40);
+    expect(hydraulicsUnitToGrid(16.5 / 40, "x", 0.5)).toBe(16.5);
+    expect(snapHydraulicsPoint({ x: 16.4 / 40, y: 6.2 / 24 }, 0.5)).toEqual({
+      x: 16.5 / 40,
+      y: 6 / 24
+    });
+    expect(persistHydraulicsCanvas({ snapStep: 0.5, showGrid: true })).toEqual({ snapStep: 0.5 });
+    expect(persistHydraulicsCanvas({ snapStep: 1, showGrid: false })).toEqual({ showGrid: false });
+    expect(persistHydraulicsCanvas({ snapStep: 1, showGrid: true })).toBeUndefined();
+    expect(persistHydraulicsCanvas({ cols: 80 })).toEqual({ cols: 80 });
+    expect(persistHydraulicsCanvas({ cols: 80, rows: 36, snapStep: 0.5 })).toEqual({
+      snapStep: 0.5,
+      cols: 80,
+      rows: 36
+    });
+    expect(hydraulicsGridToUnit(34, "x", 1, { cols: 80, rows: 24 })).toBeCloseTo(34 / 80);
+    expect(hydraulicsUnitToGrid(34 / 80, "x", 1, { cols: 80, rows: 24 })).toBe(34);
+    expect(resolveHydraulicsGridExtent({ cols: 41, rows: 13 })).toEqual({ cols: 42, rows: 14 });
+    expect(resolveHydraulicsGridExtent({ cols: 100, rows: 4 })).toEqual({ cols: 80, rows: 12 });
     expect(layoutFromResolved({
       sectors: [
         {
@@ -146,6 +170,132 @@ describe("hydraulics scene", () => {
     expect(autoPipe).not.toHaveProperty("labelOffset");
   });
 
+  it("translates every scene item by the same snapped delta", () => {
+    const next = translateHydraulicsScene(
+      {
+        sectors: [
+          {
+            id: "Government",
+            label: "Government",
+            fill: "#f8fafc",
+            stroke: "#334155",
+            opacity: 1,
+            x: 0.2,
+            y: 0.25,
+            labelOffsetX: null,
+            labelOffsetY: null
+          },
+          {
+            id: "Firms",
+            label: "Firms",
+            fill: "#f8fafc",
+            stroke: "#334155",
+            opacity: 1,
+            x: 0.5,
+            y: 0.25,
+            labelOffsetX: null,
+            labelOffsetY: null
+          }
+        ],
+        tanks: [
+          {
+            id: "Bs",
+            sectorId: "Government",
+            label: "Bs",
+            polarity: "liability",
+            color: "#c0392b",
+            x: 0.2,
+            y: 0.6,
+            value: 10,
+            maxLevel: null,
+            runMaxAbs: 20,
+            maxAbs: 20,
+            fill: 0.5,
+            labelOffsetX: null,
+            labelOffsetY: null
+          }
+        ],
+        pipes: [
+          {
+            id: "G",
+            from: { kind: "point", x: 0.1, y: 0.1 },
+            to: { kind: "sector", id: "Firms" },
+            label: "G",
+            waypoints: [{ x: 0.3, y: 0.4 }],
+            magnitude: 20,
+            strokeWidth: 4,
+            color: "#334155",
+            arrowSize: 8,
+            flowAnimationSpeed: 1,
+            widthScale: 1,
+            dashed: false,
+            tokenCount: 3,
+            opacity: 1,
+            labelT: null,
+            labelOffset: null
+          }
+        ],
+        boxes: [
+          {
+            id: "frame",
+            label: "Frame",
+            x: 0.4,
+            y: 0.5,
+            width: 0.3,
+            height: 0.3,
+            fill: "#7dd3fc",
+            fillOpacity: 0.2,
+            stroke: "#64748b",
+            dashed: false,
+            labelOffsetX: null,
+            labelOffsetY: null
+          }
+        ],
+        errors: []
+      },
+      0.1,
+      2 / 24
+    );
+
+    expect(next.sectors.map((sector) => [sector.id, sector.x, sector.y])).toEqual([
+      ["Government", 0.3, 8 / 24],
+      ["Firms", 0.6, 8 / 24]
+    ]);
+    expect(next.tanks[0]).toMatchObject({ x: 0.3, y: 16 / 24 });
+    expect(next.boxes[0]).toMatchObject({ x: 0.5, y: 0.5 + 2 / 24 });
+    expect(next.pipes[0]?.from).toEqual({ kind: "point", x: 0.2, y: 4 / 24 });
+    expect(next.pipes[0]?.to).toEqual({ kind: "sector", id: "Firms" });
+    expect(next.pipes[0]?.waypoints).toEqual([{ x: 0.4, y: 12 / 24 }]);
+  });
+
+  it("clamps a group translate so items stay on the canvas", () => {
+    const next = translateHydraulicsScene(
+      {
+        sectors: [
+          {
+            id: "Firms",
+            label: "Firms",
+            fill: "#f8fafc",
+            stroke: "#334155",
+            opacity: 1,
+            x: 0.8,
+            y: 0.25,
+            labelOffsetX: null,
+            labelOffsetY: null
+          }
+        ],
+        tanks: [],
+        pipes: [],
+        boxes: [],
+        errors: []
+      },
+      1,
+      0
+    );
+    expect(next.sectors[0]?.x).toBe(1);
+    expect(next.sectors[0]?.y).toBe(0.25);
+  });
+
   it("lets explicit coordinates win while still seeding missing nodes", () => {
     const seeded = seedHydraulicsLayout(pcTransactionMatrix(), pcBalanceSheet());
     const merged = mergeHydraulicsLayout(seeded, {
@@ -165,12 +315,87 @@ describe("hydraulics scene", () => {
     expect(merged.pipes?.length).toBeGreaterThan(0);
   });
 
+  it("merges authored canvas snap settings", () => {
+    const seeded = seedHydraulicsLayout(pcTransactionMatrix(), pcBalanceSheet());
+    const merged = mergeHydraulicsLayout(seeded, { canvas: { snapStep: 0.5, showGrid: false } });
+    expect(merged.canvas).toEqual({ snapStep: 0.5, showGrid: false });
+  });
+
+  it("persists half-cell coordinates when snapStep is 0.5", () => {
+    const layout = layoutFromResolved({
+      canvas: { snapStep: 0.5, showGrid: true, cols: 40, rows: 24 },
+      sectors: [
+        {
+          id: "Government",
+          label: "Government",
+          fill: "#f8fafc",
+          stroke: "#334155",
+          opacity: 1,
+          x: 16.5 / 40,
+          y: 6 / 24,
+          labelOffsetX: null,
+          labelOffsetY: null
+        }
+      ],
+      tanks: [],
+      pipes: [],
+      boxes: [],
+      errors: []
+    });
+    expect(layout.canvas).toEqual({ snapStep: 0.5 });
+    expect(layout.sectors?.[0]).toMatchObject({ x: 16.5, y: 6 });
+  });
+
+  it("reads half-cell positions when snapStep is 0.5", () => {
+    const transactionMatrix = pcTransactionMatrix();
+    const scene = resolveHydraulicsScene(
+      {
+        id: "pc-hydraulics",
+        type: "diagram",
+        title: "PC hydraulics",
+        source: { transactionMatrixCellId: "transaction-flow" },
+        layout: {
+          canvas: { snapStep: 0.5 },
+          sectors: [{ id: "Households", x: 16.5, y: 5 }]
+        }
+      },
+      (cellId) => (cellId === "transaction-flow" ? transactionMatrix : null),
+      () => null,
+      0
+    );
+    expect(scene.canvas).toEqual({ snapStep: 0.5, showGrid: true, cols: 40, rows: 24 });
+    expect(scene.sectors.find((entry) => entry.id === "Households")?.x).toBeCloseTo(16.5 / 40);
+  });
+
+  it("maps authored cell indices through a wider canvas without rescaling them", () => {
+    const transactionMatrix = pcTransactionMatrix();
+    const scene = resolveHydraulicsScene(
+      {
+        id: "pc-hydraulics",
+        type: "diagram",
+        title: "PC hydraulics",
+        source: { transactionMatrixCellId: "transaction-flow" },
+        layout: {
+          canvas: { cols: 80 },
+          sectors: [{ id: "Households", x: 34, y: 5 }]
+        }
+      },
+      (cellId) => (cellId === "transaction-flow" ? transactionMatrix : null),
+      () => null,
+      0
+    );
+    expect(scene.canvas).toMatchObject({ cols: 80, rows: 24 });
+    expect(scene.sectors.find((entry) => entry.id === "Households")?.x).toBeCloseTo(34 / 80);
+    expect(layoutFromResolved(scene).sectors?.[0]).toMatchObject({ x: 34, y: 5 });
+    expect(layoutFromResolved(scene).canvas).toEqual({ cols: 80 });
+  });
+
   it("resolves an empty-layout cell from the referenced matrices", () => {
     const transactionMatrix = pcTransactionMatrix();
     const balanceMatrix = pcBalanceSheet();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: {
         transactionMatrixCellId: "transaction-flow",
@@ -195,7 +420,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: { transactionMatrixCellId: "transaction-flow" },
       layout: {
@@ -249,7 +474,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: { transactionMatrixCellId: "transaction-flow" },
       layout: {
@@ -280,7 +505,7 @@ describe("hydraulics scene", () => {
     const balanceMatrix = pcBalanceSheet();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: {
         transactionMatrixCellId: "transaction-flow",
@@ -317,7 +542,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: { transactionMatrixCellId: "transaction-flow" },
       layout: {
@@ -356,7 +581,7 @@ describe("hydraulics scene", () => {
     const balanceMatrix = pcBalanceSheet();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: {
         transactionMatrixCellId: "transaction-flow",
@@ -399,7 +624,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: {
         transactionMatrixCellId: "transaction-flow",
@@ -476,6 +701,57 @@ describe("hydraulics scene", () => {
     );
   });
 
+  it("scales pipe width and dash speed against the largest |flow| in the run", () => {
+    const transactionMatrix = pcTransactionMatrix();
+    const cell: HydraulicsCell = {
+      id: "pc-hydraulics",
+      type: "diagram",
+      title: "PC hydraulics",
+      source: {
+        transactionMatrixCellId: "transaction-flow",
+        sourceRunCellId: "run-1"
+      },
+      layout: {
+        sectors: [
+          { id: "Households", x: 8, y: 5 },
+          { id: "Firms", x: 20, y: 5 }
+        ],
+        pipes: [
+          {
+            id: "C",
+            from: { kind: "sector", id: "Households" },
+            to: { kind: "sector", id: "Firms" },
+            expression: "C"
+          }
+        ]
+      }
+    };
+    const result: SimulationResult = {
+      series: {
+        C: new Float64Array([20, 80])
+      },
+      blocks: [],
+      model: { equations: [], externals: {}, initialValues: {} },
+      options: { periods: 2, solverMethod: "NEWTON", tolerance: 1e-6, maxIterations: 40 }
+    };
+
+    const resolveAt = (period: number) =>
+      resolveHydraulicsScene(
+        cell,
+        (cellId) => (cellId === "transaction-flow" ? transactionMatrix : null),
+        (cellId) => (cellId === "run-1" ? result : null),
+        period
+      ).pipes.find((pipe) => pipe.id === "C");
+
+    const early = resolveAt(0);
+    const peak = resolveAt(1);
+    expect(early?.magnitude).toBeCloseTo(20);
+    expect(peak?.magnitude).toBeCloseTo(80);
+    expect(early?.strokeWidth).toBeLessThan(peak?.strokeWidth ?? 0);
+    expect(early?.flowAnimationSpeed).toBeLessThan(peak?.flowAnimationSpeed ?? 0);
+    expect(peak?.flowAnimationSpeed).toBeCloseTo(DEFAULT_PIPE_FLOW_ANIMATION_SPEED);
+  });
+
   it("keeps dash animation still without magnitude or at zero", () => {
     expect(scaleHydraulicsPipeAnimationSpeed(null, 10)).toBe(0);
     expect(scaleHydraulicsPipeAnimationSpeed(0, 10)).toBe(0);
@@ -505,7 +781,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: { transactionMatrixCellId: "transaction-flow" },
       layout: {
@@ -560,7 +836,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: { transactionMatrixCellId: "transaction-flow" },
       layout: {
@@ -597,7 +873,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: { transactionMatrixCellId: "transaction-flow" },
       layout: {
@@ -651,7 +927,7 @@ describe("hydraulics scene", () => {
     const transactionMatrix = pcTransactionMatrix();
     const cell: HydraulicsCell = {
       id: "pc-hydraulics",
-      type: "hydraulics",
+      type: "diagram",
       title: "PC hydraulics",
       source: { transactionMatrixCellId: "transaction-flow" },
       layout: {

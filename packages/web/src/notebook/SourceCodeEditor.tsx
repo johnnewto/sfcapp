@@ -350,7 +350,7 @@ const CELL_TYPE_PROPERTY_KEYS: Record<string, string[]> = {
   matrix: ["sourceRunCellId", "columns", "sectors", "rows"],
   sequence: ["source", "participantColumnOrder"],
   sankey: ["source"],
-  hydraulics: ["source", "layout"]
+  diagram: ["source", "layout"]
 };
 
 const COMMON_CELL_PROPERTY_KEYS = ["id", "type", "title", "note", "description", "collapsed"];
@@ -564,7 +564,7 @@ function buildCompletionData(document: NotebookDocument, format: NotebookSourceF
         "matrix",
         "sequence",
         "sankey",
-        "hydraulics"
+        "diagram"
       ]
     },
     format,

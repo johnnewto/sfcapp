@@ -419,7 +419,7 @@ export function buildSourceHelperActions(
         { label: "Include zero flows", insert: '"includeZeroFlows": true' },
         { label: "Collapsed true", insert: '"collapsed": true' }
       ];
-    case "hydraulics":
+    case "diagram":
       return [
         {
           label: "Matrix source",
@@ -755,11 +755,11 @@ Optional:
 Behavior:
 - Transaction-flow matrices use the sfcr_sankey sector outflow → flow → sector inflow layout.
 - Input-output matrices (accountingKind: input-output) use output → market → inputs / final demand.`;
-    case "hydraulics":
+    case "diagram":
       return `Required fields:
 - title
 - id
-- type: "hydraulics"
+- type: "diagram"
 - source: { "transactionMatrixCellId": "transaction-flow" }
 
 Optional:
@@ -770,10 +770,10 @@ Optional:
 - sectors accept fill, stroke, and opacity (0–1); defaults match the light slate sector look
 - tank maxLevel sets the fill denominator; omit or blank to use the run max of the bound series
 - pipe color, arrowSize (0 = none), widthScale, dashed, opacity
-- pipe from.port / to.port: c plus 12 rim ports (omit for nearest mid-side). Sectors add nne/nnw/sse/ssw on the long north/south sides; tanks add ene/ese/wnw/wsw on the long east/west sides. Compass names n, ne, e, se, s, sw, w, nw still work.
+- pipe from.port / to.port: c plus 16 rim ports (omit for nearest mid-side). Compass names n, nne, ne, ene, e, ese, se, sse, s, ssw, sw, wsw, w, wnw, nw, nnw. Sectors and tanks use the same set, with two extras on every side.
 - box pipe ports use n / e / s / w, corners ne/se/sw/nw, and n+2 / e-2 / … every 2 grid cells from the side midpoint (east and south are positive)
 - pipe waypoints are spline guide points the curve passes through (cubic Catmull-Rom)
-- pipe variable / expression set flow magnitude (width + dash speed); label stays independent; no binding or ~0 magnitude is still
+- pipe variable / expression set flow magnitude (width + dash speed vs the largest |flow| in the run); label stays independent; no binding or ~0 magnitude is still
 - negative flow magnitude marches the dash overlay backwards (arrow still follows from → to)
 - pipe labelT (0–1) and labelOffset (half-cell steps) persist after the label is dragged; omit them for auto placement
 - sector / tank / box labelOffsetX and labelOffsetY (half-cell steps) persist after the label is dragged; omit them for auto placement
@@ -819,7 +819,7 @@ export function getNotebookHelpTopicIdForCell(cell: NotebookCell): NotebookHelpT
     return "chart";
   }
 
-  if (cell.type === "sankey" || cell.type === "hydraulics") {
+  if (cell.type === "sankey" || cell.type === "diagram") {
     return "sequence";
   }
 
@@ -1284,12 +1284,12 @@ function validateCellSourceShape(
         throw new Error("Sankey matrix sources require matrixCellId.");
       }
       return;
-    case "hydraulics":
+    case "diagram":
       if (!(parsed as HydraulicsCell).source || typeof (parsed as HydraulicsCell).source !== "object") {
-        throw new Error("Hydraulics cells require a source object.");
+        throw new Error("Stock-flow diagram cells require a source object.");
       }
       if (typeof (parsed as HydraulicsCell).source.transactionMatrixCellId !== "string") {
-        throw new Error("Hydraulics cells require source.transactionMatrixCellId.");
+        throw new Error("Stock-flow diagram cells require source.transactionMatrixCellId.");
       }
       return;
     case "markdown":

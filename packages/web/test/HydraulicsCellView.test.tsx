@@ -25,7 +25,7 @@ function dispatchPointer(target: EventTarget, type: string): void {
 
 const hydraulicsCell: HydraulicsCell = {
   id: "pc-hydraulics",
-  type: "hydraulics",
+  type: "diagram",
   title: "PC hydraulics",
   source: { transactionMatrixCellId: "missing" },
   layout: {
@@ -165,7 +165,7 @@ describe("HydraulicsCellView context menu", () => {
   it("adds a box from the canvas context menu", () => {
     const onCellChange = renderHydraulics();
 
-    fireEvent.contextMenu(screen.getByRole("img", { name: "Hydraulics diagram" }));
+    fireEvent.contextMenu(screen.getByRole("img", { name: "Stock-flow diagram" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Add box" }));
 
     const next = onCellChange.mock.calls.at(-1)?.[1](hydraulicsCell) as HydraulicsCell;
@@ -177,6 +177,54 @@ describe("HydraulicsCellView context menu", () => {
       fill: "#7dd3fc",
       fillOpacity: 0.2
     });
+  });
+
+  it("selects every item from the canvas context menu", () => {
+    renderHydraulics();
+
+    fireEvent.contextMenu(screen.getByRole("img", { name: "Stock-flow diagram" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Select all" }));
+
+    expect(screen.getByTestId("hydraulics-sector-Government")).toHaveClass("is-selected");
+    expect(screen.getByTestId("hydraulics-sector-Firms")).toHaveClass("is-selected");
+    expect(screen.getByTestId("hydraulics-pipe-G")).toHaveClass("is-selected");
+  });
+
+  it("attaches formula tooltips to bound pipe labels", () => {
+    render(
+      <HydraulicsCellView
+        cell={hydraulicsCell}
+        cells={[] as NotebookCell[]}
+        maxPeriodIndex={0}
+        runner={{ getResult: () => null }}
+        selectedPeriodIndex={0}
+        variableDescriptions={new Map([["G", "Government spending"]])}
+      />
+    );
+
+    const tooltip = screen
+      .getByTestId("hydraulics-pipe-label-G")
+      .querySelector("[data-formula-tooltip]")
+      ?.getAttribute("data-formula-tooltip");
+    expect(tooltip).toBe("Government spending");
+  });
+
+  it("does not attach formula tooltips while layout is unlocked", () => {
+    render(
+      <HydraulicsCellView
+        cell={hydraulicsCell}
+        cells={[] as NotebookCell[]}
+        maxPeriodIndex={0}
+        runner={{ getResult: () => null }}
+        selectedPeriodIndex={0}
+        variableDescriptions={new Map([["G", "Government spending"]])}
+      />
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /lock layout/i }));
+
+    expect(
+      screen.getByTestId("hydraulics-pipe-label-G").querySelector("[data-formula-tooltip]")
+    ).toBeNull();
   });
 
   it("authors a dashed border from the box inspector", () => {
@@ -232,6 +280,31 @@ describe("HydraulicsCellView context menu", () => {
 
     expect(screen.getByRole("combobox", { name: /from port/i })).toHaveDisplayValue("North +2 (n+2)");
     expect(screen.getByRole("option", { name: "North +4 (n+4)" })).toBeInTheDocument();
+  });
+
+  it("lists short-side extras among sector and tank pipe ports", () => {
+    const cell: HydraulicsCell = {
+      ...hydraulicsCell,
+      layout: {
+        ...hydraulicsCell.layout,
+        tanks: [{ id: "Bs", sectorId: "Government", x: 6, y: 14, variable: "Bs" }],
+        pipes: [
+          {
+            id: "flow",
+            from: { kind: "sector", id: "Government", port: "ene" },
+            to: { kind: "tank", id: "Bs", port: "nne" }
+          }
+        ]
+      }
+    };
+    renderHydraulics(vi.fn(), cell);
+
+    act(() => {
+      dispatchPointer(screen.getByTestId("hydraulics-pipe-flow"), "pointerdown");
+    });
+
+    expect(screen.getByRole("combobox", { name: /from port/i })).toHaveDisplayValue("East-northeast (ene)");
+    expect(screen.getByRole("combobox", { name: /to port/i })).toHaveDisplayValue("North-northeast (nne)");
   });
 
   it("authors sector fill and border from the inspector", () => {
@@ -312,5 +385,88 @@ describe("HydraulicsCellView context menu", () => {
 
     const cleared = onCellChange.mock.calls.at(-1)?.[1](cell) as HydraulicsCell;
     expect(cleared.layout?.tanks?.find((entry) => entry.id === "Bs")).not.toHaveProperty("maxLevel");
+  });
+
+  it("authors canvas snapStep from the canvas inspector", () => {
+    const onCellChange = renderHydraulics();
+
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.change(screen.getByLabelText("Snap step"), { target: { value: "0.5" } });
+
+    const next = onCellChange.mock.calls.at(-1)?.[1](hydraulicsCell) as HydraulicsCell;
+    expect(next.layout?.canvas).toEqual({ snapStep: 0.5 });
+  });
+
+  it("authors canvas.showGrid false from the canvas inspector", () => {
+    const onCellChange = renderHydraulics();
+
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /show snap grid/i }));
+
+    const next = onCellChange.mock.calls.at(-1)?.[1](hydraulicsCell) as HydraulicsCell;
+    expect(next.layout?.canvas).toEqual({ showGrid: false });
+  });
+
+  it("authors canvas.cols from the canvas inspector", () => {
+    const onCellChange = renderHydraulics();
+
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.change(screen.getByLabelText("Canvas columns"), { target: { value: "80" } });
+
+    const next = onCellChange.mock.calls.at(-1)?.[1](hydraulicsCell) as HydraulicsCell;
+    expect(next.layout?.canvas).toEqual({ cols: 80 });
+  });
+
+  it("keeps authored canvas extent when snap step changes", () => {
+    const cell: HydraulicsCell = {
+      ...hydraulicsCell,
+      layout: {
+        ...hydraulicsCell.layout,
+        canvas: { cols: 80 }
+      }
+    };
+    const onCellChange = renderHydraulics(vi.fn(), cell);
+
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.change(screen.getByLabelText("Snap step"), { target: { value: "0.5" } });
+
+    const next = onCellChange.mock.calls.at(-1)?.[1](cell) as HydraulicsCell;
+    expect(next.layout?.canvas).toEqual({ snapStep: 0.5, cols: 80 });
+  });
+
+  it.each(["Add sector", "Add tank", "Add box"] as const)(
+    "returns to Select / move after placing from %s",
+    (label) => {
+      renderHydraulics();
+
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(screen.getByRole("button", { name: label })).toHaveClass("is-active");
+
+      act(() => {
+        dispatchPointer(screen.getByRole("img", { name: "Stock-flow diagram" }), "pointerdown");
+      });
+
+      expect(screen.getByRole("button", { name: "Select / move" })).toHaveClass("is-active");
+      expect(screen.getByRole("button", { name: label })).not.toHaveClass("is-active");
+    }
+  );
+
+  it("returns to Select / move after the second click that completes a pipe", () => {
+    renderHydraulics();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add pipe" }));
+    expect(screen.getByRole("button", { name: "Add pipe" })).toHaveClass("is-active");
+
+    act(() => {
+      dispatchPointer(screen.getByTestId("hydraulics-port-sector-Government-e"), "pointerdown");
+    });
+    expect(screen.getByRole("button", { name: "Add pipe" })).toHaveClass("is-active");
+
+    act(() => {
+      dispatchPointer(screen.getByTestId("hydraulics-port-sector-Firms-w"), "pointerdown");
+    });
+
+    expect(screen.getByRole("button", { name: "Select / move" })).toHaveClass("is-active");
+    expect(screen.getByRole("button", { name: "Add pipe" })).not.toHaveClass("is-active");
   });
 });
